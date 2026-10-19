@@ -14,9 +14,10 @@
       vars:
         router_hostname_value: molecule-test-router
 
-    - name: Ensure a package is installed (example)
-      action: community.openwrt.{{ openwrt_package_manager }}
-      args:
-        name: luci
-        state: present
-        update_cache: true
+    - name: Apply router packages role
+      ansible.builtin.include_role:
+        name: router_packages
+      vars:
+        router_packages_list:
+          - busybox
+          - openwrt-keyring
