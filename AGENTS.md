@@ -17,6 +17,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   `defaults/main.yml`
 - `./collections/` – installed dependencies, **never edit**, must be
   git-ignored
+- `requirements.yml` – **should be added** to pin collection versions
+  (`community.openwrt`, `community.docker`). Not yet present.
 - `.github/workflows/molecule.yml` – main CI pipeline
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
 
@@ -29,10 +31,10 @@ absence is the normal state, not a defect.
 ## Code style
 
 ### Line length
-- Maximum 80 characters per physical line, in every file type: YAML,
-  shell, embedded scripts (`run: |`, `script: |`).
-- `yamllint` enforces this for all physical lines, including block
-  scalars.
+- Maximum 80 characters per physical line, by convention for all
+  file types.
+- `yamllint` enforces this for YAML files, including block scalars
+  (`run: |`, `script: |`). It does not check shell or Markdown files.
 - Do not suppress the rule with `# yamllint disable-line` unless the
   line cannot be wrapped (e.g. a long URL).
 
@@ -93,6 +95,7 @@ absence is the normal state, not a defect.
   `/var/run/ubus/ubus.sock` and `ubus list`
 - `community.openwrt.init` must run before all other roles in
   `converge.yml`
+- Currently only `openwrt-25.12` is defined in `platforms:`
 
 ## Adding a new role (checklist)
 
@@ -102,27 +105,36 @@ absence is the normal state, not a defect.
    **after** `community.openwrt.init`, passing test values via `vars:`.
 4. Use FQCN modules only.
 5. Make the role idempotent: a second `converge` run must report
-   `changed=0`.
-6. Run `yamllint .`, `ansible-lint` and
+   `changed=0` **for that role**. Other tasks may legitimately report
+   changes.
+6. Install collections first (`ansible-galaxy collection install
+   community.openwrt community.docker`), then run `yamllint .`,
+   `ansible-lint` and
    `ansible-playbook extensions/molecule/default/converge.yml
    --syntax-check` locally.
 
 ## Adding a new OpenWrt version (checklist)
 
-1. Add the platform to the matrix in
-   `.github/workflows/molecule.yml`.
-2. Add the platform to `platforms:` in
+1. Add the platform to `platforms:` in
    `extensions/molecule/default/molecule.yml` with the matching
    `openwrt/rootfs:x86_64-openwrt-<version>` image.
+2. Add the same platform name to the matrix in
+   `.github/workflows/molecule.yml`.
 3. Verify that `community.openwrt.init` supports the version and sets
    `openwrt_package_manager` correctly.
 4. If the version uses a different package manager, no role change is
    needed – the dynamic pattern handles it.
-5. Update this file and the CI section if the job structure changes.
+5. **Platform selection:** Currently the workflow does not pass a
+   platform selector to `molecule test`. Each matrix job would create
+   every platform defined in `molecule.yml`. If more than one platform
+   is defined, add `--platform-name ${{ matrix.platform }}` to the
+   `molecule test` command (supported in recent Molecule versions) or
+   split the scenario per version.
 
 ## Important commands
 
 ### Fast local checks
+Run these after installing collections (see below).
 
     yamllint .
     ansible-lint --exclude collections/ansible_collections/community/openwrt/
@@ -130,8 +142,11 @@ absence is the normal state, not a defect.
 
 ### Full test run (CI task, requires Docker)
 
+    # run the test, keep containers on failure
     molecule test --destroy=never
+    # inspect a failed container
     molecule login --host openwrt-25.12
+    # clean up afterwards
     molecule destroy
 
 Molecule is a CI responsibility. Local runs require Docker and the
@@ -140,6 +155,9 @@ above and let CI run Molecule.
 
 ### Install collections
 
+    # Once requirements.yml exists:
+    ansible-galaxy collection install -r requirements.yml
+    # Without it:
     ansible-galaxy collection install community.openwrt community.docker
 
 Dependencies should be pinned via a `requirements.yml` in the repo root
@@ -152,7 +170,10 @@ with it.
 
 - Python version: `3.14`
 - Triggers: `workflow_dispatch`, `pull_request`, and pushes to
-  `$default-branch`, `development`, and `master`.
+  `master`, `development`, and `master`.
+  **Note:** `$default-branch` is only a template macro for starter
+  workflows, not a runtime expression in `branches` filters. Use the
+  actual branch name (`master`).
 
 ### Jobs
 
@@ -193,6 +214,9 @@ dependencies, conditions, matrix, and commands.
   the module to silence it.
 - `argument --python: expected one argument`: the variable used in the
   workflow does not exist. Use `${{ env.ANSIBLE_PYTHON_VERSION }}`.
+- `couldn't resolve module/action 'community.openwrt.uci'`: collections
+  are not installed. Run `ansible-galaxy collection install
+  community.openwrt`.
 
 ## Don'ts
 
@@ -207,7 +231,8 @@ dependencies, conditions, matrix, and commands.
 - Never pass `--limit` (or `-- --limit …`) to `molecule test/create`.
   Molecule forwards it to the driver playbooks, which run on localhost.
   No host matches, the container is silently never created, and
-  `create` still reports "Successful". Select platforms via the matrix.
+  `create` still reports "Successful". Select platforms via the matrix
+  or `--platform-name`.
 - Do not invent collection metadata paths (`galaxy.yml`, `meta/`,
   `plugins/`) – this project does not have them
 - Do not suppress `yamllint` errors with `# noqa` (`# noqa` is
@@ -223,10 +248,13 @@ dependencies, conditions, matrix, and commands.
 ## When in doubt
 
 - `roles/router_hostname` is the minimal role example: a single task
-  using `community.openwrt.uci`, mit einem überschreibbaren Default in
+  using `community.openwrt.uci`, with an overridable default in
   `defaults/main.yml`
 - `converge.yml` shows how test values are passed via `vars:` to
   `include_role`
-- Before pushing, run the fast local checks above
+- Before pushing, run the fast local checks above (after installing
+  collections)
+- **Idempotence:** a second `converge` run must report `changed=0` for
+  the role you modified. Other tasks may legitimately report changes.
 - If workflow and this document disagree, the workflow wins – update
   this file
