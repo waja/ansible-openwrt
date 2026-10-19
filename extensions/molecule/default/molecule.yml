@@ -9,6 +9,8 @@ platforms:
     pre_build_image: true
 provisioner:
   name: ansible
+  env:
+    ANSIBLE_REMOTE_TEMP: /tmp
   inventory:
     group_vars:
       all:
