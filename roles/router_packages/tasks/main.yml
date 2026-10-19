@@ -1,0 +1,8 @@
+# roles/router_packages/tasks/main.yml
+---
+- name: Install packages dynamically
+  action: "community.openwrt.{{ openwrt_package_manager }}"
+  args:
+    name: "{{ router_packages_list | join(',') }}"
+    state: present
+    update_cache: true
