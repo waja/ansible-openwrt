@@ -17,7 +17,7 @@ jobs:
       issues: write
     steps:
       - name: Warn and label if PR targets master
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;
