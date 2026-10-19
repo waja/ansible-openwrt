@@ -1,0 +1,20 @@
+# extensions/molecule/default/converge.yml
+---
+- name: Converge
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Include role community.openwrt.init
+      ansible.builtin.include_role:
+        name: community.openwrt.init
+
+    - name: Apply router hostname role
+      ansible.builtin.include_role:
+        name: router_hostname
+      vars:
+        router_hostname: molecule-test-router
+
+    - name: Ensure a package is installed (example)
+      community.openwrt.apk:
+        name: luci
+        state: present

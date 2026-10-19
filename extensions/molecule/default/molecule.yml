@@ -1,0 +1,19 @@
+# extensions/molecule/default/molecule.yml
+---
+driver:
+  name: docker
+platforms:
+#  - name: openwrt-24.10
+#    image: openwrt/rootfs:x86-64-24.10
+#    command: sleep infinity
+#    pre_build_image: true
+  - name: openwrt-25.12
+    image: openwrt/rootfs:x86-64-25.12
+    command: sleep infinity
+    pre_build_image: true
+provisioner:
+  name: ansible
+  inventory:
+    group_vars:
+      all:
+        ansible_connection: docker
