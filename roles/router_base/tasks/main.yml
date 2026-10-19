@@ -1,0 +1,20 @@
+---
+- name: Determine service state after package installation
+  ansible.builtin.set_fact:
+    router_base_service_state: >-
+      {{ 'restarted' if router_packages_install_result is defined
+         and router_packages_install_result.changed else 'started' }}
+  changed_when: false
+
+- name: Enable and start required services
+  community.openwrt.service:
+    name: "{{ item }}"
+    enabled: true
+    state: "{{ router_base_service_state }}"
+  loop: "{{ router_base_services }}"
+
+- name: Remove obsolete configuration files
+  community.openwrt.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ router_base_obsolete_files }}"

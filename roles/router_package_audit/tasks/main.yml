@@ -1,0 +1,52 @@
+---
+- name: Check whether the baseline package list exists
+  community.openwrt.stat:
+    path: "{{ router_package_audit_baseline }}"
+  register: router_package_audit_baseline_stat
+
+- name: Require a baseline package list
+  ansible.builtin.fail:
+    msg: >-
+      Package audit requires {{ router_package_audit_baseline }} to exist.
+  when: not router_package_audit_baseline_stat.stat.exists
+
+- name: Create sorted baseline package list
+  ansible.builtin.raw: |
+    awk '{print $1}' {{ router_package_audit_baseline | quote }} \
+      | sort > {{ router_package_audit_old_file | quote }}
+  changed_when: false
+
+- name: Create current package list with opkg
+  ansible.builtin.raw: |
+    opkg list_installed | awk '{print $1}' \
+      | sort > {{ router_package_audit_new_file | quote }}
+  changed_when: false
+  when: openwrt_package_manager == 'opkg'
+
+- name: Create current package list with apk
+  ansible.builtin.raw: |
+    apk info | sort > {{ router_package_audit_new_file | quote }}
+  changed_when: false
+  when: openwrt_package_manager == 'apk'
+
+- name: Install diffutils
+  action: "community.openwrt.{{ openwrt_package_manager }}"
+  args:
+    name: diffutils
+    state: present
+    update_cache: true
+
+- name: Compare baseline and current package lists
+  ansible.builtin.raw: >-
+    diff -Nur {{ router_package_audit_old_file | quote }}
+    {{ router_package_audit_new_file | quote }}
+  register: router_package_audit_diff
+  changed_when: false
+  failed_when: router_package_audit_diff.rc not in [0, 1]
+
+- name: Display package differences
+  ansible.builtin.debug:
+    msg: >-
+      {{ router_package_audit_diff.stdout
+         if router_package_audit_diff.stdout | length > 0
+         else 'No package differences.' }}

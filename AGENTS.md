@@ -11,8 +11,13 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 
 ## Directory structure (binding)
 
+- `playbooks/site.yml` – standard configuration for all OpenWrt routers
+- `playbooks/audit_packages.yml` – optional installed-package comparison
 - `extensions/molecule/default/` – Molecule scenario
   (`molecule.yml`, `prepare.yml`, `converge.yml`)
+- `roles/router_packages/` – dynamically installs the default package list
+- `roles/router_base/` – enables core services and removes obsolete config
+- `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
   `defaults/main.yml`
 - `./collections/` – installed dependencies, **never edit**, must be
@@ -82,6 +87,10 @@ Always select dynamically via the fact set by
   task key when built from a variable.
 - Check the input format of the selected module (`opkg` and `apk` differ
   in some options) before copying an example.
+- `router_packages` owns package installation; service configuration
+  belongs in `router_base`.
+- `router_package_audit` is optional because it requires the saved
+  baseline file `/etc/backup/installed_packages.txt`.
 
 ## Molecule / OpenWrt containers (current state)
 

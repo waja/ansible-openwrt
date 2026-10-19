@@ -1,5 +1,11 @@
-# roles/router_packages/defaults/main.yml
 ---
 router_packages_list:
   - busybox
   - openwrt-keyring
+  - snmpd
+  - muninlite
+  - rsync
+  - uhttpd
+  - uhttpd-mod-ubus
+  - rpcd
+  - xinetd

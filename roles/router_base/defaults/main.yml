@@ -1,0 +1,7 @@
+---
+router_base_services:
+  - snmpd
+  - xinetd
+
+router_base_obsolete_files:
+  - /etc/config/snmpd-opkg
