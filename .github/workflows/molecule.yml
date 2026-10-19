@@ -33,9 +33,12 @@ jobs:
           yamllint .
 
       - name: Lint Ansible.
-        run: |
-          ansible-galaxy role install geerlingguy.docker
-          ansible-lint
+        env:
+          ANSIBLE_COLLECTIONS_PATH: >-
+            ${{ github.workspace }}/collections:/home/runner/.ansible/collections:/usr/share/ansible/collections
+          run: |
+            ansible-galaxy role install geerlingguy.docker
+            ansible-lint
 
   molecule:
     runs-on: ubuntu-latest
