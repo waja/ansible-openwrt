@@ -1,0 +1,13 @@
+# extensions/molecule/default/prepare.yml
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Wait until /tmp is usable
+      ansible.builtin.raw: test -d /tmp && test -w /tmp
+      register: tmp_check
+      until: tmp_check.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false
