@@ -17,9 +17,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   `defaults/main.yml`
 - `./collections/` – installed dependencies, **never edit**, must be
   git-ignored
-- `requirements.yml` – **should be added** to pin collection versions
-  (`community.openwrt`, `community.docker`). Not yet present. Do not
-  create it unless asked.
+- `requirements.yml` – not present. A future improvement, not part of
+  the current project state. Do not create it unless explicitly asked.
 - `.github/workflows/molecule.yml` – main CI pipeline
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
 
@@ -164,8 +163,10 @@ above and let CI run Molecule.
     # Without it:
     ansible-galaxy collection install community.openwrt community.docker
 
-Dependencies should be pinned via a `requirements.yml` in the repo root
-so CI and local runs are reproducible.
+There is no `requirements.yml` yet. Collection versions are currently
+installed unpinned. Pinning via `requirements.yml` would make CI and
+local runs reproducible, but it is a future improvement and must not be
+introduced without an explicit request.
 
 ## CI pipeline (`.github/workflows/molecule.yml`)
 
