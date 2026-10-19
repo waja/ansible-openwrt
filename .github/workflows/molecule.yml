@@ -56,7 +56,6 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - openwrt-24.10
           - openwrt-25.12
     steps:
       - name: Check out code
