@@ -7,6 +7,8 @@ platforms:
     image: openwrt/rootfs:x86_64-openwrt-25.12
     command: sleep infinity
     pre_build_image: true
+    tmpfs:
+      - /tmp
 provisioner:
   name: ansible
   inventory:
