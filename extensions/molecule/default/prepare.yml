@@ -4,10 +4,11 @@
   hosts: all
   gather_facts: false
   tasks:
-    - name: Wait until /tmp is usable
-      ansible.builtin.raw: test -d /tmp && test -w /tmp
-      register: tmp_check
-      until: tmp_check.rc == 0
+    - name: Wait until ubus is ready
+      ansible.builtin.raw: |
+        test -S /var/run/ubus/ubus.sock && ubus list >/dev/null
+      register: ubus_check
+      until: ubus_check.rc == 0
       retries: 30
       delay: 2
       changed_when: false
