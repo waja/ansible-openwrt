@@ -28,6 +28,9 @@ reference them unless explicitly asked.
 - File ends with a newline
 - Boolean values as `true`/`false`, not `yes`/`no`
 - Wrap long strings with `>-` (folded), e.g. for `MOLECULE_GLOB`
+- The 80-character limit also applies to embedded code in block scalars
+  (e.g. JavaScript in `actions/github-script`), even though `yamllint`
+  does not check it. Keep those lines short or wrap them manually.
 
 ### Ansible
 - Always use FQCN:
@@ -124,6 +127,9 @@ ansible-galaxy collection install community.openwrt community.docker
 - Do not use `become: true` in Molecule tests – the container runs as root
 - Do not add `--limit` to the pipeline as long as `MOLECULE_GLOB` selects
   the scenario and the matrix runs one platform per job
+- Do not exceed 80 characters per line (except with `# yamllint disable-line`)
+- Do not write long lines inside `script: |` blocks in GitHub workflows –
+  `yamllint` does not catch them, but they violate the same style rule
 
 ## When in doubt
 
