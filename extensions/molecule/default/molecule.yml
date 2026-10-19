@@ -8,7 +8,7 @@ platforms:
     command: /sbin/init
     pre_build_image: true
     tmpfs:
-      - /tmp
+      - /tmp:exec,mode=1777
 provisioner:
   name: ansible
   inventory:
