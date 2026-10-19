@@ -45,6 +45,9 @@ jobs:
             --exclude collections/ansible_collections/community/openwrt/
 
   molecule:
+    name: Molecule
+    needs:
+      - lint
     runs-on: ubuntu-latest
     env:
       MOLECULE_GLOB: >-
