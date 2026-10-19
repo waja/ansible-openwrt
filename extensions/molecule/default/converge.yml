@@ -21,11 +21,6 @@
           - busybox
           - openwrt-keyring
           - snmpd
-          - muninlite
-          - rsync
-          - uhttpd
-          - uhttpd-mod-ubus
-          - rpcd
           - xinetd
 
     - name: Apply router base role
