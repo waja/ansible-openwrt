@@ -2,4 +2,4 @@
 # Gewünschter Hostname des Routers.
 # Kann im Playbook, in group_vars/host_vars oder per --extra-vars
 # überschrieben werden.
-router_hostname: openwrt
+router_hostname_value: openwrt

@@ -3,4 +3,4 @@
   community.openwrt.uci:
     command: set
     key: system.@system[0].hostname
-    value: "{{ router_hostname }}"
+    value: "{{ router_hostname_value }}"
