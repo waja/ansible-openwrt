@@ -74,6 +74,25 @@ jobs:
       - name: Install Ansible collection
         run: ansible-galaxy collection install community.openwrt
 
+      - name: Versions
+        run: |
+          molecule --version
+          pip list | grep -iE 'molecule|ansible|docker'
+
+      - name: Molecule create
+        run: molecule create
+
+      - name: Container state after create
+        run: |
+          docker ps -a
+          docker inspect ${{ matrix.platform }} \
+             --format '{{.State.Status}} exit={{.State.ExitCode}}' \
+             || true
+          docker inspect ${{ matrix.platform }} \
+             --format 'cmd={{.Config.Cmd}} tmpfs={{.HostConfig.Tmpfs}}' \
+             || true
+          docker logs ${{ matrix.platform }} || true
+
       - name: Run Molecule for ${{ matrix.platform }}
         run: molecule test -- --limit ${{ matrix.platform }}
         env:
