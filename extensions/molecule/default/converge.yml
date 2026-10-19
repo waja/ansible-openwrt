@@ -15,8 +15,8 @@
         router_hostname_value: molecule-test-router
 
     - name: Ensure a package is installed (example)
-      community.openwrt.{{ openwrt_package_manager }}:
+      action: community.openwrt.{{ openwrt_package_manager }}
+      args:
         name: luci
         state: present
         update_cache: true
-
