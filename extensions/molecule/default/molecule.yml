@@ -4,7 +4,7 @@ driver:
   name: docker
 platforms:
   - name: openwrt-25.12
-    image: openwrt/rootfs:x86-64-25.12
+    image: openwrt/rootfs:x86_64-openwrt-25.12
     command: sleep infinity
     pre_build_image: true
 provisioner:
@@ -13,4 +13,5 @@ provisioner:
     group_vars:
       all:
         ansible_connection: docker
+        ansible_remote_tmp: /tmp
         openwrt_remote_tmp: /tmp
