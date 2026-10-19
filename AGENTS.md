@@ -67,10 +67,18 @@ absence is the normal state, not a defect.
   overridable
 
 ### Package installation (OpenWrt-specific)
-- **Never** hardcode `community.openwrt.apk` or `community.openwrt.opkg`.
-- Always select dynamically via the fact set by
-  `community.openwrt.init`. See the example in
-  `roles/router_packages/tasks/main.yml`.
+
+**Never** hardcode `community.openwrt.apk` or `community.openwrt.opkg`.
+Always select dynamically via the fact set by
+`community.openwrt.init`:
+
+    - name: Install packages dynamically
+      action: "community.openwrt.{{ openwrt_package_manager }}"
+      args:
+        name: "{{ router_packages_list | join(',') }}"
+        state: present
+        update_cache: true
+
 - The `action:` form is required. The module name cannot be used as a
   task key when built from a variable.
 - Check the input format of the selected module (`opkg` and `apk` differ
@@ -90,7 +98,11 @@ absence is the normal state, not a defect.
   `/var/run/ubus/ubus.sock` and `ubus list`
 - `community.openwrt.init` must run before all other roles in
   `converge.yml`
-- Currently only `openwrt-25.12` is defined in `platforms:`
+- Currently only `openwrt-25.12` is defined in `platforms:`. The CI
+  matrix lists `24.10` and `25.12`, but no platform selector is passed
+  to `molecule test`, so both matrix jobs currently run the same
+  scenario. Do not claim that both versions are tested until this is
+  fixed.
 
 ## Adding a new role (checklist)
 
@@ -99,10 +111,10 @@ absence is the normal state, not a defect.
 3. Include the role in `extensions/molecule/default/converge.yml`
    **after** `community.openwrt.init`, passing test values via `vars:`.
 4. Use FQCN modules only.
-5. Make the role idempotent. Molecule's `idempotence` step fails if
-   **any** task reports `changed` on the second run. Use
-   `changed_when: false` for read-only tasks and make module calls
-   truly idempotent.
+5. Make the entire converge run idempotent: a second converge must
+   report no changes. Fix any task that reports `changed`
+   unexpectedly. Use `changed_when: false` for read-only tasks and
+   make module calls truly idempotent.
 6. Install collections first (`ansible-galaxy collection install
    community.openwrt community.docker`), then run `yamllint .`,
    `ansible-lint` and `ansible-playbook --syntax-check` locally.
@@ -114,9 +126,12 @@ absence is the normal state, not a defect.
    `openwrt/rootfs:x86_64-openwrt-<version>` image.
 2. Add the same platform name to the matrix in
    `.github/workflows/molecule.yml`.
-3. Verify that `community.openwrt.init` supports the version and sets
+3. Pass the platform to Molecule, e.g.
+   `--platform-name "${{ matrix.platform }}"`, or split the scenario
+   per version.
+4. Verify that `community.openwrt.init` supports the version and sets
    `openwrt_package_manager` correctly.
-4. If the version uses a different package manager, no role change is
+5. If the version uses a different package manager, no role change is
    needed – the dynamic pattern handles it.
 
 ## Important commands
@@ -159,7 +174,7 @@ with it.
 
 - Python version: `3.14`
 - Triggers: `workflow_dispatch`, `pull_request`, and pushes to
-  `master` and `development`.
+  `development` and `master`.
   **Note:** `$default-branch` is only a template macro for starter
   workflows, not a runtime expression in `branches` filters. Use the
   actual branch name.
@@ -183,7 +198,10 @@ with it.
   - Depends on `lint`, `sanity`, `units`.
   - Uses `if: ${{ !cancelled() && !failure() }}` so it still runs when
     `sanity`/`units` are skipped.
-  - Matrix covers OpenWrt `24.10` and `25.12`, `fail-fast: false`.
+  - Matrix lists `24.10` and `25.12`, `fail-fast: false`. **Note:**
+    no platform selector is passed, so both jobs currently run the
+    same scenario. Fix this before relying on the matrix for version
+    coverage.
   - Selects scenarios via `MOLECULE_GLOB`.
   - Runs `molecule test --destroy=never` to preserve failed containers.
   - Prints container diagnostics on failure.
