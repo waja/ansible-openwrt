@@ -39,6 +39,8 @@ jobs:
 
   molecule:
     runs-on: ubuntu-latest
+    env:
+      MOLECULE_GLOB: "${{ github.workspace }}/extensions/molecule/*/molecule.yml"
     strategy:
       fail-fast: false
       matrix:
