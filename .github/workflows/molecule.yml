@@ -47,10 +47,81 @@ jobs:
           ansible-lint \
             --exclude collections/ansible_collections/community/openwrt/
 
+  check-structure:
+    name: Check collection structure
+    runs-on: ubuntu-latest
+    outputs:
+      has_collection: ${{ steps.check.outputs.files_exists }}
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@v7
+
+      - name: Check for galaxy.yml and tests/unit/plugins
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f galaxy.yml && -d tests/unit/plugins ]]; then
+            echo "files_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "files_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  sanity:
+    name: Sanity
+    needs:
+      - lint
+      - check-structure
+    if: needs.check-structure.outputs.has_collection == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.ANSIBLE_PYTHON_VERSION }}
+
+      - name: Install test dependencies.
+        run: pip install ansible-core
+
+      - name: Ansible Sanity check
+        run: |
+          ansible-test sanity --docker default \
+            --python ${{ env.ANSIBLE_PYTHON_VERSION }}
+
+  units:
+    name: Units
+    needs:
+      - lint
+      - check-structure
+    if: needs.check-structure.outputs.has_collection == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.ANSIBLE_PYTHON_VERSION }}
+
+      - name: Install test dependencies.
+        run: pip install ansible-core
+
+      - name: Ansible Units check
+        run: |
+          ansible-test units --docker default \
+            --python ${{ env.ANSIBLE_PYTHON_VERSION }}
+
   molecule:
     name: Molecule
     needs:
       - lint
+      - sanity
+      - units
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     env:
       MOLECULE_GLOB: >-
