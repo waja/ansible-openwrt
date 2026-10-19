@@ -1,0 +1,101 @@
+# .github/workflows/pr-base-check.yml
+
+name: PR Base Check
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+    branches:
+      - master
+
+jobs:
+  check-base-branch:
+    name: Check base branch
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Warn and label if PR targets master
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            const baseRef = context.payload.pull_request.base.ref;
+            const labelName = 'needs-rebase';
+
+            // Always fetch the current PR state from the API to avoid stale
+            // event payloads (e.g. a queued run after a retarget).
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber
+            });
+            const currentBase = pr.base.ref;
+
+            if (currentBase === 'master') {
+              // 1. Ensure the label exists (idempotent).
+              try {
+                await github.rest.issues.getLabel({
+                  owner, repo, name: labelName
+                });
+              } catch (e) {
+                if (e.status !== 404) throw e;
+                await github.rest.issues.createLabel({
+                  owner, repo, name: labelName,
+                  color: 'B60205',
+                  description: 'PR targets master, retarget to development'
+                });
+              }
+
+              // 2. Post the warning only once (check existing comments).
+              const marker = '<!-- pr-base-check-warning -->';
+              const { data: comments } = await github.rest.issues.listComments({
+                owner, repo, issue_number: prNumber, per_page: 100
+              });
+              const alreadyWarned = comments.some(c =>
+                c.user?.type === 'Bot' &&
+                c.user?.login === 'github-actions[bot]' &&
+                c.body?.includes(marker)
+              );
+
+              if (!alreadyWarned) {
+                const message = [
+                  marker,
+                  '⚠️ This PR targets `master`.',
+                  '',
+                  'Please change the base branch to `development` so it goes',
+                  'through the regular review and CI flow.',
+                  '',
+                  'You can change the base branch using the "Edit" button',
+                  'next to the PR title.'
+                ].join('\n');
+
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: prNumber, body: message
+                });
+              }
+
+              // 3. Add the label (with retry on transient failure).
+              let labeled = false;
+              for (let attempt = 1; attempt <= 3 && !labeled; attempt++) {
+                try {
+                  await github.rest.issues.addLabels({
+                    owner, repo, issue_number: prNumber, labels: [labelName]
+                  });
+                  labeled = true;
+                } catch (e) {
+                  if (attempt === 3) throw e;
+                  await new Promise(r => setTimeout(r, 2000 * attempt));
+                }
+              }
+            } else {
+              // PR no longer targets master → remove the label if present.
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: prNumber, name: labelName
+                });
+              } catch (e) {
+                // 404 = label not on PR, nothing to do.
+                if (e.status !== 404) throw e;
+              }
+            }
