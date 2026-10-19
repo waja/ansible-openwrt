@@ -1,4 +1,4 @@
-i# AGENTS.md
+# AGENTS.md
 
 ## Project context
 
@@ -68,15 +68,9 @@ absence is the normal state, not a defect.
 
 ### Package installation (OpenWrt-specific)
 - **Never** hardcode `community.openwrt.apk` or `community.openwrt.opkg`.
-- Always select dynamically via the fact set by `community.openwrt.init`:
-
-    - name: Install packages dynamically
-      action: "community.openwrt.{{ openwrt_package_manager }}"
-      args:
-        name: "{{ router_packages_list | join(',') }}"
-        state: present
-        update_cache: true
-
+- Always select dynamically via the fact set by
+  `community.openwrt.init`. See the example in
+  `roles/router_packages/tasks/main.yml`.
 - The `action:` form is required. The module name cannot be used as a
   task key when built from a variable.
 - Check the input format of the selected module (`opkg` and `apk` differ
@@ -111,9 +105,7 @@ absence is the normal state, not a defect.
    truly idempotent.
 6. Install collections first (`ansible-galaxy collection install
    community.openwrt community.docker`), then run `yamllint .`,
-   `ansible-lint` and
-   `ansible-playbook extensions/molecule/default/converge.yml
-   --syntax-check` locally.
+   `ansible-lint` and `ansible-playbook --syntax-check` locally.
 
 ## Adding a new OpenWrt version (checklist)
 
@@ -130,6 +122,7 @@ absence is the normal state, not a defect.
 ## Important commands
 
 ### Fast local checks
+
 Run these after installing collections (see below).
 
     yamllint .
@@ -205,9 +198,9 @@ dependencies, conditions, matrix, and commands.
   `create: Successful` without a container: check for `--limit` first.
 - `ip: RTNETLINK answers: Operation not permitted` in container logs
   is harmless (unprivileged container).
-- ansible-lint warning `Unable to load module community.openwrt.{{ … }}`
-  is expected for the dynamic package manager pattern. Do not hardcode
-  the module to silence it.
+- ansible-lint warning `Unable to load module
+  community.openwrt.{{ … }}` is expected for the dynamic package
+  manager pattern. Do not hardcode the module to silence it.
 - `argument --python: expected one argument`: the variable used in the
   workflow does not exist. Use `${{ env.ANSIBLE_PYTHON_VERSION }}`.
 - `couldn't resolve module/action 'community.openwrt.uci'`: collections
@@ -249,8 +242,6 @@ dependencies, conditions, matrix, and commands.
   `include_role`
 - Before pushing, run the fast local checks above (after installing
   collections)
-- **Idempotence:** Molecule's `idempotence` step fails if any task in
-  the converge play reports `changed` on the second run. Mark read-only
-  tasks with `changed_when: false` and make module calls idempotent.
+- See "Adding a new role" for the idempotence requirement
 - If workflow and this document disagree, the workflow wins – update
   this file
