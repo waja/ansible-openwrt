@@ -35,7 +35,9 @@ jobs:
       - name: Lint Ansible.
         env:
           ANSIBLE_COLLECTIONS_PATH: >-
-            ${{ github.workspace }}/collections:/home/runner/.ansible/collections:/usr/share/ansible/collections
+            ${{ github.workspace }}/collections:
+            /home/runner/.ansible/collections:
+            /usr/share/ansible/collections
         run: |
           ansible-galaxy role install geerlingguy.docker
           ansible-lint
