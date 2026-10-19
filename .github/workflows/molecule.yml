@@ -40,6 +40,7 @@ jobs:
             /usr/share/ansible/collections
         run: |
           ansible-galaxy role install geerlingguy.docker
+          ansible-galaxy collection install community.openwrt
           ansible-lint
 
   molecule:
