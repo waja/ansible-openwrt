@@ -1,4 +1,4 @@
-# AGENTS.md
+i# AGENTS.md
 
 ## Project context
 
@@ -18,7 +18,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `./collections/` – installed dependencies, **never edit**, must be
   git-ignored
 - `requirements.yml` – **should be added** to pin collection versions
-  (`community.openwrt`, `community.docker`). Not yet present.
+  (`community.openwrt`, `community.docker`). Not yet present. Do not
+  create it unless asked.
 - `.github/workflows/molecule.yml` – main CI pipeline
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
 
@@ -34,7 +35,7 @@ absence is the normal state, not a defect.
 - Maximum 80 characters per physical line, by convention for all
   file types.
 - `yamllint` enforces this for YAML files, including block scalars
-  (`run: |`, `script: |`). It does not check shell or Markdown files.
+  (`run: |`, `script: |`). It does not check Markdown or shell files.
 - Do not suppress the rule with `# yamllint disable-line` unless the
   line cannot be wrapped (e.g. a long URL).
 
@@ -104,9 +105,10 @@ absence is the normal state, not a defect.
 3. Include the role in `extensions/molecule/default/converge.yml`
    **after** `community.openwrt.init`, passing test values via `vars:`.
 4. Use FQCN modules only.
-5. Make the role idempotent: a second `converge` run must report
-   `changed=0` **for that role**. Other tasks may legitimately report
-   changes.
+5. Make the role idempotent. Molecule's `idempotence` step fails if
+   **any** task reports `changed` on the second run. Use
+   `changed_when: false` for read-only tasks and make module calls
+   truly idempotent.
 6. Install collections first (`ansible-galaxy collection install
    community.openwrt community.docker`), then run `yamllint .`,
    `ansible-lint` and
@@ -124,12 +126,6 @@ absence is the normal state, not a defect.
    `openwrt_package_manager` correctly.
 4. If the version uses a different package manager, no role change is
    needed – the dynamic pattern handles it.
-5. **Platform selection:** Currently the workflow does not pass a
-   platform selector to `molecule test`. Each matrix job would create
-   every platform defined in `molecule.yml`. If more than one platform
-   is defined, add `--platform-name ${{ matrix.platform }}` to the
-   `molecule test` command (supported in recent Molecule versions) or
-   split the scenario per version.
 
 ## Important commands
 
@@ -170,10 +166,10 @@ with it.
 
 - Python version: `3.14`
 - Triggers: `workflow_dispatch`, `pull_request`, and pushes to
-  `master`, `development`, and `master`.
+  `master` and `development`.
   **Note:** `$default-branch` is only a template macro for starter
   workflows, not a runtime expression in `branches` filters. Use the
-  actual branch name (`master`).
+  actual branch name.
 
 ### Jobs
 
@@ -207,8 +203,8 @@ dependencies, conditions, matrix, and commands.
 
 - `No such container`, `mkdir` failing in `/tmp`, or
   `create: Successful` without a container: check for `--limit` first.
-- `ip: RTNETLINK answers: Operation not permitted` in container logs is
-  harmless (unprivileged container).
+- `ip: RTNETLINK answers: Operation not permitted` in container logs
+  is harmless (unprivileged container).
 - ansible-lint warning `Unable to load module community.openwrt.{{ … }}`
   is expected for the dynamic package manager pattern. Do not hardcode
   the module to silence it.
@@ -231,8 +227,7 @@ dependencies, conditions, matrix, and commands.
 - Never pass `--limit` (or `-- --limit …`) to `molecule test/create`.
   Molecule forwards it to the driver playbooks, which run on localhost.
   No host matches, the container is silently never created, and
-  `create` still reports "Successful". Select platforms via the matrix
-  or `--platform-name`.
+  `create` still reports "Successful".
 - Do not invent collection metadata paths (`galaxy.yml`, `meta/`,
   `plugins/`) – this project does not have them
 - Do not suppress `yamllint` errors with `# noqa` (`# noqa` is
@@ -254,7 +249,8 @@ dependencies, conditions, matrix, and commands.
   `include_role`
 - Before pushing, run the fast local checks above (after installing
   collections)
-- **Idempotence:** a second `converge` run must report `changed=0` for
-  the role you modified. Other tasks may legitimately report changes.
+- **Idempotence:** Molecule's `idempotence` step fails if any task in
+  the converge play reports `changed` on the second run. Mark read-only
+  tasks with `changed_when: false` and make module calls idempotent.
 - If workflow and this document disagree, the workflow wins – update
   this file
