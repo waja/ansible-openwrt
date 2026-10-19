@@ -82,7 +82,14 @@ jobs:
       - name: Molecule create
         run: molecule create
 
-      - name: Container state after create
+      - name: Run Molecule for ${{ matrix.platform }}
+        run: molecule test --destroy=never -- --limit ${{ matrix.platform }}
+        env:
+          PY_COLORS: '1'
+          ANSIBLE_FORCE_COLOR: '1'
+
+      - name: Debug containers
+        if: failure()
         run: |
           docker ps -a
           docker inspect ${{ matrix.platform }} \
@@ -93,8 +100,6 @@ jobs:
              || true
           docker logs ${{ matrix.platform }} || true
 
-      - name: Run Molecule for ${{ matrix.platform }}
-        run: molecule test -- --limit ${{ matrix.platform }}
-        env:
-          PY_COLORS: '1'
-          ANSIBLE_FORCE_COLOR: '1'
+      - name: Molecule destroy
+        if: always()
+        run: molecule destroy
