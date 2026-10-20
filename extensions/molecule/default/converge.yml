@@ -28,7 +28,7 @@
         path: /etc/config/snmpd-opkg
         state: touch
       tags:
-        - molecule-notest
+        - molecule-idempotence-notest
 
     - name: Apply router base role
       ansible.builtin.include_role:
