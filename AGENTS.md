@@ -181,23 +181,21 @@ Molecule is a CI responsibility. Local runs require Docker and the
 Molecule toolchain; if those are unavailable, rely on the fast checks
 above and let CI run Molecule.
 
-### Install collections
+### Install Ansible dependencies
 
-    # Once requirements.yml exists:
+The repository-level `requirements.yml` pins the role and collection
+versions used by CI. Install roles and collections separately because
+they use different destination paths:
+
+    ansible-galaxy role install -r requirements.yml \
+      --roles-path ~/.ansible/roles
     ansible-galaxy collection install -r requirements.yml \
       --collections-path ~/.ansible/collections
-    # Without it:
-    ansible-galaxy collection install community.openwrt community.docker \
-      --collections-path ~/.ansible/collections
 
-CI installs collections into `~/.ansible/collections`, matching the
-user-specific installation path used for roles (`~/.ansible/roles`).
-Ansible's default collection search path includes this directory.
-
-There is no `requirements.yml` yet. Collection versions are currently
-installed unpinned. Pinning via `requirements.yml` would make CI and
-local runs reproducible, but it is a future improvement and must not be
-introduced without an explicit request.
+Ansible's default search paths include these user-specific directories.
+The Renovate configuration extends `config:recommended`, which enables
+the Ansible Galaxy manager to propose updates for role and collection
+entries in `requirements.yml`.
 
 ## CI pipeline (`.github/workflows/molecule.yml`)
 
@@ -215,9 +213,8 @@ with it.
 
 - `lint`
   - Runs `yamllint .`.
-  - Installs the `geerlingguy.docker` role into
-    `~/.ansible/roles` and `community.openwrt` into
-    `~/.ansible/collections`.
+  - Installs pinned roles and collections from `requirements.yml` into
+    `~/.ansible/roles` and `~/.ansible/collections`, respectively.
   - Runs `ansible-lint`, excluding the installed `community.openwrt`
     collection.
 - `check-structure`
@@ -230,6 +227,8 @@ with it.
   - Use `ansible-test` with `${{ env.ANSIBLE_PYTHON_VERSION }}`.
 - `molecule`
   - Depends on `lint`, `sanity`, `units`.
+  - Installs pinned roles and collections from `requirements.yml` into
+    `~/.ansible/roles` and `~/.ansible/collections`, respectively.
   - Uses `if: ${{ !cancelled() && !failure() }}` so it still runs when
     `sanity`/`units` are skipped.
   - Matrix lists `24.10` and `25.12`, `fail-fast: false`. **Note:**
