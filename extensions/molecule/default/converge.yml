@@ -9,13 +9,13 @@
 
     - name: Apply router hostname role
       ansible.builtin.include_role:
-        name: "{{ playbook_dir }}/../../../roles/router_hostname"
+        name: router_hostname
       vars:
         router_hostname_value: molecule-test-router
 
     - name: Apply router packages role
       ansible.builtin.include_role:
-        name: "{{ playbook_dir }}/../../../roles/router_packages"
+        name: router_packages
       vars:
         router_packages_list:
           - busybox
@@ -32,7 +32,7 @@
 
     - name: Apply router base role
       ansible.builtin.include_role:
-        name: "{{ playbook_dir }}/../../../roles/router_base"
+        name: router_base
 
     - name: Verify required services are enabled and running
       ansible.builtin.raw: |
