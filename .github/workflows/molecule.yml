@@ -2,7 +2,6 @@
 ---
 name: Molecule CI
 
----
 env:
   ANSIBLE_PYTHON_VERSION: '3.14'
 
@@ -158,7 +157,8 @@ jobs:
 
       - name: Configure Ansible role search path
         run: |
-          echo "ANSIBLE_ROLES_PATH=$GITHUB_WORKSPACE/roles:$HOME/.ansible/roles:/usr/share/ansible/roles" >> "$GITHUB_ENV"
+          printf 'ANSIBLE_ROLES_PATH=%s/roles:%s/.ansible/roles:/usr/share/ansible/roles\n' \
+            "$GITHUB_WORKSPACE" "$HOME" >> "$GITHUB_ENV"
 
       - name: Run Molecule for ${{ matrix.platform }}
         run: molecule test --destroy=never
