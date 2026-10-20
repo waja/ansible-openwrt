@@ -157,8 +157,8 @@ jobs:
 
       - name: Configure Ansible role search path
         run: |
-          echo "ANSIBLE_ROLES_PATH=$GITHUB_WORKSPACE/roles:$HOME/.ansible/roles:"\
-          "/usr/share/ansible/roles" >> "$GITHUB_ENV"
+          echo "ANSIBLE_ROLES_PATH=$GITHUB_WORKSPACE/roles:"\
+          "$HOME/.ansible/roles:/usr/share/ansible/roles" >> "$GITHUB_ENV"
 
       - name: Run Molecule for ${{ matrix.platform }}
         run: molecule test --destroy=never
