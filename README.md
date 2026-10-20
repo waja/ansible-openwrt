@@ -20,9 +20,12 @@ Both playbooks target the `openwrt` inventory group.
 
 ## Requirements
 
-- Python and Ansible installed on the control node.
-- SSH access to each OpenWrt router, typically with a configured SSH key.
+- SSH access to each OpenWrt router.
 - The Ansible dependencies listed in `requirements.yml`.
+- Either Ansible and Python on the control node, or Docker to run Ansible
+  in a container.
+
+### Run Ansible directly on the control node
 
 Install the pinned dependencies into the standard user Ansible paths:
 
@@ -32,6 +35,72 @@ ansible-galaxy role install -r requirements.yml \
 ansible-galaxy collection install -r requirements.yml \
   --collections-path ~/.ansible/collections
 ```
+
+### Run Ansible in Docker with `serversideup/ansible`
+
+The [`serversideup/ansible` image](https://github.com/serversideup/docker-ansible)
+provides Ansible and Python in a container, so they do not need to be
+installed on the control node. The examples below run Ansible from this
+repository directory and keep the inventory and playbooks on the host.
+
+Choose a specific image tag from the
+[available tags](https://hub.docker.com/r/serversideup/ansible/tags).
+Pin the tag rather than using `latest`, so deployments use a predictable
+Ansible and Python environment. Replace `<pinned-tag>` in the examples
+with the tag you selected.
+
+The image uses `/ansible` as its working directory and `/ssh` for SSH
+configuration. Mount the repository at `/ansible` and your SSH directory
+at `/ssh`. The SSH directory is mounted read-only below; do not copy
+private keys into the image or commit them to the repository.
+
+For example, run the standard configuration playbook:
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/ansible" \
+  -v "$HOME/.ssh:/ssh:ro" \
+  -e PUID="$(id -u)" \
+  -e PGID="$(id -g)" \
+  serversideup/ansible:<pinned-tag> \
+  ansible-playbook -i inventory.ini playbooks/site.yml
+```
+
+The container needs the role and collection dependencies from
+`requirements.yml`. For a simple first run, install them and execute the
+playbook in the same container invocation:
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/ansible" \
+  -v "$HOME/.ssh:/ssh:ro" \
+  -e PUID="$(id -u)" \
+  -e PGID="$(id -g)" \
+  serversideup/ansible:<pinned-tag> \
+  sh -lc 'ansible-galaxy role install -r requirements.yml \
+    --roles-path /tmp/ansible-roles &&
+    ansible-galaxy collection install -r requirements.yml \
+    --collections-path /tmp/ansible-collections &&
+    ANSIBLE_ROLES_PATH=/tmp/ansible-roles \
+    ANSIBLE_COLLECTIONS_PATH=/tmp/ansible-collections \
+    ansible-playbook -i inventory.ini playbooks/site.yml'
+```
+
+This downloads the pinned dependencies on each fresh run. For frequent use,
+build a small image on top of `serversideup/ansible` that installs the
+repository's `requirements.yml` at build time. Keep the image tag and
+dependency versions pinned so the control-node environment is reproducible.
+
+To run the package audit instead, replace the playbook path with
+`playbooks/audit_packages.yml`. To target one router, add
+`--limit router1` to the `ansible-playbook` command.
+
+The container still needs network access to the routers and valid SSH
+authentication. The image does not make Python available on the OpenWrt
+targets; the project's tasks must remain compatible with Python-free
+OpenWrt systems. See the upstream
+[image documentation](https://github.com/serversideup/docker-ansible)
+for SSH-agent forwarding and other configuration options.
 
 ## Define your routers
 
