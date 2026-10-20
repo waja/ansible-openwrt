@@ -54,7 +54,8 @@ they are also used when defining host-specific variables.
 Check SSH connectivity without requiring Python on the router:
 
 ```bash
-ansible -i inventory.ini openwrt -m ansible.builtin.raw -a 'ubus call system board'
+ansible -i inventory.ini openwrt \\
+  -m ansible.builtin.raw -a 'ubus call system board'
 ```
 
 This runs `ubus call system board` over SSH using Ansible's raw module.
