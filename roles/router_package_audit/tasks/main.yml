@@ -1,3 +1,4 @@
+# roles/router_package_audit/tasks/main.yml
 ---
 - name: Check whether the baseline package list exists
   community.openwrt.stat:
