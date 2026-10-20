@@ -133,7 +133,7 @@ they are also used when defining host-specific variables.
 Check SSH connectivity without requiring Python on the router:
 
 ```bash
-ansible -i inventory.ini openwrt \\
+ansible -i inventory.ini openwrt \
   -m ansible.builtin.raw -a 'ubus call system board'
 ```
 
@@ -293,7 +293,14 @@ than both.
 
 ## Development checks
 
-Install the dependencies first, then run the checks used by the project:
+Install the lint tools used by the project, then run the checks. On a control
+node with Python and pip available, install them with:
+
+```bash
+python -m pip install yamllint ansible-lint
+```
+
+Then run the checks used by the project:
 
 ```bash
 yamllint .
