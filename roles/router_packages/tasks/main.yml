@@ -2,7 +2,7 @@
 ---
 - name: Acquire the shared service restart lock
   ansible.builtin.raw: |
-    lock=/etc/.router-packages-restart-lock
+    lock=/tmp/router-packages-restart-lock
     timeout={{ router_packages_service_restart_lock_timeout | int }}
     waited=0
     until mkdir "$lock" 2>/dev/null; do
@@ -17,12 +17,12 @@
 
 - name: Check for a pending service restart from an earlier run
   community.openwrt.stat:
-    path: /etc/.router-packages-restart-pending
+    path: /tmp/router-packages-restart-pending
   register: router_packages_pending_restart_stat
 
 - name: Mark services for restart before package installation
   community.openwrt.file:
-    path: /etc/.router-packages-restart-pending
+    path: /tmp/router-packages-restart-pending
     state: touch
   when: not router_packages_pending_restart_stat.stat.exists
   changed_when: false
@@ -41,13 +41,13 @@
     # run too late and leave stale completion markers for the next role.
     - name: Reset restart progress after package changes  # noqa: no-handler
       community.openwrt.file:
-        path: /etc/.router-packages-restart-completed
+        path: /tmp/router-packages-restart-completed
         state: absent
       when: router_packages_install_result.changed
 
     - name: Clear restart marker when packages did not change
       community.openwrt.file:
-        path: /etc/.router-packages-restart-pending
+        path: /tmp/router-packages-restart-pending
         state: absent
       when:
         - not router_packages_install_result.changed
@@ -56,5 +56,5 @@
   always:
     - name: Release the shared service restart lock
       ansible.builtin.raw: >-
-        rmdir /etc/.router-packages-restart-lock
+        rmdir /tmp/router-packages-restart-lock
       changed_when: false
