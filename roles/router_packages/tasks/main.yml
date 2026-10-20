@@ -15,20 +15,20 @@
     done
   changed_when: false
 
-- name: Check for a pending service restart from an earlier run
-  community.openwrt.stat:
-    path: /tmp/router-packages-restart-pending
-  register: router_packages_pending_restart_stat
-
-- name: Mark services for restart before package installation
-  community.openwrt.file:
-    path: /tmp/router-packages-restart-pending
-    state: touch
-  when: not router_packages_pending_restart_stat.stat.exists
-  changed_when: false
-
 - name: Install requested and required service packages
   block:
+    - name: Check for a pending service restart from an earlier run
+      community.openwrt.stat:
+        path: /tmp/router-packages-restart-pending
+      register: router_packages_pending_restart_stat
+
+    - name: Mark services for restart before package installation
+      community.openwrt.file:
+        path: /tmp/router-packages-restart-pending
+        state: touch
+      when: not router_packages_pending_restart_stat.stat.exists
+      changed_when: false
+
     - name: Install packages with opkg
       ansible.builtin.include_tasks: install_opkg.yml
       when: openwrt_package_manager == 'opkg'
