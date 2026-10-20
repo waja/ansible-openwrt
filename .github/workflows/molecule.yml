@@ -36,15 +36,11 @@ jobs:
           yamllint .
 
       - name: Lint Ansible.
-        env:
-          ANSIBLE_COLLECTIONS_PATH: >-
-            ${{ github.workspace }}/collections:
-            /home/runner/.ansible/collections:
-            /usr/share/ansible/collections
         run: |
           ansible-galaxy role install geerlingguy.docker \
             --roles-path ~/.ansible/roles
-          ansible-galaxy collection install community.openwrt
+          ansible-galaxy collection install community.openwrt \
+            --collections-path ~/.ansible/collections
           ansible-lint \
             --exclude collections/ansible_collections/community/openwrt/
 
@@ -148,7 +144,9 @@ jobs:
           pip install ansible-core molecule molecule-plugins[docker]
 
       - name: Install Ansible collection
-        run: ansible-galaxy collection install community.openwrt
+        run: |
+          ansible-galaxy collection install community.openwrt \
+            --collections-path ~/.ansible/collections
 
       - name: Versions
         run: |

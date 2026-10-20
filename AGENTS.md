@@ -184,9 +184,15 @@ above and let CI run Molecule.
 ### Install collections
 
     # Once requirements.yml exists:
-    ansible-galaxy collection install -r requirements.yml
+    ansible-galaxy collection install -r requirements.yml \
+      --collections-path ~/.ansible/collections
     # Without it:
-    ansible-galaxy collection install community.openwrt community.docker
+    ansible-galaxy collection install community.openwrt community.docker \
+      --collections-path ~/.ansible/collections
+
+CI installs collections into `~/.ansible/collections`, matching the
+user-specific installation path used for roles (`~/.ansible/roles`).
+Ansible's default collection search path includes this directory.
 
 There is no `requirements.yml` yet. Collection versions are currently
 installed unpinned. Pinning via `requirements.yml` would make CI and
@@ -209,7 +215,9 @@ with it.
 
 - `lint`
   - Runs `yamllint .`.
-  - Installs Ansible dependencies (`ansible-lint`, roles, collections).
+  - Installs the `geerlingguy.docker` role into
+    `~/.ansible/roles` and `community.openwrt` into
+    `~/.ansible/collections`.
   - Runs `ansible-lint`, excluding the installed `community.openwrt`
     collection.
 - `check-structure`
