@@ -22,8 +22,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   `defaults/main.yml`
 - `./collections/` – installed dependencies, **never edit**, must be
   git-ignored
-- `requirements.yml` – not present. A future improvement, not part of
-  the current project state. Do not create it unless explicitly asked.
+- `requirements.yml` – authoritative, version-pinned source for
+  Ansible role and collection dependencies used locally and in CI.
 - `.github/workflows/molecule.yml` – main CI pipeline
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
 
@@ -183,9 +183,10 @@ above and let CI run Molecule.
 
 ### Install Ansible dependencies
 
-The repository-level `requirements.yml` pins the role and collection
-versions used by CI. Install roles and collections separately because
-they use different destination paths:
+The repository-level `requirements.yml` is the source of truth for
+pinned Ansible role and collection dependencies, including the
+`community.docker` connection plugin required by Molecule. Install roles
+and collections separately because they use different destination paths:
 
     ansible-galaxy role install -r requirements.yml \
       --roles-path ~/.ansible/roles
