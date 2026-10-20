@@ -158,6 +158,7 @@ jobs:
       - name: Run Molecule for ${{ matrix.platform }}
         run: molecule test --destroy=never
         env:
+          ANSIBLE_ROLES_PATH: "${{ github.workspace }}/roles:/home/runner/.ansible/roles:/usr/share/ansible/roles"
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
 
