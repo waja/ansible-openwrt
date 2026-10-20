@@ -51,17 +51,26 @@ of your routers. Configure SSH authentication as appropriate for your
 environment. The names `router1` and `router2` are inventory hostnames;
 they are also used when defining host-specific variables.
 
-Check that Ansible can connect:
+Check SSH connectivity without requiring Python on the router:
+
+```bash
+ansible -i inventory.ini openwrt -m ansible.builtin.raw -a 'ubus call system board'
+```
+
+This runs `ubus call system board` over SSH using Ansible's raw module.
+It verifies that Ansible can connect and execute a command on OpenWrt
+without requiring Python on the target. It also checks that `ubus` is
+available, so a failure may indicate an issue beyond SSH connectivity.
+
+On targets that have a usable Python environment, you can additionally
+use Ansible's normal ping module:
 
 ```bash
 ansible -i inventory.ini openwrt -m ansible.builtin.ping
 ```
 
-The `ping` module checks Ansible connectivity and requires a usable Python
-environment on the target. If your OpenWrt image does not provide Python,
-use the connection check documented for your environment instead; the
-configuration playbooks themselves use the OpenWrt collection and raw
-commands where necessary.
+The ping module requires Python on the target and will fail on Python-free
+OpenWrt images even when SSH connectivity works.
 
 ## Configure the routers
 
