@@ -37,7 +37,7 @@
       ansible.builtin.include_tasks: install_apk.yml
       when: openwrt_package_manager == 'apk'
 
-    - name: Reset completed service restarts when packages changed
+    - name: Reset restart progress after package changes  # noqa: no-handler
       community.openwrt.file:
         path: /etc/.router-packages-restart-completed
         state: absent
