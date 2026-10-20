@@ -38,10 +38,10 @@ ansible-galaxy collection install -r requirements.yml \
 
 ### Run Ansible in Docker with `serversideup/ansible`
 
-The [`serversideup/ansible` image](
-https://github.com/serversideup/docker-ansible) provides Ansible and Python
-in a container, so they do not need to be installed on the control node. The examples below run Ansible from this
-repository directory and keep the inventory and playbooks on the host.
+The [serversideup/ansible image](https://github.com/serversideup/docker-ansible)
+provides Ansible and Python in a container, so they do not need to be
+installed on the control node. The examples run Ansible from this repository
+directory and keep the inventory and playbooks on the host.
 
 Choose a specific image tag from the
 [available tags](https://hub.docker.com/r/serversideup/ansible/tags).
