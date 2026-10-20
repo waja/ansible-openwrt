@@ -19,3 +19,4 @@
   when:
     - router_base_pending_restart_stat.stat.exists
     - not router_base_service_restart_stat.stat.exists
+  changed_when: true
