@@ -1,0 +1,24 @@
+# roles/router_base/tasks/restart_service.yml
+---
+- name: Check whether this service restart already completed
+  community.openwrt.stat:
+    path: "/etc/.router-packages-restart-completed/{{ item }}"
+  register: router_base_service_restart_stat
+
+- name: Enable and start or restart service
+  community.openwrt.service:
+    name: "{{ item }}"
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if router_base_pending_restart_stat.stat.exists
+         and not router_base_service_restart_stat.stat.exists
+         else 'started' }}
+
+- name: Record successful service restart
+  community.openwrt.file:
+    path: "/etc/.router-packages-restart-completed/{{ item }}"
+    state: touch
+  when:
+    - router_base_pending_restart_stat.stat.exists
+    - not router_base_service_restart_stat.stat.exists
