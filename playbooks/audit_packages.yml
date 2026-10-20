@@ -1,3 +1,4 @@
+# playbooks/audit_packages.yml
 ---
 - name: Audit installed OpenWrt packages
   hosts: openwrt
