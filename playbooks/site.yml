@@ -1,3 +1,4 @@
+# playbooks/site.yml
 ---
 - name: Configure OpenWrt routers
   hosts: openwrt
