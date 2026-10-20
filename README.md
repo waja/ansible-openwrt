@@ -20,7 +20,7 @@ Both playbooks target the `openwrt` inventory group.
 
 ## Requirements
 
-- SSH access to each OpenWrt router.
+- SSH access to each OpenWrt router, typically with a configured SSH key.
 - The Ansible dependencies listed in `requirements.yml`.
 - Either Ansible and Python on the control node, or Docker to run Ansible
   in a container.
