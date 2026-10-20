@@ -2,7 +2,7 @@
 ---
 - name: Acquire the shared service restart lock
   ansible.builtin.raw: |
-    lock=/etc/.router-packages-restart-lock
+    lock=/tmp/router-packages-restart-lock
     timeout={{ router_base_service_restart_lock_timeout | int }}
     waited=0
     until mkdir "$lock" 2>/dev/null; do
@@ -25,12 +25,12 @@
 
     - name: Check whether service restarts are pending
       community.openwrt.stat:
-        path: /etc/.router-packages-restart-pending
+        path: /tmp/router-packages-restart-pending
       register: router_base_pending_restart_stat
 
     - name: Create service restart completion marker directory
       community.openwrt.file:
-        path: /etc/.router-packages-restart-completed
+        path: /tmp/router-packages-restart-completed
         state: directory
       when: router_base_pending_restart_stat.stat.exists
 
@@ -40,17 +40,17 @@
 
     - name: Clear pending service restart marker
       community.openwrt.file:
-        path: /etc/.router-packages-restart-pending
+        path: /tmp/router-packages-restart-pending
         state: absent
       when: router_base_pending_restart_stat.stat.exists
 
     - name: Remove service restart completion markers
       community.openwrt.file:
-        path: /etc/.router-packages-restart-completed
+        path: /tmp/router-packages-restart-completed
         state: absent
 
   always:
     - name: Release the shared service restart lock
       ansible.builtin.raw: >-
-        rmdir /etc/.router-packages-restart-lock
+        rmdir /tmp/router-packages-restart-lock
       changed_when: false
