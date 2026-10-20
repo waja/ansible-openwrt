@@ -40,6 +40,8 @@ absence is the normal state, not a defect.
 
 ### YAML
 - 2-space indentation, no tabs
+- Start every YAML file with a comment containing its repository-relative
+  path, followed by `---`
 - File ends with a newline
 - Boolean values as `true`/`false`, not `yes`/`no`
 - Wrap long strings with `>-` (folded) at YAML level only. Never use
