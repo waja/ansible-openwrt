@@ -10,12 +10,19 @@
       Package audit requires {{ router_package_audit_baseline }} to exist.
   when: not router_package_audit_baseline_stat.stat.exists
 
-- name: Install diffutils before taking the package snapshot
-  action: "community.openwrt.{{ openwrt_package_manager }}"
-  args:
+- name: Install diffutils before taking the package snapshot with opkg
+  community.openwrt.opkg:
     name: diffutils
     state: present
     update_cache: true
+  when: openwrt_package_manager == 'opkg'
+
+- name: Install diffutils before taking the package snapshot with apk
+  community.openwrt.apk:
+    name: diffutils
+    state: present
+    update_cache: true
+  when: openwrt_package_manager == 'apk'
 
 - name: Create a unique directory for this audit run
   ansible.builtin.raw: mktemp -d /tmp/router-package-audit.XXXXXX

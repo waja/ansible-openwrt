@@ -1,0 +1,9 @@
+---
+- name: Install requested and required packages with opkg
+  community.openwrt.opkg:
+    name: >-
+      {{ (router_packages_list + router_packages_required_services)
+         | unique }}
+    state: present
+    update_cache: true
+  register: router_packages_install_result
