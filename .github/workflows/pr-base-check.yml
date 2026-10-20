@@ -1,8 +1,9 @@
 # .github/workflows/pr-base-check.yml
+---
 
 name: PR Base Check
 
-on:
+"on":
   pull_request_target:
     types: [opened, synchronize, reopened, edited]
     branches:
