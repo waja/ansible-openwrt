@@ -54,19 +54,13 @@ configuration. Mount the repository at `/ansible` and your SSH directory
 at `/ssh`. The SSH directory is mounted read-only below; do not copy
 private keys into the image or commit them to the repository.
 
-For example, run the standard configuration playbook:
+First, verify that the selected image can run Ansible:
 
 ```bash
-docker run --rm -it \
-  -v "$PWD:/ansible" \
-  -v "$HOME/.ssh:/ssh:ro" \
-  -e PUID="$(id -u)" \
-  -e PGID="$(id -g)" \
-  serversideup/ansible:<pinned-tag> \
-  ansible-playbook -i inventory.ini playbooks/site.yml
+docker run --rm serversideup/ansible:<pinned-tag> ansible --version
 ```
 
-The container needs the role and collection dependencies from
+The container also needs the role and collection dependencies from
 `requirements.yml`. For a simple first run, install them and execute the
 playbook in the same container invocation:
 
@@ -88,8 +82,24 @@ docker run --rm -it \
 
 This downloads the pinned dependencies on each fresh run. For frequent use,
 build a small image on top of `serversideup/ansible` that installs the
-repository's `requirements.yml` at build time. Keep the image tag and
-dependency versions pinned so the control-node environment is reproducible.
+repository's `requirements.yml` at build time. The shorter invocation then
+works with the same volume mounts:
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/ansible" \
+  -v "$HOME/.ssh:/ssh:ro" \
+  -e PUID="$(id -u)" \
+  -e PGID="$(id -g)" \
+  ansible-openwrt:<pinned-tag> \
+  ansible-playbook -i inventory.ini playbooks/site.yml
+```
+
+Keep the base image tag and dependency versions pinned so the control-node
+environment is reproducible. The examples assume SSH host keys are already
+present in `~/.ssh/known_hosts`; if your SSH configuration needs to update
+that file, provide a writable known-hosts file as described in the upstream
+image documentation.
 
 To run the package audit instead, replace the playbook path with
 `playbooks/audit_packages.yml`. To target one router, add
