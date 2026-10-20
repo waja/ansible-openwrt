@@ -37,9 +37,9 @@ jobs:
 
       - name: Lint Ansible.
         run: |
-          ansible-galaxy role install geerlingguy.docker \
+          ansible-galaxy role install -r requirements.yml \
             --roles-path ~/.ansible/roles
-          ansible-galaxy collection install community.openwrt \
+          ansible-galaxy collection install -r requirements.yml \
             --collections-path ~/.ansible/collections
           ansible-lint \
             --exclude collections/ansible_collections/community/openwrt/
@@ -143,9 +143,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install ansible-core molecule molecule-plugins[docker]
 
-      - name: Install Ansible collection
+      - name: Install Ansible dependencies
         run: |
-          ansible-galaxy collection install community.openwrt \
+          ansible-galaxy role install -r requirements.yml \
+            --roles-path ~/.ansible/roles
+          ansible-galaxy collection install -r requirements.yml \
             --collections-path ~/.ansible/collections
 
       - name: Versions
