@@ -42,7 +42,8 @@ jobs:
             /home/runner/.ansible/collections:
             /usr/share/ansible/collections
         run: |
-          ansible-galaxy role install geerlingguy.docker
+          ansible-galaxy role install geerlingguy.docker \
+            --roles-path ~/.ansible/roles
           ansible-galaxy collection install community.openwrt
           ansible-lint \
             --exclude collections/ansible_collections/community/openwrt/
