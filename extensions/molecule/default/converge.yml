@@ -23,6 +23,11 @@
           - snmpd
           - xinetd
 
+    - name: Create obsolete SNMP configuration for the cleanup test
+      community.openwrt.file:
+        path: /etc/config/snmpd-opkg
+        state: touch
+
     - name: Apply router base role
       ansible.builtin.include_role:
         name: router_base

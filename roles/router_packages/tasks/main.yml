@@ -1,29 +1,53 @@
 ---
+- name: Acquire the shared service restart lock
+  ansible.builtin.raw: |
+    lock={{ router_service_restart_lock_dir | quote }}
+    timeout={{ router_service_restart_lock_timeout | int }}
+    waited=0
+    until mkdir "$lock" 2>/dev/null; do
+      if [ "$waited" -ge "$timeout" ]; then
+        echo "Timed out waiting for service restart lock: $lock" >&2
+        exit 1
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
+  changed_when: false
+
 - name: Check for a pending service restart from an earlier run
   community.openwrt.stat:
-    path: "{{ router_packages_pending_restart_file }}"
+    path: "{{ router_service_restart_pending_file }}"
   register: router_packages_pending_restart_stat
 
 - name: Mark services for restart before package installation
   community.openwrt.file:
-    path: "{{ router_packages_pending_restart_file }}"
+    path: "{{ router_service_restart_pending_file }}"
     state: touch
   when: not router_packages_pending_restart_stat.stat.exists
   changed_when: false
 
-- name: Install packages dynamically
-  action: "community.openwrt.{{ openwrt_package_manager }}"
-  args:
-    name: "{{ router_packages_list | join(',') }}"
-    state: present
-    update_cache: true
-  register: router_packages_install_result
+- name: Install requested and required service packages
+  block:
+    - name: Install packages dynamically
+      action: "community.openwrt.{{ openwrt_package_manager }}"
+      args:
+        name: >-
+          {{ (router_packages_list + router_packages_required_services)
+             | unique | join(',') }}
+        state: present
+        update_cache: true
+      register: router_packages_install_result
 
-- name: Clear restart marker when packages did not change
-  community.openwrt.file:
-    path: "{{ router_packages_pending_restart_file }}"
-    state: absent
-  when:
-    - not router_packages_install_result.changed
-    - not router_packages_pending_restart_stat.stat.exists
-  changed_when: false
+    - name: Clear restart marker when packages did not change
+      community.openwrt.file:
+        path: "{{ router_service_restart_pending_file }}"
+        state: absent
+      when:
+        - not router_packages_install_result.changed
+        - not router_packages_pending_restart_stat.stat.exists
+      changed_when: false
+  always:
+    - name: Release the shared service restart lock
+      ansible.builtin.raw: >-
+        rmdir {{ router_service_restart_lock_dir | quote }}
+      changed_when: false

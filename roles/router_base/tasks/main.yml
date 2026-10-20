@@ -1,26 +1,48 @@
 ---
-- name: Check whether service restarts are pending
-  community.openwrt.stat:
-    path: "{{ router_base_pending_restart_file }}"
-  register: router_base_pending_restart_stat
+- name: Acquire the shared service restart lock
+  ansible.builtin.raw: |
+    lock={{ router_service_restart_lock_dir | quote }}
+    timeout={{ router_service_restart_lock_timeout | int }}
+    waited=0
+    until mkdir "$lock" 2>/dev/null; do
+      if [ "$waited" -ge "$timeout" ]; then
+        echo "Timed out waiting for service restart lock: $lock" >&2
+        exit 1
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
+  changed_when: false
 
-- name: Enable and start required services
-  community.openwrt.service:
-    name: "{{ item }}"
-    enabled: true
-    state: >-
-      {{ 'restarted' if router_base_pending_restart_stat.stat.exists
-         else 'started' }}
-  loop: "{{ router_base_services }}"
+- name: Apply base service configuration while holding the lock
+  block:
+    - name: Remove obsolete configuration files before service startup
+      community.openwrt.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ router_base_obsolete_files }}"
 
-- name: Clear pending service restart marker
-  community.openwrt.file:
-    path: "{{ router_base_pending_restart_file }}"
-    state: absent
-  when: router_base_pending_restart_stat.stat.exists
+    - name: Check whether service restarts are pending
+      community.openwrt.stat:
+        path: "{{ router_service_restart_pending_file }}"
+      register: router_base_pending_restart_stat
 
-- name: Remove obsolete configuration files
-  community.openwrt.file:
-    path: "{{ item }}"
-    state: absent
-  loop: "{{ router_base_obsolete_files }}"
+    - name: Enable and start or restart required services
+      community.openwrt.service:
+        name: "{{ item }}"
+        enabled: true
+        state: >-
+          {{ 'restarted' if router_base_pending_restart_stat.stat.exists
+             else 'started' }}
+      loop: "{{ router_base_services }}"
+
+    - name: Clear pending service restart marker
+      community.openwrt.file:
+        path: "{{ router_service_restart_pending_file }}"
+        state: absent
+      when: router_base_pending_restart_stat.stat.exists
+  always:
+    - name: Release the shared service restart lock
+      ansible.builtin.raw: >-
+        rmdir {{ router_service_restart_lock_dir | quote }}
+      changed_when: false
