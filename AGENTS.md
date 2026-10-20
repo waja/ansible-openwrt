@@ -28,10 +28,24 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
 
 The repository is **not** a full Ansible collection. There is no
-`galaxy.yml`, `meta/`, or `plugins/` directory, and none must be created
-unless explicitly requested. The CI `check-structure` job detects these
-paths and, if present, enables additional collection-level tests. Their
-absence is the normal state, not a defect.
+`galaxy.yml`, `meta/`, or `plugins/` directory, and none must be
+created unless explicitly requested. The CI `check-structure` job detects
+these paths and, if present, enables additional collection-level tests.
+Their absence is the normal state, not a defect.
+
+## Documentation maintenance
+
+Keep `README.md` in sync with the actual repository behavior and usage.
+Whenever a change affects playbooks, roles, variables/defaults, inventory
+configuration, dependencies, supported OpenWrt versions, or user-facing
+commands, review the README and update it when needed. Add or revise
+examples when the supported way to use the project changes. Do not document
+behavior that has not been implemented or verified. If a change genuinely
+needs no README update, no documentation-only edit is required.
+
+Keep the relevant operational details in `AGENTS.md` synchronized too,
+especially when changing development instructions, repository conventions,
+or CI workflows.
 
 ## Code style
 
@@ -253,8 +267,8 @@ dependencies, conditions, matrix, and commands.
 - ansible-lint warning `Unable to load module
   community.openwrt.{{ … }}` is expected for the dynamic package
   manager pattern. Do not hardcode the module to silence it.
-- `argument --python: expected one argument`: the variable used in the
-  workflow does not exist. Use `${{ env.ANSIBLE_PYTHON_VERSION }}`.
+- `argument --python: expected one argument`: the variable used in
+  the workflow does not exist. Use `${{ env.ANSIBLE_PYTHON_VERSION }}`.
 - `couldn't resolve module/action 'community.openwrt.uci'`: collections
   are not installed. Run `ansible-galaxy collection install
   community.openwrt`.
