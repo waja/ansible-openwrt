@@ -27,6 +27,8 @@
       community.openwrt.file:
         path: /etc/config/snmpd-opkg
         state: touch
+      tags:
+        - molecule-notest
 
     - name: Apply router base role
       ansible.builtin.include_role:
