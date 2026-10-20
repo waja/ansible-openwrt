@@ -60,9 +60,17 @@ absence is the normal state, not a defect.
 - Give tasks descriptive names (`name:`), in English
 - In `converge.yml`: pass test values directly to `include_role` via
   `vars:` so they are visible and scoped
-- Do not use `command`/`shell` when a module exists;
-  `ansible.builtin.raw` is allowed in `prepare.yml` because no Python
-  environment is available on the target yet
+- Do not use `command`/`shell` when a module exists.
+- `ansible.builtin.raw` is allowed in `prepare.yml` because no Python
+  environment is available on the target yet.
+- A narrow additional exception is allowed when one remote operation must
+  be followed immediately by a related state marker and no Ansible module
+  can perform both actions together. In `router_base`, the service restart
+  and its completion-marker write are run in one remote shell command.
+  This reduces the risk that Ansible loses the task acknowledgement after
+  the restart but before a separate marker task runs, which could cause an
+  unnecessary restart on the next run. Do not use `raw` as a general
+  replacement for available modules.
 
 ### Role variables
 - Must be prefixed with the role name:
@@ -78,17 +86,23 @@ absence is the normal state, not a defect.
 Always select dynamically via the fact set by
 `community.openwrt.init`:
 
-    - name: Install packages dynamically
+    - name: Install requested and required packages dynamically
       action: "community.openwrt.{{ openwrt_package_manager }}"
       args:
-        name: "{{ router_packages_list | join(',') }}"
+        name: >-
+          {{ (router_packages_list + router_packages_required_services)
+             | unique | join(',') }}
         state: present
         update_cache: true
+      register: router_packages_install_result
 
 - The `action:` form is required. The module name cannot be used as a
   task key when built from a variable.
 - Check the input format of the selected module (`opkg` and `apk` differ
   in some options) before copying an example.
+- Keep the installation result registered as
+  `router_packages_install_result`; restart-marker handling depends on
+  its `changed` value.
 - `router_packages` owns package installation; service configuration
   belongs in `router_base`.
 - `router_package_audit` is optional because it requires the saved
