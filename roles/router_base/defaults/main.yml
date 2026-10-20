@@ -3,5 +3,7 @@ router_base_services:
   - snmpd
   - xinetd
 
+router_base_pending_restart_file: /etc/.router-packages-restart-pending
+
 router_base_obsolete_files:
   - /etc/config/snmpd-opkg

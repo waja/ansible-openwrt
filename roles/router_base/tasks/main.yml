@@ -1,17 +1,23 @@
 ---
-- name: Determine service state after package installation
-  ansible.builtin.set_fact:
-    router_base_service_state: >-
-      {{ 'restarted' if router_packages_install_result is defined
-         and router_packages_install_result.changed else 'started' }}
-  changed_when: false
+- name: Check whether service restarts are pending
+  community.openwrt.stat:
+    path: "{{ router_base_pending_restart_file }}"
+  register: router_base_pending_restart_stat
 
 - name: Enable and start required services
   community.openwrt.service:
     name: "{{ item }}"
     enabled: true
-    state: "{{ router_base_service_state }}"
+    state: >-
+      {{ 'restarted' if router_base_pending_restart_stat.stat.exists
+         else 'started' }}
   loop: "{{ router_base_services }}"
+
+- name: Clear pending service restart marker
+  community.openwrt.file:
+    path: "{{ router_base_pending_restart_file }}"
+    state: absent
+  when: router_base_pending_restart_stat.stat.exists
 
 - name: Remove obsolete configuration files
   community.openwrt.file:

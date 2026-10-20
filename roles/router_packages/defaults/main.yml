@@ -9,3 +9,5 @@ router_packages_list:
   - uhttpd-mod-ubus
   - rpcd
   - xinetd
+
+router_packages_pending_restart_file: /etc/.router-packages-restart-pending

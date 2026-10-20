@@ -1,4 +1,2 @@
 ---
 router_package_audit_baseline: /etc/backup/installed_packages.txt
-router_package_audit_old_file: /tmp/router-package-audit-old
-router_package_audit_new_file: /tmp/router-package-audit-new
