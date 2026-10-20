@@ -2,10 +2,11 @@
 ---
 name: Molecule CI
 
+---
 env:
   ANSIBLE_PYTHON_VERSION: '3.14'
 
-on:
+"on":
   workflow_dispatch:
   # execute on pull request event
   pull_request:
@@ -155,10 +156,13 @@ jobs:
           molecule --version
           pip list | grep -iE 'molecule|ansible|docker'
 
+      - name: Configure Ansible role search path
+        run: |
+          echo "ANSIBLE_ROLES_PATH=$GITHUB_WORKSPACE/roles:$HOME/.ansible/roles:/usr/share/ansible/roles" >> "$GITHUB_ENV"
+
       - name: Run Molecule for ${{ matrix.platform }}
         run: molecule test --destroy=never
         env:
-          ANSIBLE_ROLES_PATH: "${{ github.workspace }}/roles:/home/runner/.ansible/roles:/usr/share/ansible/roles"
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
 
