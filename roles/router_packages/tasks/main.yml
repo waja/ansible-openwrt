@@ -29,13 +29,15 @@
       when: not router_packages_pending_restart_stat.stat.exists
       changed_when: false
 
-    - name: Install packages with opkg
-      ansible.builtin.include_tasks: install_opkg.yml
-      when: openwrt_package_manager == 'opkg'
-
-    - name: Install packages with apk
-      ansible.builtin.include_tasks: install_apk.yml
-      when: openwrt_package_manager == 'apk'
+    - name: Install requested and required packages dynamically
+      action: "community.openwrt.{{ openwrt_package_manager }}"
+      args:
+        name: >-
+          {{ (router_packages_list + router_packages_required_services)
+             | unique | join(',') }}
+        state: present
+        update_cache: true
+      register: router_packages_install_result
 
     # Must run immediately after package installation: a handler could
     # run too late and leave stale completion markers for the next role.
