@@ -128,8 +128,7 @@ jobs:
       matrix:
         platform:
           - openwrt-25.12
-          # Temporarily disabled: OpenWrt 24.10 opkg networking fails in CI.
-          # - openwrt-24.10
+          - openwrt-24.10
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -162,9 +161,7 @@ jobs:
           "$HOME/.ansible/roles:/usr/share/ansible/roles" >> "$GITHUB_ENV"
 
       - name: Run Molecule for ${{ matrix.platform }}
-        run: >-
-          molecule test --destroy=never
-          --platform-name "${{ matrix.platform }}"
+        run: molecule test --destroy=never
         env:
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
@@ -174,40 +171,12 @@ jobs:
         run: |
           docker ps -a
           docker inspect ${{ matrix.platform }} \
-            --format 'status={{.State.Status}} exit={{.State.ExitCode}}'
+             --format '{{.State.Status}} exit={{.State.ExitCode}}' \
+             || true
           docker inspect ${{ matrix.platform }} \
-            --format 'cmd={{.Config.Cmd}} network={{.HostConfig.NetworkMode}}'
-          docker inspect ${{ matrix.platform }} \
-            --format 'privileged={{.HostConfig.Privileged}}'
-          docker inspect ${{ matrix.platform }} \
-            --format 'security={{json .HostConfig.SecurityOpt}}'
-          docker inspect ${{ matrix.platform }} \
-            --format 'tmpfs={{json .HostConfig.Tmpfs}}'
-          docker inspect ${{ matrix.platform }} \
-            --format 'networks={{json .NetworkSettings.Networks}}'
+             --format 'cmd={{.Config.Cmd}} tmpfs={{.HostConfig.Tmpfs}}' \
+             || true
           docker logs ${{ matrix.platform }} || true
-          if [[ "${{ matrix.platform }}" == "openwrt-24.10" ]]; then
-            docker exec "${{ matrix.platform }}" sh -c '
-              echo "=== OpenWrt release and package manager ==="
-              cat /etc/openwrt_release || true
-              opkg --version || true
-
-              echo "=== Network interfaces, routes and DNS ==="
-              ip -details addr show || true
-              ip route show table all || true
-              cat /etc/resolv.conf || true
-              echo "=== Network/firewall init links ==="
-              ls -l /etc/rc.d/S*network /etc/rc.d/S*dnsmasq \
-                /etc/rc.d/S*firewall /etc/rc.d/S*odhcpd 2>&1 || true
-              echo "=== Firewall rules ==="
-              nft list ruleset 2>&1 || iptables-save 2>&1 || true
-              echo "=== Recent system log ==="
-              logread 2>&1 | tail -100 || true
-
-              echo "=== Filesystem space ==="
-              df -h / /tmp || true
-            ' || true
-          fi
 
       - name: Molecule destroy
         if: always()
