@@ -8,4 +8,4 @@
     - community.openwrt.init
     - router_packages
     - router_base
-    - router_dhcp_server
+    - router_network
