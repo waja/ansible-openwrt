@@ -80,16 +80,18 @@ or CI workflows.
   environment is available on the target yet.
 - A narrow additional exception is allowed when a remote operation must
   be coordinated with a lock and a related state marker, and no Ansible module
-  can perform the combined operation. This exception covers the DHCP
-  reconciliation lock and shared service-restart lock in `router_network`,
-  as well as the existing service locks in `router_base` and
-  `router_packages`. Locks live in the root-owned
-  `/root/.ansible-locks` directory, not world-writable `/tmp`; acquisition
-  reclaims lock directories older than 1800 seconds. Lock timeouts must exceed
-  that age so an orphaned lock can be reclaimed. `router_network` holds
-  the shared service lock while committing DHCP settings, so a concurrent
-  restart cannot clear a marker for a commit that occurred during the restart.
-  The dnsmasq restart and marker clear run in one remote command. Do not use
+  can perform the combined operation. This covers the DHCP reconciliation
+  lock and shared service-restart lock in `router_network`, and the shared
+  service locks in `router_base` and `router_packages`. The locks use
+  token-owned directories in root-owned `/root/.ansible-locks`. Service-lock
+  users also acquire `/tmp/router-packages-restart-lock` to coordinate with
+  older role versions that use that path. Locks are never reclaimed based on
+  age alone: an abandoned lock causes a timeout and requires manual removal
+  after confirming no run is active. Each run releases only locks carrying
+  its own token, and cleanup runs only after successful acquisition.
+  `router_network` holds the shared service lock while committing DHCP
+  settings. The dnsmasq handler rechecks the pending marker while holding
+  that same lock and clears it only after a successful restart. Do not use
   `raw` as a general replacement for available modules.
 
 ### Role variables
