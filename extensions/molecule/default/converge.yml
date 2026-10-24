@@ -39,8 +39,8 @@
       ansible.builtin.include_role:
         name: router_network
       vars:
-        router_network_dhcp_disabled_interfaces:
-          - lan
+        router_network_dhcp_interfaces:
+          lan: disabled
 
     - name: Read LAN DHCP ignore setting
       community.openwrt.uci:
