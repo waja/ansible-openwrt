@@ -201,28 +201,6 @@ jobs:
                 /etc/rc.d/S*firewall /etc/rc.d/S*odhcpd 2>&1 || true
               echo "=== Firewall rules ==="
               nft list ruleset 2>&1 || iptables-save 2>&1 || true
-              echo "=== Socket/connectivity test ==="
-              url='https://downloads.openwrt.org/releases/24.10.8/targets/x86/64/'
-              url="${url}packages/Packages.gz"
-              wget -O /tmp/opkg-test.gz "$url" 2>&1 || true
-
-              echo "=== Package status ==="
-              opkg status snmpd snmpd-nossl libnetsnmp-nossl \
-                libpci libpcre2 || true
-
-              echo "=== Package maintainer scripts ==="
-              for script in \
-                /usr/lib/opkg/info/snmpd.postinst \
-                /usr/lib/opkg/info/snmpd-nossl.postinst \
-                /usr/lib/opkg/info/libnetsnmp-nossl.postinst \
-                /usr/lib/opkg/info/libpci.postinst \
-                /usr/lib/opkg/info/libpcre2.postinst; do
-                if [ -f "$script" ]; then
-                  echo "--- $script"
-                  cat "$script"
-                fi
-              done
-
               echo "=== Recent system log ==="
               logread 2>&1 | tail -100 || true
 
