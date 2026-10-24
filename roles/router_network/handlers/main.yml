@@ -1,36 +1,20 @@
 # roles/router_network/handlers/main.yml
 ---
 - name: Restart dnsmasq
-  block:
-    - name: Acquire the shared service restart lock
-      ansible.builtin.raw: |
-        lock=/tmp/router-packages-restart-lock
-        timeout={{ router_network_service_restart_lock_timeout | int }}
-        waited=0
-        until mkdir "$lock" 2>/dev/null; do
-          if [ "$waited" -ge "$timeout" ]; then
-            echo "Timed out waiting for service restart lock: $lock" >&2
-            exit 1
-          fi
-          sleep 1
-          waited=$((waited + 1))
-        done
-      changed_when: false
+  ansible.builtin.raw: |
+    lock=/tmp/router-packages-restart-lock
+    timeout={{ router_network_service_restart_lock_timeout | int }}
+    waited=0
+    until mkdir "$lock" 2>/dev/null; do
+      if [ "$waited" -ge "$timeout" ]; then
+        echo "Timed out waiting for service restart lock: $lock" >&2
+        exit 1
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
 
-    - name: Restart dnsmasq and clear its pending marker
-      block:
-        - name: Restart dnsmasq
-          community.openwrt.service:
-            name: dnsmasq
-            state: restarted
-
-        - name: Clear pending dnsmasq restart marker
-          community.openwrt.file:
-            path: /tmp/router-network-dnsmasq-restart-pending
-            state: absent
-
-      always:
-        - name: Release the shared service restart lock
-          ansible.builtin.raw: >-
-            rmdir /tmp/router-packages-restart-lock
-          changed_when: false
+    trap 'rmdir "$lock"' EXIT
+    /etc/init.d/dnsmasq restart &&
+      rm -f /tmp/router-network-dnsmasq-restart-pending
+  changed_when: true
