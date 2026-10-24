@@ -85,7 +85,8 @@ or CI workflows.
   as well as the existing service locks in `router_base` and
   `router_packages`. Locks live in the root-owned
   `/root/.ansible-locks` directory, not world-writable `/tmp`; acquisition
-  reclaims directories older than the stale-lock age. `router_network` holds
+  reclaims lock directories older than 1800 seconds. Lock timeouts must exceed
+  that age so an orphaned lock can be reclaimed. `router_network` holds
   the shared service lock while committing DHCP settings, so a concurrent
   restart cannot clear a marker for a commit that occurred during the restart.
   The dnsmasq restart and marker clear run in one remote command. Do not use
