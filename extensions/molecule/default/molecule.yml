@@ -3,6 +3,7 @@
 driver:
   name: docker
 platforms:
+  # Pin stable releases so package feeds do not resolve to SNAPSHOT.
   - name: openwrt-25.12
     image: openwrt/rootfs:x86_64-25.12.6
     command: /sbin/init
