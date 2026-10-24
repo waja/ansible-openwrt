@@ -14,7 +14,7 @@
       modified=$(stat -c %Y "$lock" 2>/dev/null || echo "$now")
       age=$((now - modified))
       if [ "$age" -ge "$stale_after" ]; then
-        stale="$lock.stale.$now.$waited"
+        stale="$lock.stale.$now.$"
         if mv "$lock" "$stale" 2>/dev/null; then
           rmdir "$stale" 2>/dev/null || rm -rf "$stale"
           continue
