@@ -128,4 +128,3 @@
           ansible.builtin.raw: >-
             rmdir /tmp/router-network-reconcile-lock
           changed_when: false
-
