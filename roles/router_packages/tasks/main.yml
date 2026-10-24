@@ -2,10 +2,24 @@
 ---
 - name: Acquire the shared service restart lock
   ansible.builtin.raw: |
-    lock=/tmp/router-packages-restart-lock
+    lock_root=/root/.ansible-locks
+    lock="$lock_root/router-packages-restart-lock"
     timeout={{ router_packages_service_restart_lock_timeout | int }}
+    stale_after=1800
     waited=0
+    umask 077
+    mkdir -p "$lock_root" && chmod 700 "$lock_root" || exit 1
     until mkdir "$lock" 2>/dev/null; do
+      now=$(date +%s)
+      modified=$(stat -c %Y "$lock" 2>/dev/null || echo "$now")
+      age=$((now - modified))
+      if [ "$age" -ge "$stale_after" ]; then
+        stale="$lock.stale.$"
+        if mv "$lock" "$stale" 2>/dev/null; then
+          rmdir "$stale" 2>/dev/null || rm -rf "$stale"
+          continue
+        fi
+      fi
       if [ "$waited" -ge "$timeout" ]; then
         echo "Timed out waiting for service restart lock: $lock" >&2
         exit 1
@@ -58,5 +72,5 @@
   always:
     - name: Release the shared service restart lock
       ansible.builtin.raw: >-
-        rmdir /tmp/router-packages-restart-lock
+        rmdir /root/.ansible-locks/router-packages-restart-lock
       changed_when: false
