@@ -4,7 +4,7 @@ driver:
   name: docker
 platforms:
   - name: openwrt-25.12
-    image: openwrt/rootfs:x86_64-openwrt-25.12
+    image: openwrt/rootfs:x86_64-25.12.6
     command: /sbin/init
     pre_build_image: true
     tmpfs:
