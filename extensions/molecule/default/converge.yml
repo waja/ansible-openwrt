@@ -39,7 +39,7 @@
       ansible.builtin.include_role:
         name: router_network
       vars:
-        router_dhcp_server_disabled_interfaces:
+        router_network_dhcp_disabled_interfaces:
           - lan
 
     - name: Verify required services are enabled and running
