@@ -136,11 +136,11 @@ Always select dynamically via the fact set by
   `/var/run/ubus/ubus.sock` and `ubus list`
 - `community.openwrt.init` must run before all other roles in
   `converge.yml`
-- Currently only `openwrt-25.12` is defined in `platforms:`. The CI
-  matrix lists `24.10` and `25.12`, but no platform selector is passed
-  to `molecule test`, so both matrix jobs currently run the same
-  scenario. Do not claim that both versions are tested until this is
-  fixed.
+- Currently only `openwrt-25.12` is defined in `platforms:` and enabled
+  in the CI matrix. OpenWrt 24.10 is temporarily disabled because its
+  opkg networking fails in CI. The workflow passes
+  `--platform-name "${{ matrix.platform }}"` so each enabled matrix job
+  tests its selected image.
 
 ## Adding a new role (checklist)
 
@@ -164,9 +164,8 @@ Always select dynamically via the fact set by
    `openwrt/rootfs:x86_64-openwrt-<version>` image.
 2. Add the same platform name to the matrix in
    `.github/workflows/molecule.yml`.
-3. Pass the platform to Molecule, e.g.
-   `--platform-name "${{ matrix.platform }}"`, or split the scenario
-   per version.
+3. Pass the platform to Molecule with
+   `--platform-name "${{ matrix.platform }}"` in the CI matrix job.
 4. Verify that `community.openwrt.init` supports the version and sets
    `openwrt_package_manager` correctly.
 5. If the version uses a different package manager, no role change is
@@ -246,10 +245,11 @@ with it.
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
   - Uses `if: ${{ !cancelled() && !failure() }}` so it still runs when
     `sanity`/`units` are skipped.
-  - Matrix lists `24.10` and `25.12`, `fail-fast: false`. **Note:**
-    no platform selector is passed, so both jobs currently run the
-    same scenario. Fix this before relying on the matrix for version
-    coverage.
+  - Matrix currently enables only `openwrt-25.12`, with
+    `fail-fast: false`. OpenWrt 24.10 is temporarily disabled because
+    its opkg networking fails in CI.
+  - Passes `--platform-name "${{ matrix.platform }}"` to ensure each
+    enabled matrix job tests its selected Molecule platform.
   - Selects scenarios via `MOLECULE_GLOB`.
   - Runs `molecule test --destroy=never` to preserve failed containers.
   - Prints container diagnostics on failure.
