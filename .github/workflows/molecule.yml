@@ -179,6 +179,35 @@ jobs:
              --format 'cmd={{.Config.Cmd}} tmpfs={{.HostConfig.Tmpfs}}' \
              || true
           docker logs ${{ matrix.platform }} || true
+          if [[ "${{ matrix.platform }}" == "openwrt-24.10" ]]; then
+            docker exec "${{ matrix.platform }}" sh -c '
+              echo "=== OpenWrt release and package manager ==="
+              cat /etc/openwrt_release || true
+              opkg --version || true
+
+              echo "=== Package status ==="
+              opkg status snmpd snmpd-nossl libnetsnmp-nossl libpci libpcre2 || true
+
+              echo "=== Package maintainer scripts ==="
+              for script in \
+                /usr/lib/opkg/info/snmpd.postinst \
+                /usr/lib/opkg/info/snmpd-nossl.postinst \
+                /usr/lib/opkg/info/libnetsnmp-nossl.postinst \
+                /usr/lib/opkg/info/libpci.postinst \
+                /usr/lib/opkg/info/libpcre2.postinst; do
+                if [ -f "$script" ]; then
+                  echo "--- $script"
+                  cat "$script"
+                fi
+              done
+
+              echo "=== Recent system log ==="
+              logread 2>&1 | tail -100 || true
+
+              echo "=== Filesystem space ==="
+              df -h / /tmp || true
+            ' || true
+          fi
 
       - name: Molecule destroy
         if: always()
