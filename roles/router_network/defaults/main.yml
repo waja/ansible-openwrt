@@ -5,5 +5,5 @@
 # Unlisted sections are left untouched.
 router_network_dhcp_interfaces: {}
 
-router_network_reconcile_lock_timeout: 1860
-router_network_service_restart_lock_timeout: 1860
+# Set to true to retry a dnsmasq restart after a previous handler failure.
+router_network_force_restart: false
