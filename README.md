@@ -238,28 +238,31 @@ ansible-playbook -i inventory.ini playbooks/site.yml --limit router2
 ### Configure network settings
 
 The `router_network` role is the home for network configuration. Its first
-feature can disable the IPv4 DHCP server on selected OpenWrt interfaces.
-The standard `site.yml` playbook includes this role. It reconciles every DHCP
-section: listed sections are disabled, while all other sections are enabled.
-With the default empty list, all DHCP sections are enabled.
+feature explicitly configures IPv4 DHCP status per OpenWrt DHCP section.
+The standard `site.yml` playbook includes this role. Set each managed
+section to `enabled` or `disabled`; sections omitted from the mapping are
+left unchanged. The default empty mapping therefore preserves existing
+DHCP settings.
 
-For example, to disable IPv4 DHCP on LAN for every router, add this to
-`group_vars/openwrt.yml`:
+For example, to disable IPv4 DHCP on LAN and enable it on the guest network
+for every router, add this to `group_vars/openwrt.yml`:
 
 ```yaml
 ---
-router_network_dhcp_disabled_interfaces:
-  - lan
+router_network_dhcp_interfaces:
+  lan: disabled
+  guest: enabled
 ```
 
 You can instead define the variable in `host_vars/<inventory_hostname>.yml`
-to disable DHCP only on specific routers. The value is a list of OpenWrt
-DHCP configuration section names, such as `lan` or `guest`.
+to configure DHCP only on specific routers. Keys are existing OpenWrt DHCP
+configuration section names, such as `lan` or `guest`. Each value must be
+`enabled` or `disabled`; invalid values and unknown section names fail
+validation rather than silently changing other interfaces.
 
-The role sets `dhcp.<interface>.ignore=1` for listed sections and `0` for
-all other DHCP sections. This controls IPv4 DHCP only; it does not disable
-DHCPv6 or IPv6 Router Advertisements. Configure those separately if your
-network requires them to be disabled too.
+The role sets `dhcp.<interface>.ignore=0` for `enabled` and `1` for
+`disabled`. This controls IPv4 DHCP only; it does not configure DHCPv6 or
+IPv6 Router Advertisements. Configure those separately if needed.
 
 ### Audit installed packages
 
