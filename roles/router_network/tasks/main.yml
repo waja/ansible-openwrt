@@ -1,0 +1,8 @@
+# roles/router_network/tasks/main.yml
+---
+- name: Disable IPv4 DHCP server on selected interfaces
+  community.openwrt.uci:
+    command: set
+    key: "dhcp.{{ item }}.ignore"
+    value: "1"
+  loop: "{{ router_network_dhcp_disabled_interfaces }}"
