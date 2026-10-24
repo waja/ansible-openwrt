@@ -31,7 +31,6 @@
         mkdir -p "$lock_root" && chmod 700 "$lock_root" || exit 1
         until mkdir "$lock" 2>/dev/null; do
           if [ "$waited" -ge "$timeout" ]; then
-            
             echo "Timed out waiting for lock: $lock" >&2
             exit 1
           fi
@@ -40,7 +39,6 @@
         done
         printf '%s\n' "$token" > "$lock/owner" || {
           rmdir "$lock" 2>/dev/null || true
-          
           exit 1
         }
       register: router_network_reconcile_lock_acquisition
@@ -207,12 +205,12 @@
       always:
         - name: Release the DHCP reconciliation lock
           ansible.builtin.raw: |
-          lock=/root/.ansible-locks/router-network-reconcile-lock
-          token='{{ router_network_reconcile_lock_token }}'
-          if [ -f "$lock/owner" ] &&
-             [ "$(cat "$lock/owner")" = "$token" ]; then
-            rm -f "$lock/owner"
-            rmdir "$lock"
-          fi
-          when: router_network_reconcile_lock_acquisition is succeeded
-          changed_when: false
+        lock=/root/.ansible-locks/router-network-reconcile-lock
+        token='{{ router_network_reconcile_lock_token }}'
+        if [ -f "$lock/owner" ] &&
+           [ "$(cat "$lock/owner")" = "$token" ]; then
+          rm -f "$lock/owner"
+          rmdir "$lock"
+        fi
+      when: router_network_reconcile_lock_acquisition is succeeded
+      changed_when: false
