@@ -312,7 +312,7 @@ than both.
 - `playbooks/audit_packages.yml` — installed-package audit
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
-- `roles/router_dhcp_server/` — per-interface IPv4 DHCP server control
+- `roles/router_network/` — network configuration, initially IPv4 DHCP control
 - `roles/router_package_audit/` — package baseline comparison
 - `requirements.yml` — pinned Ansible role and collection dependencies
 - `extensions/molecule/default/` — Molecule test scenario
