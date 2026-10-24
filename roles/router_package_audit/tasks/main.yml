@@ -1,0 +1,78 @@
+# roles/router_package_audit/tasks/main.yml
+---
+- name: Check whether the baseline package list exists
+  community.openwrt.stat:
+    path: "{{ router_package_audit_baseline }}"
+  register: router_package_audit_baseline_stat
+
+- name: Require a baseline package list
+  ansible.builtin.fail:
+    msg: >-
+      Package audit requires {{ router_package_audit_baseline }} to exist.
+  when: not router_package_audit_baseline_stat.stat.exists
+
+- name: Install diffutils before taking the package snapshot with opkg
+  community.openwrt.opkg:
+    name: diffutils
+    state: present
+    update_cache: true
+  when: openwrt_package_manager == 'opkg'
+
+- name: Install diffutils before taking the package snapshot with apk
+  community.openwrt.apk:
+    name: diffutils
+    state: present
+    update_cache: true
+  when: openwrt_package_manager == 'apk'
+
+- name: Create a unique directory for this audit run
+  ansible.builtin.raw: mktemp -d /tmp/router-package-audit.XXXXXX
+  register: router_package_audit_temp_dir
+  changed_when: false
+
+- name: Compare baseline and current package lists
+  block:
+    - name: Create sorted baseline package list
+      ansible.builtin.raw: |
+        dir={{ (router_package_audit_temp_dir.stdout | trim) | quote }}
+        baseline={{ router_package_audit_baseline | quote }}
+        awk '{print $1}' "$baseline" > "$dir/old.unsorted" &&
+        sort "$dir/old.unsorted" > "$dir/old"
+      changed_when: false
+
+    - name: Capture installed packages with opkg
+      ansible.builtin.raw: |
+        dir={{ (router_package_audit_temp_dir.stdout | trim) | quote }}
+        opkg list_installed > "$dir/current.raw" &&
+        awk '{print $1}' "$dir/current.raw" > "$dir/current.unsorted" &&
+        sort "$dir/current.unsorted" > "$dir/new"
+      changed_when: false
+      when: openwrt_package_manager == 'opkg'
+
+    - name: Capture installed packages with apk
+      ansible.builtin.raw: |
+        dir={{ (router_package_audit_temp_dir.stdout | trim) | quote }}
+        apk info > "$dir/current.raw" &&
+        sort "$dir/current.raw" > "$dir/new"
+      changed_when: false
+      when: openwrt_package_manager == 'apk'
+
+    - name: Compare baseline and current package lists
+      ansible.builtin.raw: |
+        dir={{ (router_package_audit_temp_dir.stdout | trim) | quote }}
+        diff -Nur "$dir/old" "$dir/new"
+      register: router_package_audit_diff
+      changed_when: false
+      failed_when: router_package_audit_diff.rc not in [0, 1]
+
+    - name: Display package differences
+      ansible.builtin.debug:
+        msg: >-
+          {{ router_package_audit_diff.stdout
+             if router_package_audit_diff.stdout | length > 0
+             else 'No package differences.' }}
+  always:
+    - name: Remove temporary audit files
+      ansible.builtin.raw: |
+        rm -rf {{ (router_package_audit_temp_dir.stdout | trim) | quote }}
+      changed_when: false

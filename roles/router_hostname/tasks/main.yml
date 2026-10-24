@@ -1,3 +1,4 @@
+# roles/router_hostname/tasks/main.yml
 ---
 - name: Set hostname via UCI
   community.openwrt.uci:

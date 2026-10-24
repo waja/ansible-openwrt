@@ -1,0 +1,22 @@
+# roles/router_base/tasks/restart_service.yml
+---
+- name: Check whether this service restart already completed
+  community.openwrt.stat:
+    path: "/tmp/router-packages-restart-completed/{{ item }}"
+  register: router_base_service_restart_stat
+
+- name: Ensure service is enabled and started
+  community.openwrt.service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+
+- name: Restart service and record progress in one remote command
+  ansible.builtin.raw: |
+    service={{ ('/etc/init.d/' ~ item) | quote }}
+    marker={{ ('/tmp/router-packages-restart-completed/' ~ item) | quote }}
+    "$service" restart && touch "$marker"
+  when:
+    - router_base_pending_restart_stat.stat.exists
+    - not router_base_service_restart_stat.stat.exists
+  changed_when: true

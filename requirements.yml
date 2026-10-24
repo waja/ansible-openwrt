@@ -1,0 +1,11 @@
+# requirements.yml
+---
+roles:
+  - name: geerlingguy.docker
+    version: "8.0.0"
+
+collections:
+  - name: community.openwrt
+    version: "1.10.0"
+  - name: community.docker
+    version: "5.4.0"

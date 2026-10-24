@@ -3,3 +3,16 @@
 router_packages_list:
   - busybox
   - openwrt-keyring
+  - snmpd
+  - muninlite
+  - rsync
+  - uhttpd
+  - uhttpd-mod-ubus
+  - rpcd
+  - xinetd
+
+router_packages_required_services:
+  - snmpd
+  - xinetd
+
+router_packages_service_restart_lock_timeout: 120

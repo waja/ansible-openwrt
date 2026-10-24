@@ -21,3 +21,35 @@
         router_packages_list:
           - busybox
           - openwrt-keyring
+          - snmpd
+          - xinetd
+
+    - name: Create obsolete SNMP configuration for the cleanup test
+      community.openwrt.file:
+        path: /etc/config/snmpd-opkg
+        state: touch
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Apply router base role
+      ansible.builtin.include_role:
+        name: router_base
+
+    - name: Verify required services are enabled and running
+      ansible.builtin.raw: |
+        for service in snmpd xinetd; do
+          /etc/init.d/"$service" enabled || exit 1
+          pidof "$service" >/dev/null || exit 1
+        done
+      changed_when: false
+
+    - name: Check for obsolete SNMP configuration
+      community.openwrt.stat:
+        path: /etc/config/snmpd-opkg
+      register: router_obsolete_snmp_config
+
+    - name: Assert obsolete SNMP configuration is absent
+      ansible.builtin.assert:
+        that:
+          - not router_obsolete_snmp_config.stat.exists
+        fail_msg: The obsolete snmpd-opkg configuration still exists.

@@ -1,0 +1,10 @@
+# playbooks/site.yml
+---
+- name: Configure OpenWrt routers
+  hosts: openwrt
+  gather_facts: false
+
+  roles:
+    - community.openwrt.init
+    - router_packages
+    - router_base

@@ -1,0 +1,10 @@
+# roles/router_base/defaults/main.yml
+---
+router_base_services:
+  - snmpd
+  - xinetd
+
+router_base_service_restart_lock_timeout: 120
+
+router_base_obsolete_files:
+  - /etc/config/snmpd-opkg

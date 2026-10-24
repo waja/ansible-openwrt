@@ -5,7 +5,7 @@ name: Molecule CI
 env:
   ANSIBLE_PYTHON_VERSION: '3.14'
 
-on:
+"on":
   workflow_dispatch:
   # execute on pull request event
   pull_request:
@@ -36,14 +36,11 @@ jobs:
           yamllint .
 
       - name: Lint Ansible.
-        env:
-          ANSIBLE_COLLECTIONS_PATH: >-
-            ${{ github.workspace }}/collections:
-            /home/runner/.ansible/collections:
-            /usr/share/ansible/collections
         run: |
-          ansible-galaxy role install geerlingguy.docker
-          ansible-galaxy collection install community.openwrt
+          ansible-galaxy role install -r requirements.yml \
+            --roles-path ~/.ansible/roles
+          ansible-galaxy collection install -r requirements.yml \
+            --collections-path ~/.ansible/collections
           ansible-lint \
             --exclude collections/ansible_collections/community/openwrt/
 
@@ -146,13 +143,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install ansible-core molecule molecule-plugins[docker]
 
-      - name: Install Ansible collection
-        run: ansible-galaxy collection install community.openwrt
+      - name: Install Ansible dependencies
+        run: |
+          ansible-galaxy role install -r requirements.yml \
+            --roles-path ~/.ansible/roles
+          ansible-galaxy collection install -r requirements.yml \
+            --collections-path ~/.ansible/collections
 
       - name: Versions
         run: |
           molecule --version
           pip list | grep -iE 'molecule|ansible|docker'
+
+      - name: Configure Ansible role search path
+        run: |
+          echo "ANSIBLE_ROLES_PATH=$GITHUB_WORKSPACE/roles:"\
+          "$HOME/.ansible/roles:/usr/share/ansible/roles" >> "$GITHUB_ENV"
 
       - name: Run Molecule for ${{ matrix.platform }}
         run: molecule test --destroy=never

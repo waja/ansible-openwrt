@@ -1,0 +1,3 @@
+# roles/router_package_audit/defaults/main.yml
+---
+router_package_audit_baseline: /etc/backup/installed_packages.txt
