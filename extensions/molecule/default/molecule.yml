@@ -14,13 +14,9 @@ platforms:
     image: openwrt/rootfs:x86_64-24.10.8
     # Keep Docker's IP, default route and resolver instead of letting the
     # router's default LAN setup replace them before opkg can reach its feeds.
-    command:
-      - /bin/sh
-      - -c
-      - >-
-        rm -f /etc/rc.d/S*network /etc/rc.d/S*dnsmasq
-        /etc/rc.d/S*firewall /etc/rc.d/S*odhcpd;
-        exec /sbin/init
+    command: >-
+      /bin/sh -c 'rm -f /etc/rc.d/S*network /etc/rc.d/S*dnsmasq
+      /etc/rc.d/S*firewall /etc/rc.d/S*odhcpd; exec /sbin/init'
     # OpenWrt 24.10's procd/jail needs privileges denied by the default
     # Docker security profile when package post-install scripts start services.
     privileged: true
