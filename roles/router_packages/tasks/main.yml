@@ -3,7 +3,7 @@
 - name: Generate service restart lock token
   ansible.builtin.set_fact:
     router_packages_service_lock_token: >-
-      {{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
+      {{ lookup('password', '/dev/null length=32') }}
   changed_when: false
 
 - name: Acquire the shared service restart lock
