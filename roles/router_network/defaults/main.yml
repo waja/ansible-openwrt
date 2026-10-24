@@ -1,0 +1,4 @@
+# roles/router_network/defaults/main.yml
+---
+# OpenWrt interfaces whose IPv4 DHCP server should be disabled.
+router_network_dhcp_disabled_interfaces: []
