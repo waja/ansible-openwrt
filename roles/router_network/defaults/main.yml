@@ -5,6 +5,7 @@
 # Unlisted sections are left untouched.
 router_network_dhcp_interfaces: {}
 
-# Timeouts for per-router DHCP reconciliation and service restart locks.
+# Timeouts for per-router reconciliation and service restart locks.
 router_network_reconcile_lock_timeout: 120
 router_network_service_restart_lock_timeout: 120
+router_network_stale_lock_age: 1800
