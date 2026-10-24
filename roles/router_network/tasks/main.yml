@@ -6,61 +6,26 @@
   changed_when: router_network_force_restart | bool
   notify: Restart dnsmasq
 
-- name: Reconcile configured IPv4 DHCP settings
+- name: Configure IPv4 DHCP settings
   when: router_network_dhcp_interfaces | length > 0
   block:
-    - name: Read DHCP configuration sections
-      community.openwrt.uci:
-        command: show
-        config: dhcp
-      register: router_network_dhcp_config
-      changed_when: false
-      failed_when: false
-
-    - name: Verify DHCP configuration is readable
-      ansible.builtin.assert:
-        that:
-          - not (router_network_dhcp_config.failed | default(false))
-          - router_network_dhcp_config.result is defined
-        fail_msg: >-
-          Cannot read the OpenWrt DHCP UCI configuration. Ensure the
-          dhcp configuration exists and is readable before setting
-          router_network_dhcp_interfaces.
-
-    - name: Extract DHCP section names
-      ansible.builtin.set_fact:
-        router_network_dhcp_sections: >-
-          {{ router_network_dhcp_config.result
-             | regex_findall('(?m)^dhcp[.]([^.=]+)=dhcp$') }}
-      changed_when: false
-
-    - name: Verify DHCP sections exist
-      ansible.builtin.assert:
-        that:
-          - router_network_dhcp_sections | length > 0
-        fail_msg: >-
-          No DHCP sections were found in the OpenWrt DHCP UCI
-          configuration, but router_network_dhcp_interfaces is set.
-
-    - name: Validate DHCP interface configuration
+    - name: Validate DHCP interface settings
       ansible.builtin.assert:
         that:
           - item.value in ['enabled', 'disabled']
-          - item.key in router_network_dhcp_sections
         fail_msg: >-
-          Invalid DHCP configuration for '{{ item.key }}': use an
-          existing DHCP section and set its status to 'enabled' or
-          'disabled'.
+          Invalid DHCP configuration for '{{ item.key }}': set its
+          status to 'enabled' or 'disabled'.
       loop: "{{ router_network_dhcp_interfaces | dict2items }}"
       loop_control:
         label: "{{ item.key }}"
 
-    - name: Initialize DHCP reconciliation operations
+    - name: Initialize DHCP configuration operations
       ansible.builtin.set_fact:
         router_network_dhcp_operations: []
       changed_when: false
 
-    - name: Build DHCP reconciliation operations
+    - name: Build DHCP configuration operations
       ansible.builtin.set_fact:
         router_network_dhcp_operations: >-
           {{ router_network_dhcp_operations
