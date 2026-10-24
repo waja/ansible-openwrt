@@ -11,16 +11,12 @@
   ansible.builtin.set_fact:
     router_network_dhcp_sections: >-
       {{ router_network_dhcp_config.result
-         | regex_findall('(?m)^dhcp\\.([^.=]+)=dhcp$') }}
-
-- name: Initialize DHCP reconciliation operations
-  ansible.builtin.set_fact:
-    router_network_dhcp_operations: []
+         | regex_findall('(?m)^dhcp\.([^.=]+)=dhcp$') }}
 
 - name: Build DHCP reconciliation operations
   ansible.builtin.set_fact:
     router_network_dhcp_operations: >-
-      {{ router_network_dhcp_operations
+      {{ (router_network_dhcp_operations | default([]))
          + [{
              'command': 'set',
              'key': 'dhcp.' ~ item ~ '.ignore',
@@ -35,5 +31,5 @@
 - name: Reconcile IPv4 DHCP settings in one UCI transaction
   community.openwrt.uci:
     autocommit: true
-    operations: "{{ router_network_dhcp_operations }}"
+    operations: "{{ router_network_dhcp_operations | default([]) }}"
   notify: Restart dnsmasq
