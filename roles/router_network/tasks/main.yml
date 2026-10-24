@@ -26,6 +26,7 @@
                else '0'
              )
            }] }}
+  changed_when: false
   loop: "{{ router_network_dhcp_sections }}"
 
 - name: Reconcile IPv4 DHCP settings in one UCI transaction
