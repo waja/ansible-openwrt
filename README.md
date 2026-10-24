@@ -264,14 +264,10 @@ The role sets `dhcp.<interface>.ignore=0` for `enabled` and `1` for
 `disabled`. This controls IPv4 DHCP only; it does not configure DHCPv6 or
 IPv6 Router Advertisements. Configure those separately if needed.
 
-The network role serializes DHCP reconciliation and shares a service-restart
-lock with the package and base roles. Lock acquisition waits up to the
-configured timeout (1860 seconds by default). Locks are not reclaimed based
-on age, because an old lock may still belong to an active run. If a run is
-interrupted and leaves a lock behind, confirm that no Ansible run is active
-before manually removing the corresponding lock directory under
-`/root/.ansible-locks` or the compatibility lock
-`/tmp/router-packages-restart-lock`.
+The role restarts dnsmasq when the UCI configuration changes. If a
+previous dnsmasq restart failed, set `router_network_force_restart: true`
+for a run to request another restart even when the DHCP settings are already
+correct. The default is `false`.
 
 ### Audit installed packages
 
