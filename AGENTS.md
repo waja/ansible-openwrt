@@ -78,14 +78,14 @@ or CI workflows.
 - Do not use `command`/`shell` when a module exists.
 - `ansible.builtin.raw` is allowed in `prepare.yml` because no Python
   environment is available on the target yet.
-- A narrow additional exception is allowed when one remote operation must
-  be followed immediately by a related state marker and no Ansible module
-  can perform both actions together. In `router_base`, the service restart
-  and its completion-marker write are run in one remote shell command.
-  This reduces the risk that Ansible loses the task acknowledgement after
-  the restart but before a separate marker task runs, which could cause an
-  unnecessary restart on the next run. Do not use `raw` as a general
-  replacement for available modules.
+- A narrow additional exception is allowed when a remote operation
+  must be coordinated with a lock and a related state marker, and no Ansible
+  module can perform the combined operation. `router_base` records service
+  restart progress in the same remote command as the restart;
+  `router_network` acquires the shared service-restart lock, restarts
+  `dnsmasq`, and clears its pending marker in one remote command. This avoids
+  overlapping service restarts and preserves retry state if the restart fails.
+  Do not use `raw` as a general replacement for available modules.
 
 ### Role variables
 - Must be prefixed with the role name:
