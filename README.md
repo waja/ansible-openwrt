@@ -239,9 +239,9 @@ ansible-playbook -i inventory.ini playbooks/site.yml --limit router2
 
 The `router_network` role is the home for network configuration. Its first
 feature can disable the IPv4 DHCP server on selected OpenWrt interfaces.
-The standard `site.yml` playbook includes this role,
-but its default list is empty, so existing DHCP behavior is unchanged unless
-you configure the variable.
+The standard `site.yml` playbook includes this role. It reconciles every DHCP
+section: listed sections are disabled, while all other sections are enabled.
+With the default empty list, all DHCP sections are enabled.
 
 For example, to disable IPv4 DHCP on LAN for every router, add this to
 `group_vars/openwrt.yml`:
