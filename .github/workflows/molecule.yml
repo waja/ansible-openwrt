@@ -173,10 +173,10 @@ jobs:
         run: |
           docker ps -a
           docker inspect ${{ matrix.platform }} \
-             --format '{{.State.Status}} exit={{.State.ExitCode}}' \
+             --format 'status={{.State.Status}} exit={{.State.ExitCode}} cmd={{.Config.Cmd}} network={{.HostConfig.NetworkMode}} privileged={{.HostConfig.Privileged}} security={{json .HostConfig.SecurityOpt}} tmpfs={{json .HostConfig.Tmpfs}}' \
              || true
           docker inspect ${{ matrix.platform }} \
-             --format 'cmd={{.Config.Cmd}} tmpfs={{.HostConfig.Tmpfs}}' \
+             --format 'networks={{json .NetworkSettings.Networks}}' \
              || true
           docker logs ${{ matrix.platform }} || true
           if [[ "${{ matrix.platform }}" == "openwrt-24.10" ]]; then
@@ -184,6 +184,20 @@ jobs:
               echo "=== OpenWrt release and package manager ==="
               cat /etc/openwrt_release || true
               opkg --version || true
+
+              echo "=== Network interfaces, routes and DNS ==="
+              ip -details addr show || true
+              ip route show table all || true
+              cat /etc/resolv.conf || true
+              echo "=== Network/firewall init links ==="
+              ls -l /etc/rc.d/S*network /etc/rc.d/S*dnsmasq \
+                /etc/rc.d/S*firewall /etc/rc.d/S*odhcpd 2>&1 || true
+              echo "=== Firewall rules ==="
+              nft list ruleset 2>&1 || iptables-save 2>&1 || true
+              echo "=== Socket/connectivity test ==="
+              wget -O /tmp/opkg-test.gz \
+                https://downloads.openwrt.org/releases/24.10.8/targets/x86/64/packages/Packages.gz \
+                2>&1 || true
 
               echo "=== Package status ==="
               opkg status snmpd snmpd-nossl libnetsnmp-nossl \
