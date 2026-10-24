@@ -16,6 +16,8 @@ platforms:
     # OpenWrt 24.10's procd/jail needs privileges denied by the default
     # Docker security profile when package post-install scripts start services.
     privileged: true
+    security_opts:
+      - seccomp=unconfined
     pre_build_image: true
     tmpfs:
       - /tmp:exec,mode=1777
