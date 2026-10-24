@@ -1,5 +1,5 @@
 # roles/router_network/defaults/main.yml
 ---
-# DHCP sections whose IPv4 DHCP server should be disabled.
-# All other DHCP sections are explicitly enabled by the role.
-router_network_dhcp_disabled_interfaces: []
+# Explicit IPv4 DHCP status per DHCP configuration section.
+# Supported values are "enabled" and "disabled"; unlisted sections are untouched.
+router_network_dhcp_interfaces: {}
