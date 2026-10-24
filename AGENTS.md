@@ -78,16 +78,18 @@ or CI workflows.
 - Do not use `command`/`shell` when a module exists.
 - `ansible.builtin.raw` is allowed in `prepare.yml` because no Python
   environment is available on the target yet.
-- A narrow additional exception is allowed when a remote operation must be
-  coordinated with a lock and a related state marker, and no Ansible module
-  can perform the combined operation. The service lock lives in the
-  root-owned `/root/.ansible-locks` directory, not world-writable `/tmp`;
-  lock acquisition reclaims directories older than the configured stale-lock
-  age. `router_network` also holds the shared service lock while committing
-  DHCP settings, so a concurrent restart cannot clear a marker for a commit
-  that occurred during the restart. The dnsmasq restart and marker clear run
-  in one remote command. Do not use `raw` as a general replacement for
-  available modules.
+- A narrow additional exception is allowed when a remote operation must
+  be coordinated with a lock and a related state marker, and no Ansible module
+  can perform the combined operation. This exception covers the DHCP
+  reconciliation lock and shared service-restart lock in `router_network`,
+  as well as the existing service locks in `router_base` and
+  `router_packages`. Locks live in the root-owned
+  `/root/.ansible-locks` directory, not world-writable `/tmp`; acquisition
+  reclaims directories older than the stale-lock age. `router_network` holds
+  the shared service lock while committing DHCP settings, so a concurrent
+  restart cannot clear a marker for a commit that occurred during the restart.
+  The dnsmasq restart and marker clear run in one remote command. Do not use
+  `raw` as a general replacement for available modules.
 
 ### Role variables
 - Must be prefixed with the role name:
