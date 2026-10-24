@@ -116,5 +116,3 @@
             rmdir /tmp/router-network-reconcile-lock
           changed_when: false
 
-- name: Flush handlers so pending DHCP changes are applied immediately
-  ansible.builtin.meta: flush_handlers
