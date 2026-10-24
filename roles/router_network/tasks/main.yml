@@ -35,27 +35,3 @@
     autocommit: true
     operations: "{{ router_network_dhcp_operations | default([]) }}"
   notify: Restart dnsmasq
-) }}
-  changed_when: false
-
-- name: Build DHCP reconciliation operations
-  ansible.builtin.set_fact:
-    router_network_dhcp_operations: >-
-      {{ (router_network_dhcp_operations | default([]))
-         + [{
-             'command': 'set',
-             'key': 'dhcp.' ~ item ~ '.ignore',
-             'value': (
-               '1'
-               if item in router_network_dhcp_disabled_interfaces
-               else '0'
-             )
-           }] }}
-  changed_when: false
-  loop: "{{ router_network_dhcp_sections }}"
-
-- name: Reconcile IPv4 DHCP settings in one UCI transaction
-  community.openwrt.uci:
-    autocommit: true
-    operations: "{{ router_network_dhcp_operations | default([]) }}"
-  notify: Restart dnsmasq
