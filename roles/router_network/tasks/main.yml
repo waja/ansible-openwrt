@@ -56,6 +56,14 @@
                  | regex_findall('(?m)^dhcp[.]([^.=]+)=dhcp$') }}
           changed_when: false
 
+        - name: Verify DHCP sections exist
+          ansible.builtin.assert:
+            that:
+              - router_network_dhcp_sections | length > 0
+            fail_msg: >-
+              No DHCP sections were found in the OpenWrt DHCP UCI
+              configuration, but router_network_dhcp_interfaces is set.
+
         - name: Validate DHCP interface configuration
           ansible.builtin.assert:
             that:
