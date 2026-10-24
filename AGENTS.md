@@ -120,8 +120,9 @@ Always select dynamically via the fact set by
   its `changed` value.
 - `router_packages` owns package installation; base service configuration
   belongs in `router_base`.
-- `router_network` owns network configuration, initially IPv4 DHCP server
-  settings; DHCPv6 and IPv6 Router Advertisements are outside its first scope.
+- `router_network` owns network configuration, initially explicit per-section
+  IPv4 DHCP status (`enabled`/`disabled`); unlisted sections stay unchanged.
+  DHCPv6 and IPv6 Router Advertisements are outside its first scope.
 - `router_package_audit` is optional because it requires the saved
   baseline file `/etc/backup/installed_packages.txt`.
 
@@ -307,8 +308,8 @@ dependencies, conditions, matrix, and commands.
 - `roles/router_hostname` is the minimal role example: a single task
   using `community.openwrt.uci`, with an overridable default in
   `defaults/main.yml`
-- `roles/router_network` shows per-interface UCI configuration using
-  the `router_network_dhcp_disabled_interfaces` list
+- `roles/router_network` shows explicit per-interface UCI configuration using
+  the `router_network_dhcp_interfaces` mapping
 - `converge.yml` shows how test values are passed via `vars:` to
   `include_role`
 - Before pushing, run the fast local checks above (after installing
