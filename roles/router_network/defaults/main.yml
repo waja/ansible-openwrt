@@ -1,5 +1,6 @@
 # roles/router_network/defaults/main.yml
 ---
 # Explicit IPv4 DHCP status per DHCP configuration section.
-# Supported values are "enabled" and "disabled"; unlisted sections are untouched.
+# Supported values are "enabled" and "disabled".
+# Unlisted sections are left untouched.
 router_network_dhcp_interfaces: {}
