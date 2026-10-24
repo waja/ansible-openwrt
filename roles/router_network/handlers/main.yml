@@ -1,0 +1,5 @@
+# roles/router_network/handlers/main.yml
+---
+- name: Restart dnsmasq
+  ansible.builtin.raw: /etc/init.d/dnsmasq restart
+  changed_when: true

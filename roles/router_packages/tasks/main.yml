@@ -1,18 +1,46 @@
 # roles/router_packages/tasks/main.yml
 ---
+- name: Generate service restart lock token
+  ansible.builtin.set_fact:
+    router_packages_service_lock_token: >-
+      {{ lookup('password', '/dev/null length=32') }}
+  changed_when: false
+
 - name: Acquire the shared service restart lock
   ansible.builtin.raw: |
-    lock=/tmp/router-packages-restart-lock
+    lock_root=/root/.ansible-locks
+    lock="$lock_root/router-packages-restart-lock"
+    token='{{ router_packages_service_lock_token }}'
     timeout={{ router_packages_service_restart_lock_timeout | int }}
     waited=0
-    until mkdir "$lock" 2>/dev/null; do
+    umask 077
+    mkdir -p "$lock_root" && chmod 700 "$lock_root" || exit 1
+    legacy_lock=/tmp/router-packages-restart-lock
+    legacy_owner="$legacy_lock.owner.$token"
+    while ! mkdir "$legacy_lock" 2>/dev/null; do
       if [ "$waited" -ge "$timeout" ]; then
-        echo "Timed out waiting for service restart lock: $lock" >&2
+        echo "Timed out waiting for legacy service restart lock" >&2
         exit 1
       fi
       sleep 1
       waited=$((waited + 1))
     done
+    : > "$legacy_owner"
+    until mkdir "$lock" 2>/dev/null; do
+      if [ "$waited" -ge "$timeout" ]; then
+        rm -f "$legacy_owner"; rmdir "$legacy_lock" 2>/dev/null || true;
+        echo "Timed out waiting for lock: $lock" >&2
+        exit 1
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
+    printf '%s\n' "$token" > "$lock/owner" || {
+      rmdir "$lock" 2>/dev/null || true
+      rm -f "$legacy_owner"; rmdir "$legacy_lock" 2>/dev/null || true;
+      exit 1
+    }
+  register: router_packages_service_lock_acquisition
   changed_when: false
 
 - name: Install requested and required service packages
@@ -57,6 +85,19 @@
       changed_when: false
   always:
     - name: Release the shared service restart lock
-      ansible.builtin.raw: >-
-        rmdir /tmp/router-packages-restart-lock
+      ansible.builtin.raw: |
+        lock=/root/.ansible-locks/router-packages-restart-lock
+        token='{{ router_packages_service_lock_token }}'
+        if [ -f "$lock/owner" ] &&
+           [ "$(cat "$lock/owner")" = "$token" ]; then
+          rm -f "$lock/owner"
+          rmdir "$lock"
+        fi
+        legacy_lock=/tmp/router-packages-restart-lock
+        legacy_owner="$legacy_lock.owner.$token"
+        if [ -f "$legacy_owner" ]; then
+          rm -f "$legacy_owner"
+          rmdir "$legacy_lock" 2>/dev/null || true
+        fi
+      when: router_packages_service_lock_acquisition is succeeded
       changed_when: false

@@ -17,6 +17,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   (`molecule.yml`, `prepare.yml`, `converge.yml`)
 - `roles/router_packages/` – dynamically installs the default package list
 - `roles/router_base/` – enables core services and removes obsolete config
+- `roles/router_network/` – manages network configuration, initially IPv4 DHCP
 - `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
   `defaults/main.yml`
@@ -77,14 +78,13 @@ or CI workflows.
 - Do not use `command`/`shell` when a module exists.
 - `ansible.builtin.raw` is allowed in `prepare.yml` because no Python
   environment is available on the target yet.
-- A narrow additional exception is allowed when one remote operation must
-  be followed immediately by a related state marker and no Ansible module
-  can perform both actions together. In `router_base`, the service restart
-  and its completion-marker write are run in one remote shell command.
-  This reduces the risk that Ansible loses the task acknowledgement after
-  the restart but before a separate marker task runs, which could cause an
-  unnecessary restart on the next run. Do not use `raw` as a general
-  replacement for available modules.
+- Existing shared service-lock logic in `router_base` and
+  `router_packages` uses `raw` to coordinate multi-task service operations.
+  Do not copy that locking design into new features without a separate design
+  review.
+- A service command may use `ansible.builtin.raw` on Python-free OpenWrt
+  targets when an available module cannot perform the operation reliably.
+  Do not use `raw` as a general replacement for available modules.
 
 ### Role variables
 - Must be prefixed with the role name:
@@ -117,8 +117,11 @@ Always select dynamically via the fact set by
 - Keep the installation result registered as
   `router_packages_install_result`; restart-marker handling depends on
   its `changed` value.
-- `router_packages` owns package installation; service configuration
+- `router_packages` owns package installation; base service configuration
   belongs in `router_base`.
+- `router_network` owns network configuration, initially explicit per-section
+  IPv4 DHCP status (`enabled`/`disabled`); unlisted sections stay unchanged.
+  DHCPv6 and IPv6 Router Advertisements are outside its first scope.
 - `router_package_audit` is optional because it requires the saved
   baseline file `/etc/backup/installed_packages.txt`.
 
@@ -136,11 +139,9 @@ Always select dynamically via the fact set by
   `/var/run/ubus/ubus.sock` and `ubus list`
 - `community.openwrt.init` must run before all other roles in
   `converge.yml`
-- Currently only `openwrt-25.12` is defined in `platforms:`. The CI
-  matrix lists `24.10` and `25.12`, but no platform selector is passed
-  to `molecule test`, so both matrix jobs currently run the same
-  scenario. Do not claim that both versions are tested until this is
-  fixed.
+- `openwrt-24.10` and `openwrt-25.12` are defined in `platforms:`. CI
+  passes `--platform-name "${{ matrix.platform }}"` so each matrix job
+  tests its corresponding image.
 
 ## Adding a new role (checklist)
 
@@ -164,9 +165,8 @@ Always select dynamically via the fact set by
    `openwrt/rootfs:x86_64-openwrt-<version>` image.
 2. Add the same platform name to the matrix in
    `.github/workflows/molecule.yml`.
-3. Pass the platform to Molecule, e.g.
-   `--platform-name "${{ matrix.platform }}"`, or split the scenario
-   per version.
+3. Pass the platform to Molecule with
+   `--platform-name "${{ matrix.platform }}"` in the CI matrix job.
 4. Verify that `community.openwrt.init` supports the version and sets
    `openwrt_package_manager` correctly.
 5. If the version uses a different package manager, no role change is
@@ -304,6 +304,8 @@ dependencies, conditions, matrix, and commands.
 - `roles/router_hostname` is the minimal role example: a single task
   using `community.openwrt.uci`, with an overridable default in
   `defaults/main.yml`
+- `roles/router_network` shows explicit per-interface UCI configuration using
+  the `router_network_dhcp_interfaces` mapping
 - `converge.yml` shows how test values are passed via `vars:` to
   `include_role`
 - Before pushing, run the fast local checks above (after installing

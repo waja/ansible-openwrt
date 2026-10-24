@@ -3,12 +3,14 @@
 driver:
   name: docker
 platforms:
+  # Pin stable releases so package feeds do not resolve to SNAPSHOT.
   - name: openwrt-25.12
-    image: openwrt/rootfs:x86_64-openwrt-25.12
+    image: openwrt/rootfs:x86_64-25.12.6
     command: /sbin/init
     pre_build_image: true
     tmpfs:
       - /tmp:exec,mode=1777
+  # OpenWrt 24.10 is temporarily disabled; see the workflow matrix.
 provisioner:
   name: ansible
   config_options:
