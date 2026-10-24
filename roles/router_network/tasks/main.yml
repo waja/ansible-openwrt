@@ -1,53 +1,120 @@
 # roles/router_network/tasks/main.yml
 ---
-- name: Read DHCP configuration sections
-  community.openwrt.uci:
-    command: show
-    config: dhcp
-  register: router_network_dhcp_config
-  changed_when: false
+- name: Check for a pending dnsmasq restart from an earlier run
+  community.openwrt.stat:
+    path: /tmp/router-network-dnsmasq-restart-pending
+  register: router_network_pending_restart_stat
 
-- name: Extract DHCP section names
-  ansible.builtin.set_fact:
-    router_network_dhcp_sections: >-
-      {{ router_network_dhcp_config.result
-         | regex_findall('(?m)^dhcp[.]([^.=]+)=dhcp$') }}
-  changed_when: false
-
-- name: Validate DHCP interface configuration
-  ansible.builtin.assert:
-    that:
-      - item.value in ['enabled', 'disabled']
-      - item.key in router_network_dhcp_sections
-    fail_msg: >-
-      Invalid DHCP configuration for '{{ item.key }}': use an existing DHCP
-      section and set its status to 'enabled' or 'disabled'.
-  loop: "{{ router_network_dhcp_interfaces | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
-
-- name: Initialize DHCP reconciliation operations
-  ansible.builtin.set_fact:
-    router_network_dhcp_operations: []
-  changed_when: false
-
-- name: Build DHCP reconciliation operations
-  ansible.builtin.set_fact:
-    router_network_dhcp_operations: >-
-      {{ router_network_dhcp_operations
-         + [{
-             'command': 'set',
-             'key': 'dhcp.' ~ item.key ~ '.ignore',
-             'value': '0' if item.value == 'enabled' else '1'
-           }] }}
-  changed_when: false
-  loop: "{{ router_network_dhcp_interfaces | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
-
-- name: Reconcile configured IPv4 DHCP settings in one UCI transaction
-  community.openwrt.uci:
-    autocommit: true
-    operations: "{{ router_network_dhcp_operations }}"
-  when: router_network_dhcp_operations | length > 0
+- name: Schedule retry of a pending dnsmasq restart
+  ansible.builtin.debug:
+    msg: A dnsmasq restart is pending from an earlier run.
+  changed_when: router_network_pending_restart_stat.stat.exists
   notify: Restart dnsmasq
+
+- name: Reconcile configured IPv4 DHCP settings
+  when: router_network_dhcp_interfaces | length > 0
+  block:
+    - name: Acquire the DHCP reconciliation lock
+      ansible.builtin.raw: |
+        lock=/tmp/router-network-reconcile-lock
+        timeout={{ router_network_reconcile_lock_timeout | int }}
+        waited=0
+        until mkdir "$lock" 2>/dev/null; do
+          if [ "$waited" -ge "$timeout" ]; then
+            echo "Timed out waiting for DHCP reconciliation lock: $lock" >&2
+            exit 1
+          fi
+          sleep 1
+          waited=$((waited + 1))
+        done
+      changed_when: false
+
+    - name: Reconcile DHCP configuration while holding the lock
+      block:
+        - name: Read DHCP configuration sections
+          community.openwrt.uci:
+            command: show
+            config: dhcp
+          register: router_network_dhcp_config
+          changed_when: false
+          failed_when: false
+
+        - name: Verify DHCP configuration is readable
+          ansible.builtin.assert:
+            that:
+              - not (router_network_dhcp_config.failed | default(false))
+              - router_network_dhcp_config.result is defined
+            fail_msg: >-
+              Cannot read the OpenWrt DHCP UCI configuration. Ensure the
+              dhcp configuration exists and is readable before setting
+              router_network_dhcp_interfaces.
+
+        - name: Extract DHCP section names
+          ansible.builtin.set_fact:
+            router_network_dhcp_sections: >-
+              {{ router_network_dhcp_config.result
+                 | regex_findall('(?m)^dhcp[.]([^.=]+)=dhcp$') }}
+          changed_when: false
+
+        - name: Validate DHCP interface configuration
+          ansible.builtin.assert:
+            that:
+              - item.value in ['enabled', 'disabled']
+              - item.key in router_network_dhcp_sections
+            fail_msg: >-
+              Invalid DHCP configuration for '{{ item.key }}': use an
+              existing DHCP section and set its status to 'enabled' or
+              'disabled'.
+          loop: "{{ router_network_dhcp_interfaces | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+
+        - name: Create pending dnsmasq restart marker before UCI commit
+          community.openwrt.file:
+            path: /tmp/router-network-dnsmasq-restart-pending
+            state: touch
+          changed_when: false
+
+        - name: Initialize DHCP reconciliation operations
+          ansible.builtin.set_fact:
+            router_network_dhcp_operations: []
+          changed_when: false
+
+        - name: Build DHCP reconciliation operations
+          ansible.builtin.set_fact:
+            router_network_dhcp_operations: >-
+              {{ router_network_dhcp_operations
+                 + [{
+                     'command': 'set',
+                     'key': 'dhcp.' ~ item.key ~ '.ignore',
+                     'value': '0' if item.value == 'enabled' else '1'
+                   }] }}
+          changed_when: false
+          loop: "{{ router_network_dhcp_interfaces | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+
+        - name: Commit configured IPv4 DHCP settings in one UCI transaction
+          community.openwrt.uci:
+            autocommit: true
+            operations: "{{ router_network_dhcp_operations }}"
+          register: router_network_dhcp_transaction
+          notify: Restart dnsmasq
+
+        - name: Remove marker when no restart is needed
+          community.openwrt.file:
+            path: /tmp/router-network-dnsmasq-restart-pending
+            state: absent
+          when:
+            - not (router_network_dhcp_transaction.changed | default(false))
+            - not router_network_pending_restart_stat.stat.exists
+          changed_when: false
+
+      always:
+        - name: Release the DHCP reconciliation lock
+          ansible.builtin.raw: >-
+            rmdir /tmp/router-network-reconcile-lock
+          changed_when: false
+
+- name: Flush handlers so pending DHCP changes are applied immediately
+  ansible.builtin.meta: flush_handlers
