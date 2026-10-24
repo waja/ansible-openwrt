@@ -35,9 +35,9 @@
       ansible.builtin.include_role:
         name: router_base
 
-    - name: Apply router DHCP server role
+    - name: Apply router network role
       ansible.builtin.include_role:
-        name: router_dhcp_server
+        name: router_network
       vars:
         router_dhcp_server_disabled_interfaces:
           - lan
