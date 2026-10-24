@@ -167,9 +167,9 @@ Target just one router with `--limit`:
 ansible-playbook -i inventory.ini playbooks/site.yml --limit router1
 ```
 
-The `site.yml` playbook runs the initialization role first, then installs
-the configured packages, and finally configures base services and removes
-obsolete configuration files.
+The `site.yml` playbook runs initialization first, installs the configured
+packages, configures base services and removes obsolete configuration files,
+then applies the network configuration through `router_network`.
 
 ### Configure packages per router
 
