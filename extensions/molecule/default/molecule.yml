@@ -9,6 +9,12 @@ platforms:
     pre_build_image: true
     tmpfs:
       - /tmp:exec,mode=1777
+  - name: openwrt-24.10
+    image: openwrt/rootfs:x86_64-openwrt-24.10
+    command: /sbin/init
+    pre_build_image: true
+    tmpfs:
+      - /tmp:exec,mode=1777
 provisioner:
   name: ansible
   config_options:
