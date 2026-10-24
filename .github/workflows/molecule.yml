@@ -186,7 +186,8 @@ jobs:
               opkg --version || true
 
               echo "=== Package status ==="
-              opkg status snmpd snmpd-nossl libnetsnmp-nossl libpci libpcre2 || true
+              opkg status snmpd snmpd-nossl libnetsnmp-nossl \\
+                libpci libpcre2 || true
 
               echo "=== Package maintainer scripts ==="
               for script in \
