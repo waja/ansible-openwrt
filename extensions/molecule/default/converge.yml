@@ -35,6 +35,13 @@
       ansible.builtin.include_role:
         name: router_base
 
+    - name: Apply router DHCP server role
+      ansible.builtin.include_role:
+        name: router_dhcp_server
+      vars:
+        router_dhcp_server_disabled_interfaces:
+          - lan
+
     - name: Verify required services are enabled and running
       ansible.builtin.raw: |
         for service in snmpd xinetd; do
