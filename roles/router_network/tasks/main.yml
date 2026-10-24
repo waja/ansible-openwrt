@@ -161,6 +161,12 @@
                 path: /tmp/router-network-dnsmasq-restart-pending
               register: router_network_locked_pending_restart_stat
 
+            - name: Schedule retry for a pending restart found under the lock
+              ansible.builtin.debug:
+                msg: A pending dnsmasq restart was found while holding the service lock.
+              changed_when: router_network_locked_pending_restart_stat.stat.exists
+              notify: Restart dnsmasq
+
             - name: Create pending dnsmasq restart marker before UCI commit
               community.openwrt.file:
                 path: /tmp/router-network-dnsmasq-restart-pending
