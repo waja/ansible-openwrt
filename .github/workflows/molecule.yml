@@ -201,8 +201,8 @@ jobs:
               echo "=== Firewall rules ==="
               nft list ruleset 2>&1 || iptables-save 2>&1 || true
               echo "=== Socket/connectivity test ==="
-              url='https://downloads.openwrt.org/releases/24.10.8/targets/x86/64/'\
-'packages/Packages.gz'
+              url='https://downloads.openwrt.org/releases/24.10.8/targets/x86/64/'
+              url="${url}packages/Packages.gz"
               wget -O /tmp/opkg-test.gz "$url" 2>&1 || true
 
               echo "=== Package status ==="
