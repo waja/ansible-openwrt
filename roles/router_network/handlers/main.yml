@@ -59,4 +59,5 @@
     fi
     exit "$result"
   register: router_network_dnsmasq_restart
-  changed_when: "'DNSMASQ_RESTARTED' in router_network_dnsmasq_restart.stdout
+  changed_when: >-
+    'DNSMASQ_RESTARTED' in router_network_dnsmasq_restart.stdout
