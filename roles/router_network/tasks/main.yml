@@ -16,10 +16,24 @@
   block:
     - name: Acquire the DHCP reconciliation lock
       ansible.builtin.raw: |
-        lock=/tmp/router-network-reconcile-lock
+        lock_root=/root/.ansible-locks
+        lock="$lock_root/router-network-reconcile-lock"
         timeout={{ router_network_reconcile_lock_timeout | int }}
+        stale_after={{ router_network_stale_lock_age | int }}
         waited=0
+        umask 077
+        mkdir -p "$lock_root" && chmod 700 "$lock_root" || exit 1
         until mkdir "$lock" 2>/dev/null; do
+          now=$(date +%s)
+          modified=$(stat -c %Y "$lock" 2>/dev/null || echo "$now")
+          age=$((now - modified))
+          if [ "$age" -ge "$stale_after" ]; then
+            stale="$lock.stale.$$"
+            if mv "$lock" "$stale" 2>/dev/null; then
+              rmdir "$stale" 2>/dev/null || rm -rf "$stale"
+              continue
+            fi
+          fi
           if [ "$waited" -ge "$timeout" ]; then
             echo "Timed out waiting for DHCP reconciliation lock: $lock" >&2
             exit 1
@@ -77,17 +91,6 @@
           loop_control:
             label: "{{ item.key }}"
 
-        - name: Check pending dnsmasq restart state under the lock
-          community.openwrt.stat:
-            path: /tmp/router-network-dnsmasq-restart-pending
-          register: router_network_locked_pending_restart_stat
-
-        - name: Create pending dnsmasq restart marker before UCI commit
-          community.openwrt.file:
-            path: /tmp/router-network-dnsmasq-restart-pending
-            state: touch
-          changed_when: false
-
         - name: Initialize DHCP reconciliation operations
           ansible.builtin.set_fact:
             router_network_dhcp_operations: []
@@ -107,24 +110,72 @@
           loop_control:
             label: "{{ item.key }}"
 
-        - name: Commit configured IPv4 DHCP settings in one UCI transaction
-          community.openwrt.uci:
-            autocommit: true
-            operations: "{{ router_network_dhcp_operations }}"
-          register: router_network_dhcp_transaction
-          notify: Restart dnsmasq
-
-        - name: Remove marker when no restart is needed
-          community.openwrt.file:
-            path: /tmp/router-network-dnsmasq-restart-pending
-            state: absent
-          when:
-            - not (router_network_dhcp_transaction.changed | default(false))
-            - not router_network_locked_pending_restart_stat.stat.exists
+        - name: Acquire the shared service restart lock for the UCI commit
+          ansible.builtin.raw: |
+            lock_root=/root/.ansible-locks
+            lock="$lock_root/router-packages-restart-lock"
+            timeout={{ router_network_service_restart_lock_timeout | int }}
+            stale_after={{ router_network_stale_lock_age | int }}
+            waited=0
+            umask 077
+            mkdir -p "$lock_root" && chmod 700 "$lock_root" || exit 1
+            until mkdir "$lock" 2>/dev/null; do
+              now=$(date +%s)
+              modified=$(stat -c %Y "$lock" 2>/dev/null || echo "$now")
+              age=$((now - modified))
+              if [ "$age" -ge "$stale_after" ]; then
+                stale="$lock.stale.$$"
+                if mv "$lock" "$stale" 2>/dev/null; then
+                  rmdir "$stale" 2>/dev/null || rm -rf "$stale"
+                  continue
+                fi
+              fi
+              if [ "$waited" -ge "$timeout" ]; then
+                echo "Timed out waiting for service restart lock: $lock" >&2
+                exit 1
+              fi
+              sleep 1
+              waited=$((waited + 1))
+            done
           changed_when: false
+
+        - name: Commit DHCP settings and mark dnsmasq restart pending
+          block:
+            - name: Check pending dnsmasq restart state under the lock
+              community.openwrt.stat:
+                path: /tmp/router-network-dnsmasq-restart-pending
+              register: router_network_locked_pending_restart_stat
+
+            - name: Create pending dnsmasq restart marker before UCI commit
+              community.openwrt.file:
+                path: /tmp/router-network-dnsmasq-restart-pending
+                state: touch
+              changed_when: false
+
+            - name: Commit configured IPv4 DHCP settings in one UCI transaction
+              community.openwrt.uci:
+                autocommit: true
+                operations: "{{ router_network_dhcp_operations }}"
+              register: router_network_dhcp_transaction
+              notify: Restart dnsmasq
+
+            - name: Remove marker when no restart is needed
+              community.openwrt.file:
+                path: /tmp/router-network-dnsmasq-restart-pending
+                state: absent
+              when:
+                - not (router_network_dhcp_transaction.changed | default(false))
+                - not router_network_locked_pending_restart_stat.stat.exists
+              changed_when: false
+
+          always:
+            - name: Release the shared service restart lock after UCI commit
+              ansible.builtin.raw: >-
+                rmdir /root/.ansible-locks/router-packages-restart-lock
+              changed_when: false
 
       always:
         - name: Release the DHCP reconciliation lock
           ansible.builtin.raw: >-
-            rmdir /tmp/router-network-reconcile-lock
+            rmdir /root/.ansible-locks/router-network-reconcile-lock
           changed_when: false
