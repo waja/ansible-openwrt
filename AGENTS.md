@@ -78,8 +78,12 @@ or CI workflows.
 - Do not use `command`/`shell` when a module exists.
 - `ansible.builtin.raw` is allowed in `prepare.yml` because no Python
   environment is available on the target yet.
-- A narrow exception is allowed for service commands on Python-free OpenWrt
-  targets when the available modules cannot perform the operation reliably.
+- Existing shared service-lock logic in `router_base` and
+  `router_packages` uses `raw` to coordinate multi-task service operations.
+  Do not copy that locking design into new features without a separate design
+  review.
+- A service command may use `ansible.builtin.raw` on Python-free OpenWrt
+  targets when an available module cannot perform the operation reliably.
   Do not use `raw` as a general replacement for available modules.
 
 ### Role variables
