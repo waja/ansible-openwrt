@@ -11,7 +11,8 @@ inventory and customize variables there.
 ## What the playbooks do
 
 - `playbooks/site.yml` runs the standard configuration:
-  `community.openwrt.init`, `router_packages`, and `router_base`.
+  `community.openwrt.init`, `router_packages`, `router_base`, and
+  `router_dhcp_server`.
 - `playbooks/audit_packages.yml` compares the installed packages on each
   router against a saved package-list baseline. It reports differences but
   does not install or remove packages to reconcile them.
@@ -234,6 +235,30 @@ ansible-playbook -i inventory.ini playbooks/site.yml
 ansible-playbook -i inventory.ini playbooks/site.yml --limit router2
 ```
 
+### Disable DHCP on selected interfaces
+
+The `router_dhcp_server` role can disable the IPv4 DHCP server on selected
+OpenWrt interfaces. The standard `site.yml` playbook includes this role,
+but its default list is empty, so existing DHCP behavior is unchanged unless
+you configure the variable.
+
+For example, to disable IPv4 DHCP on LAN for every router, add this to
+`group_vars/openwrt.yml`:
+
+```yaml
+---
+router_dhcp_server_disabled_interfaces:
+  - lan
+```
+
+You can instead define the variable in `host_vars/<inventory_hostname>.yml`
+to disable DHCP only on specific routers. The value is a list of OpenWrt
+DHCP configuration section names, such as `lan` or `guest`.
+
+This sets `dhcp.<interface>.ignore=1`. It controls IPv4 DHCP only; it does
+not disable DHCPv6 or IPv6 Router Advertisements. Configure those separately
+if your network requires them to be disabled too.
+
 ### Audit installed packages
 
 The audit playbook requires a baseline package list on each target router.
@@ -286,6 +311,7 @@ than both.
 - `playbooks/audit_packages.yml` — installed-package audit
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
+- `roles/router_dhcp_server/` — per-interface IPv4 DHCP server control
 - `roles/router_package_audit/` — package baseline comparison
 - `requirements.yml` — pinned Ansible role and collection dependencies
 - `extensions/molecule/default/` — Molecule test scenario
