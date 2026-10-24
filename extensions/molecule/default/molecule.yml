@@ -13,6 +13,9 @@ platforms:
   - name: openwrt-24.10
     image: openwrt/rootfs:x86_64-24.10.8
     command: /sbin/init
+    # OpenWrt 24.10's procd/jail needs privileges denied by the default
+    # Docker security profile when package post-install scripts start services.
+    privileged: true
     pre_build_image: true
     tmpfs:
       - /tmp:exec,mode=1777
