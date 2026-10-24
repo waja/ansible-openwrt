@@ -14,33 +14,36 @@
 - name: Reconcile configured IPv4 DHCP settings
   when: router_network_dhcp_interfaces | length > 0
   block:
+    - name: Generate DHCP reconciliation lock token
+      ansible.builtin.set_fact:
+        router_network_reconcile_lock_token: >-
+          {{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
+      changed_when: false
+
     - name: Acquire the DHCP reconciliation lock
       ansible.builtin.raw: |
         lock_root=/root/.ansible-locks
         lock="$lock_root/router-network-reconcile-lock"
+        token='{{ router_network_reconcile_lock_token }}'
         timeout={{ router_network_reconcile_lock_timeout | int }}
-        stale_after={{ router_network_stale_lock_age | int }}
         waited=0
         umask 077
         mkdir -p "$lock_root" && chmod 700 "$lock_root" || exit 1
         until mkdir "$lock" 2>/dev/null; do
-          now=$(date +%s)
-          modified=$(stat -c %Y "$lock" 2>/dev/null || echo "$now")
-          age=$((now - modified))
-          if [ "$age" -ge "$stale_after" ]; then
-            stale="$lock.stale.$(cat /proc/sys/kernel/random/uuid)"
-            if mv "$lock" "$stale" 2>/dev/null; then
-              rmdir "$stale" 2>/dev/null || rm -rf "$stale"
-              continue
-            fi
-          fi
           if [ "$waited" -ge "$timeout" ]; then
-            echo "Timed out waiting for DHCP reconciliation lock: $lock" >&2
+            
+            echo "Timed out waiting for lock: $lock" >&2
             exit 1
           fi
           sleep 1
           waited=$((waited + 1))
         done
+        printf '%s\n' "$token" > "$lock/owner" || {
+          rmdir "$lock" 2>/dev/null || true
+          
+          exit 1
+        }
+      register: router_network_reconcile_lock_acquisition
       changed_when: false
 
     - name: Reconcile DHCP configuration while holding the lock
@@ -110,33 +113,47 @@
           loop_control:
             label: "{{ item.key }}"
 
+        - name: Generate service restart lock token
+          ansible.builtin.set_fact:
+            router_network_service_lock_token: >-
+              {{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
+          changed_when: false
+
         - name: Acquire the shared service restart lock for the UCI commit
           ansible.builtin.raw: |
             lock_root=/root/.ansible-locks
             lock="$lock_root/router-packages-restart-lock"
+            token='{{ router_network_service_lock_token }}'
             timeout={{ router_network_service_restart_lock_timeout | int }}
-            stale_after={{ router_network_stale_lock_age | int }}
             waited=0
             umask 077
             mkdir -p "$lock_root" && chmod 700 "$lock_root" || exit 1
-            until mkdir "$lock" 2>/dev/null; do
-              now=$(date +%s)
-              modified=$(stat -c %Y "$lock" 2>/dev/null || echo "$now")
-              age=$((now - modified))
-              if [ "$age" -ge "$stale_after" ]; then
-                stale="$lock.stale.$(cat /proc/sys/kernel/random/uuid)"
-                if mv "$lock" "$stale" 2>/dev/null; then
-                  rmdir "$stale" 2>/dev/null || rm -rf "$stale"
-                  continue
-                fi
-              fi
+            legacy_lock=/tmp/router-packages-restart-lock
+            legacy_owner="$legacy_lock.owner.$token"
+            while ! mkdir "$legacy_lock" 2>/dev/null; do
               if [ "$waited" -ge "$timeout" ]; then
-                echo "Timed out waiting for service restart lock: $lock" >&2
+                echo "Timed out waiting for legacy service restart lock" >&2
                 exit 1
               fi
               sleep 1
               waited=$((waited + 1))
             done
+            : > "$legacy_owner"
+            until mkdir "$lock" 2>/dev/null; do
+              if [ "$waited" -ge "$timeout" ]; then
+                rm -f "$legacy_owner"; rmdir "$legacy_lock" 2>/dev/null || true;
+                echo "Timed out waiting for lock: $lock" >&2
+                exit 1
+              fi
+              sleep 1
+              waited=$((waited + 1))
+            done
+            printf '%s\n' "$token" > "$lock/owner" || {
+              rmdir "$lock" 2>/dev/null || true
+              rm -f "$legacy_owner"; rmdir "$legacy_lock" 2>/dev/null || true;
+              exit 1
+            }
+          register: router_network_service_lock_acquisition
           changed_when: false
 
         - name: Commit DHCP settings and mark dnsmasq restart pending
@@ -170,12 +187,32 @@
 
           always:
             - name: Release the shared service restart lock after UCI commit
-              ansible.builtin.raw: >-
-                rmdir /root/.ansible-locks/router-packages-restart-lock
+              ansible.builtin.raw: |
+                lock=/root/.ansible-locks/router-packages-restart-lock
+                token='{{ router_network_service_lock_token }}'
+                if [ -f "$lock/owner" ] &&
+                   [ "$(cat "$lock/owner")" = "$token" ]; then
+                  rm -f "$lock/owner"
+                  rmdir "$lock"
+                fi
+                legacy_lock=/tmp/router-packages-restart-lock
+                legacy_owner="$legacy_lock.owner.$token"
+                if [ -f "$legacy_owner" ]; then
+                  rm -f "$legacy_owner"
+                  rmdir "$legacy_lock" 2>/dev/null || true
+                fi
+              when: router_network_service_lock_acquisition is succeeded
               changed_when: false
 
       always:
         - name: Release the DHCP reconciliation lock
-          ansible.builtin.raw: >-
-            rmdir /root/.ansible-locks/router-network-reconcile-lock
+          ansible.builtin.raw: |
+          lock=/root/.ansible-locks/router-network-reconcile-lock
+          token='{{ router_network_reconcile_lock_token }}'
+          if [ -f "$lock/owner" ] &&
+             [ "$(cat "$lock/owner")" = "$token" ]; then
+            rm -f "$lock/owner"
+            rmdir "$lock"
+          fi
+          when: router_network_reconcile_lock_acquisition is succeeded
           changed_when: false
