@@ -173,11 +173,17 @@ jobs:
         run: |
           docker ps -a
           docker inspect ${{ matrix.platform }} \
-             --format 'status={{.State.Status}} exit={{.State.ExitCode}} cmd={{.Config.Cmd}} network={{.HostConfig.NetworkMode}} privileged={{.HostConfig.Privileged}} security={{json .HostConfig.SecurityOpt}} tmpfs={{json .HostConfig.Tmpfs}}' \
-             || true
+            --format 'status={{.State.Status}} exit={{.State.ExitCode}}'
           docker inspect ${{ matrix.platform }} \
-             --format 'networks={{json .NetworkSettings.Networks}}' \
-             || true
+            --format 'cmd={{.Config.Cmd}} network={{.HostConfig.NetworkMode}}'
+          docker inspect ${{ matrix.platform }} \
+            --format 'privileged={{.HostConfig.Privileged}}'
+          docker inspect ${{ matrix.platform }} \
+            --format 'security={{json .HostConfig.SecurityOpt}}'
+          docker inspect ${{ matrix.platform }} \
+            --format 'tmpfs={{json .HostConfig.Tmpfs}}'
+          docker inspect ${{ matrix.platform }} \
+            --format 'networks={{json .NetworkSettings.Networks}}'
           docker logs ${{ matrix.platform }} || true
           if [[ "${{ matrix.platform }}" == "openwrt-24.10" ]]; then
             docker exec "${{ matrix.platform }}" sh -c '
@@ -195,9 +201,9 @@ jobs:
               echo "=== Firewall rules ==="
               nft list ruleset 2>&1 || iptables-save 2>&1 || true
               echo "=== Socket/connectivity test ==="
-              wget -O /tmp/opkg-test.gz \
-                https://downloads.openwrt.org/releases/24.10.8/targets/x86/64/packages/Packages.gz \
-                2>&1 || true
+              url='https://downloads.openwrt.org/releases/24.10.8/targets/x86/64/'\
+'packages/Packages.gz'
+              wget -O /tmp/opkg-test.gz "$url" 2>&1 || true
 
               echo "=== Package status ==="
               opkg status snmpd snmpd-nossl libnetsnmp-nossl \
