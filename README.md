@@ -12,7 +12,7 @@ inventory and customize variables there.
 
 - `playbooks/site.yml` runs the standard configuration:
   `community.openwrt.init`, `router_packages`, `router_base`, and
-  `router_dhcp_server`.
+  `router_network`.
 - `playbooks/audit_packages.yml` compares the installed packages on each
   router against a saved package-list baseline. It reports differences but
   does not install or remove packages to reconcile them.
@@ -235,10 +235,11 @@ ansible-playbook -i inventory.ini playbooks/site.yml
 ansible-playbook -i inventory.ini playbooks/site.yml --limit router2
 ```
 
-### Disable DHCP on selected interfaces
+### Configure network settings
 
-The `router_dhcp_server` role can disable the IPv4 DHCP server on selected
-OpenWrt interfaces. The standard `site.yml` playbook includes this role,
+The `router_network` role is the home for network configuration. Its first
+feature can disable the IPv4 DHCP server on selected OpenWrt interfaces.
+The standard `site.yml` playbook includes this role,
 but its default list is empty, so existing DHCP behavior is unchanged unless
 you configure the variable.
 
@@ -247,7 +248,7 @@ For example, to disable IPv4 DHCP on LAN for every router, add this to
 
 ```yaml
 ---
-router_dhcp_server_disabled_interfaces:
+router_network_dhcp_disabled_interfaces:
   - lan
 ```
 
