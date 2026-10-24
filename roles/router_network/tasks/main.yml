@@ -77,6 +77,11 @@
           loop_control:
             label: "{{ item.key }}"
 
+        - name: Check pending dnsmasq restart state under the lock
+          community.openwrt.stat:
+            path: /tmp/router-network-dnsmasq-restart-pending
+          register: router_network_locked_pending_restart_stat
+
         - name: Create pending dnsmasq restart marker before UCI commit
           community.openwrt.file:
             path: /tmp/router-network-dnsmasq-restart-pending
@@ -115,7 +120,7 @@
             state: absent
           when:
             - not (router_network_dhcp_transaction.changed | default(false))
-            - not router_network_pending_restart_stat.stat.exists
+            - not router_network_locked_pending_restart_stat.stat.exists
           changed_when: false
 
       always:
