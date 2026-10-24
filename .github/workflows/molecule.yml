@@ -128,7 +128,8 @@ jobs:
       matrix:
         platform:
           - openwrt-25.12
-          - openwrt-24.10
+          # Temporarily disabled: OpenWrt 24.10 opkg networking fails in CI.
+          # - openwrt-24.10
     steps:
       - name: Check out code
         uses: actions/checkout@v7
