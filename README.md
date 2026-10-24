@@ -256,9 +256,10 @@ You can instead define the variable in `host_vars/<inventory_hostname>.yml`
 to disable DHCP only on specific routers. The value is a list of OpenWrt
 DHCP configuration section names, such as `lan` or `guest`.
 
-This sets `dhcp.<interface>.ignore=1`. It controls IPv4 DHCP only; it does
-not disable DHCPv6 or IPv6 Router Advertisements. Configure those separately
-if your network requires them to be disabled too.
+The role sets `dhcp.<interface>.ignore=1` for listed sections and `0` for
+all other DHCP sections. This controls IPv4 DHCP only; it does not disable
+DHCPv6 or IPv6 Router Advertisements. Configure those separately if your
+network requires them to be disabled too.
 
 ### Audit installed packages
 
