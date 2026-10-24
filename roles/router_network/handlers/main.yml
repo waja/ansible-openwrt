@@ -4,31 +4,59 @@
   ansible.builtin.raw: |
     lock_root=/root/.ansible-locks
     lock="$lock_root/router-packages-restart-lock"
+    legacy_lock=/tmp/router-packages-restart-lock
+    token=$(cat /proc/sys/kernel/random/uuid)
+    legacy_owner="$legacy_lock.owner.$token"
     timeout={{ router_network_service_restart_lock_timeout | int }}
-    stale_after={{ router_network_stale_lock_age | int }}
     waited=0
     umask 077
     mkdir -p "$lock_root" && chmod 700 "$lock_root" || exit 1
-    until mkdir "$lock" 2>/dev/null; do
-      now=$(date +%s)
-      modified=$(stat -c %Y "$lock" 2>/dev/null || echo "$now")
-      age=$((now - modified))
-      if [ "$age" -ge "$stale_after" ]; then
-        stale="$lock.stale.$(cat /proc/sys/kernel/random/uuid)"
-        if mv "$lock" "$stale" 2>/dev/null; then
-          rmdir "$stale" 2>/dev/null || rm -rf "$stale"
-          continue
-        fi
-      fi
+    while ! mkdir "$legacy_lock" 2>/dev/null; do
       if [ "$waited" -ge "$timeout" ]; then
+        echo "Timed out waiting for legacy service restart lock" >&2
+        exit 1
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
+    : > "$legacy_owner"
+    until mkdir "$lock" 2>/dev/null; do
+      if [ "$waited" -ge "$timeout" ]; then
+        rm -f "$legacy_owner"
+        rmdir "$legacy_lock" 2>/dev/null || true
         echo "Timed out waiting for service restart lock: $lock" >&2
         exit 1
       fi
       sleep 1
       waited=$((waited + 1))
     done
+    printf '%s\n' "$token" > "$lock/owner" || {
+      rmdir "$lock" 2>/dev/null || true
+      rm -f "$legacy_owner"
+      rmdir "$legacy_lock" 2>/dev/null || true
+      exit 1
+    }
 
-    trap 'rmdir "$lock"' EXIT
-    /etc/init.d/dnsmasq restart &&
+    # Recheck the marker only after both shared locks are held.
+    if [ ! -e /tmp/router-network-dnsmasq-restart-pending ]; then
+      result=0
+    elif /etc/init.d/dnsmasq restart; then
       rm -f /tmp/router-network-dnsmasq-restart-pending
-  changed_when: true
+      echo DNSMASQ_RESTARTED
+      result=0
+    else
+      result=$?
+    fi
+
+    if [ -f "$lock/owner" ] &&
+       [ "$(cat "$lock/owner")" = "$token" ]; then
+      rm -f "$lock/owner"
+      rmdir "$lock"
+    fi
+    if [ -f "$legacy_owner" ]; then
+      rm -f "$legacy_owner"
+      rmdir "$legacy_lock" 2>/dev/null || true
+    fi
+    exit "$result"
+  register: router_network_dnsmasq_restart
+  changed_when: "'DNSMASQ_RESTARTED' in router_network_dnsmasq_restart.stdout
