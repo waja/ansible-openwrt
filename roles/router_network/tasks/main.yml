@@ -14,24 +14,40 @@
          | regex_findall('(?m)^dhcp[.]([^.=]+)=dhcp$') }}
   changed_when: false
 
+- name: Validate DHCP interface configuration
+  ansible.builtin.assert:
+    that:
+      - item.value in ['enabled', 'disabled']
+      - item.key in router_network_dhcp_sections
+    fail_msg: >-
+      Invalid DHCP configuration for '{{ item.key }}': use an existing DHCP
+      section and set its status to 'enabled' or 'disabled'.
+  loop: "{{ router_network_dhcp_interfaces | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Initialize DHCP reconciliation operations
+  ansible.builtin.set_fact:
+    router_network_dhcp_operations: []
+  changed_when: false
+
 - name: Build DHCP reconciliation operations
   ansible.builtin.set_fact:
     router_network_dhcp_operations: >-
-      {{ (router_network_dhcp_operations | default([]))
+      {{ router_network_dhcp_operations
          + [{
              'command': 'set',
-             'key': 'dhcp.' ~ item ~ '.ignore',
-             'value': (
-               '1'
-               if item in router_network_dhcp_disabled_interfaces
-               else '0'
-             )
+             'key': 'dhcp.' ~ item.key ~ '.ignore',
+             'value': '0' if item.value == 'enabled' else '1'
            }] }}
   changed_when: false
-  loop: "{{ router_network_dhcp_sections }}"
+  loop: "{{ router_network_dhcp_interfaces | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
 
-- name: Reconcile IPv4 DHCP settings in one UCI transaction
+- name: Reconcile configured IPv4 DHCP settings in one UCI transaction
   community.openwrt.uci:
     autocommit: true
-    operations: "{{ router_network_dhcp_operations | default([]) }}"
+    operations: "{{ router_network_dhcp_operations }}"
+  when: router_network_dhcp_operations | length > 0
   notify: Restart dnsmasq
