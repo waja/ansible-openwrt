@@ -21,6 +21,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
   `defaults/main.yml`
+- `includes/` – reusable task files shared by multiple roles
 - `./collections/` – installed dependencies, **never edit**, must be
   git-ignored
 - `requirements.yml` – authoritative, version-pinned source for
@@ -78,10 +79,11 @@ or CI workflows.
 - Do not use `command`/`shell` when a module exists.
 - `ansible.builtin.raw` is allowed in `prepare.yml` because no Python
   environment is available on the target yet.
-- Existing shared service-lock logic in `router_base` and
-  `router_packages` uses `raw` to coordinate multi-task service operations.
-  Do not copy that locking design into new features without a separate design
-  review.
+- Shared service-lock tasks live in
+  `includes/router_service_restart_lock/` and are included by
+  `router_base` and `router_packages`. They use `raw` to coordinate
+  multi-task service operations. Do not copy that locking design into new
+  features without a separate design review.
 - A service command may use `ansible.builtin.raw` on Python-free OpenWrt
   targets when an available module cannot perform the operation reliably.
   Do not use `raw` as a general replacement for available modules.
