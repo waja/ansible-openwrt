@@ -11,7 +11,8 @@ inventory and customize variables there.
 ## What the playbooks do
 
 - `playbooks/site.yml` runs the standard configuration:
-  `community.openwrt.init`, `router_packages`, and `router_base`.
+  `community.openwrt.init`, `router_packages`, `router_base`, and
+  `router_network`.
 - `playbooks/audit_packages.yml` compares the installed packages on each
   router against a saved package-list baseline. It reports differences but
   does not install or remove packages to reconcile them.
@@ -166,9 +167,9 @@ Target just one router with `--limit`:
 ansible-playbook -i inventory.ini playbooks/site.yml --limit router1
 ```
 
-The `site.yml` playbook runs the initialization role first, then installs
-the configured packages, and finally configures base services and removes
-obsolete configuration files.
+The `site.yml` playbook runs initialization first, installs the configured
+packages, configures base services and removes obsolete configuration files,
+then applies the network configuration through `router_network`.
 
 ### Configure packages per router
 
@@ -234,6 +235,40 @@ ansible-playbook -i inventory.ini playbooks/site.yml
 ansible-playbook -i inventory.ini playbooks/site.yml --limit router2
 ```
 
+### Configure network settings
+
+The `router_network` role is the home for network configuration. Its first
+feature explicitly configures IPv4 DHCP status per OpenWrt DHCP section.
+The standard `site.yml` playbook includes this role. Set each managed
+section to `enabled` or `disabled`; sections omitted from the mapping are
+left unchanged. The default empty mapping therefore preserves existing
+DHCP settings.
+
+For example, to disable IPv4 DHCP on LAN and enable it on the guest network
+for every router, add this to `group_vars/openwrt.yml`:
+
+```yaml
+---
+router_network_dhcp_interfaces:
+  lan: disabled
+  guest: enabled
+```
+
+You can instead define the variable in `host_vars/<inventory_hostname>.yml`
+to configure DHCP only on specific routers. Keys are existing OpenWrt DHCP
+configuration section names, such as `lan` or `guest`. Each value must be
+`enabled` or `disabled`; invalid values and unknown section names fail
+validation rather than silently changing other interfaces.
+
+The role sets `dhcp.<interface>.ignore=0` for `enabled` and `1` for
+`disabled`. This controls IPv4 DHCP only; it does not configure DHCPv6 or
+IPv6 Router Advertisements. Configure those separately if needed.
+
+The role restarts dnsmasq when the UCI configuration changes. If a
+previous dnsmasq restart failed, set `router_network_force_restart: true`
+for a run to request another restart even when the DHCP settings are already
+correct. The default is `false`.
+
 ### Audit installed packages
 
 The audit playbook requires a baseline package list on each target router.
@@ -286,6 +321,7 @@ than both.
 - `playbooks/audit_packages.yml` — installed-package audit
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
+- `roles/router_network/` — network configuration, initially IPv4 DHCP control
 - `roles/router_package_audit/` — package baseline comparison
 - `requirements.yml` — pinned Ansible role and collection dependencies
 - `extensions/molecule/default/` — Molecule test scenario
