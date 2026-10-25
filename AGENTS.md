@@ -83,9 +83,10 @@ or CI workflows.
   `includes/router_service_restart_lock/` and are included by
   `router_base` and `router_packages`. They use `raw` to coordinate
   multi-task service operations. Do not copy that locking design into new
-  features without a separate design review. Set `router_service_restart_lock_timeout`
-  to override the shared 1860-second timeout; the previous role-specific timeout
-  variables remain accepted as fallbacks.
+  features without a separate design review.
+- Set `router_service_restart_lock_timeout` to override the shared
+  1860-second timeout; previous role-specific timeout variables remain
+  accepted as fallbacks.
 - A service command may use `ansible.builtin.raw` on Python-free OpenWrt
   targets when an available module cannot perform the operation reliably.
   Do not use `raw` as a general replacement for available modules.
