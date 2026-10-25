@@ -40,7 +40,7 @@ jobs:
           ansible-galaxy role install -r requirements.yml \
             --roles-path ~/.ansible/roles
           ansible-galaxy collection install -r requirements.yml \
-            --collections-path ~/.ansible/collections
+            --collections-path ~/.ansible/collections --force
           ansible-lint \
             --exclude collections/ansible_collections/community/openwrt/
 
@@ -148,7 +148,7 @@ jobs:
           ansible-galaxy role install -r requirements.yml \
             --roles-path ~/.ansible/roles
           ansible-galaxy collection install -r requirements.yml \
-            --collections-path ~/.ansible/collections
+            --collections-path ~/.ansible/collections --force
 
       - name: Versions
         run: |
