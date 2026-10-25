@@ -33,7 +33,7 @@ Install the pinned dependencies into the standard user Ansible paths:
 ansible-galaxy role install -r requirements.yml \
   --roles-path ~/.ansible/roles
 ansible-galaxy collection install -r requirements.yml \
-  --collections-path ~/.ansible/collections
+  --collections-path ~/.ansible/collections --force
 ```
 
 ### Run Ansible in Docker with `serversideup/ansible`
