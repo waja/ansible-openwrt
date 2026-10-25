@@ -1,5 +1,13 @@
 # roles/router_network/tasks/main.yml
 ---
+- name: Validate DHCP interface settings mapping
+  ansible.builtin.assert:
+    that:
+      - router_network_dhcp_interfaces is mapping
+    fail_msg: >-
+      router_network_dhcp_interfaces must be a mapping of DHCP section names
+      to 'enabled' or 'disabled'.
+
 - name: Request a dnsmasq restart when explicitly forced
   ansible.builtin.debug:
     msg: A dnsmasq restart was explicitly requested.
