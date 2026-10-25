@@ -4,7 +4,5 @@ router_base_services:
   - snmpd
   - xinetd
 
-router_base_service_restart_lock_timeout: 1860
-
 router_base_obsolete_files:
   - /etc/config/snmpd-opkg
