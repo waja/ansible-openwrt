@@ -1,0 +1,9 @@
+# roles/router_network/defaults/main.yml
+---
+# Explicit IPv4 DHCP status per DHCP configuration section.
+# Supported values are "enabled" and "disabled".
+# Unlisted sections are left untouched.
+router_network_dhcp_interfaces: {}
+
+# Set to true to retry a dnsmasq restart after a previous handler failure.
+router_network_force_restart: false
