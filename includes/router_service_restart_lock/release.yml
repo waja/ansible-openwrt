@@ -1,0 +1,19 @@
+# includes/router_service_restart_lock/release.yml
+---
+- name: Release the shared service restart lock
+  ansible.builtin.raw: |
+    lock=/root/.ansible-locks/router-packages-restart-lock
+    token='{{ router_service_lock_token }}'
+    if [ -f "$lock/owner" ] &&
+       [ "$(cat "$lock/owner")" = "$token" ]; then
+      rm -f "$lock/owner"
+      rmdir "$lock"
+    fi
+    legacy_lock=/tmp/router-packages-restart-lock
+    legacy_owner="$legacy_lock.owner.$token"
+    if [ -f "$legacy_owner" ]; then
+      rm -f "$legacy_owner"
+      rmdir "$legacy_lock" 2>/dev/null || true
+    fi
+  when: router_service_lock_acquisition is succeeded
+  changed_when: false
