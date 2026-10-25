@@ -256,9 +256,9 @@ router_network_dhcp_interfaces:
 
 You can instead define the variable in `host_vars/<inventory_hostname>.yml`
 to configure DHCP only on specific routers. Keys are existing OpenWrt DHCP
-configuration section names, such as `lan` or `guest`. Each value must be
-`enabled` or `disabled`; invalid values and unknown section names fail
-validation rather than silently changing other interfaces.
+configuration section names, such as `lan` or `guest`. Each key should name
+an existing DHCP section, and each value must be `enabled` or `disabled`.
+Invalid values fail validation rather than silently changing other interfaces.
 
 The role sets `dhcp.<interface>.ignore=0` for `enabled` and `1` for
 `disabled`. This controls IPv4 DHCP only; it does not configure DHCPv6 or
