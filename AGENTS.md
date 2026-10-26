@@ -47,6 +47,33 @@ Keep the relevant operational details in `AGENTS.md` synchronized too,
 especially when changing development instructions, repository conventions,
 or CI workflows.
 
+## Development workflow
+
+Keep the PR branch history focused on reviewed, coherent changes. Do not
+use commits on the PR branch as a scratchpad for intermediate experiments.
+
+1. Prepare related edits in a local working tree or a separate scratch branch.
+2. Review the complete diff before committing, including surrounding logic,
+   defaults, tests, and documentation affected by the change.
+3. Run the applicable local checks before committing when the required
+   tooling is available. At minimum, run the fast local checks listed below
+   for Ansible changes.
+4. Commit only a coherent, reviewed unit of work. Use a message that explains
+   the change's intent; avoid commits that merely reverse or repair a
+   just-created, unreviewed commit.
+5. Before pushing, inspect the final diff and commit list against the PR base.
+   Do not push known-broken or exploratory intermediate states just to save
+   progress.
+6. Report which checks actually ran and their results. Clearly distinguish
+   static inspection from executed tests. If a check cannot run locally, say
+   why and rely on CI where appropriate; do not imply it passed.
+
+If a mistake has already been pushed, fix and verify the complete change before
+adding more commits. Consolidate noisy commits only when they are your own and
+rewriting the branch is safe; never rewrite unrelated commits or shared work.
+Prefer a clean follow-up commit over history rewriting when the branch has
+other contributors or its history is already in use.
+
 ## Code style
 
 ### Line length
