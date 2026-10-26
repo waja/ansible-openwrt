@@ -252,15 +252,34 @@ not already present on the router. See the
 [OpenWrt ASU documentation](
 https://openwrt.org/docs/guide-user/installation/attended.sysupgrade).
 
-### Configure packages per router
+### Configure packages and managed services
 
-The `router_packages` role uses `router_packages_list` to define the
-requested packages. The role also adds its required service packages from
-`router_packages_required_services`. The defaults are defined in
+The `router_packages` role installs the packages listed in
+`router_packages_list` and derives additional packages from the services
+managed by `router_base`. The service list is configured with
+`router_base_services`; the mapping from service names to package names is
+`router_packages_service_package_map`, whose defaults are defined in
 `roles/router_packages/defaults/main.yml`.
 
-You can set package lists in inventory variables without changing the
-playbook.
+Each mapping entry is a list of packages. A service can therefore require
+multiple packages, and its service name does not have to match its package
+name. Every service in `router_base_services` must have an entry in the
+mapping; otherwise the package role fails with an assertion error. Duplicate
+package names are installed only once.
+
+Do not add packages to `router_packages_list` solely because they are
+required by a managed service. For example, `snmpd` and `xinetd` are
+installed automatically while they remain in the default `router_base_services`
+list and have their default mappings. Add packages to `router_packages_list`
+when you want them independently of the managed service list.
+
+The standard `playbooks/site.yml` playbook passes `router_base_services`
+to the package role. When using `router_packages` independently, set
+`router_packages_managed_services` yourself; it defaults to an empty list
+rather than assuming that every service in the mapping is managed.
+
+You can customize package lists and managed services in inventory variables
+without changing the playbook.
 
 #### Same package list for all routers
 
@@ -271,12 +290,16 @@ Create `group_vars/openwrt.yml` next to your inventory file:
 router_packages_list:
   - busybox
   - openwrt-keyring
+  - rsync
+router_base_services:
   - snmpd
   - xinetd
 ```
 
-All hosts in the `openwrt` group use this list unless overridden by a
-host-specific variable.
+All hosts in the `openwrt` group use these values unless overridden by
+host-specific variables. The example explicitly lists the default managed
+services to show where service management is configured; if you only want to
+change the package list, you do not need to set `router_base_services`.
 
 #### Different package lists per router
 
@@ -288,8 +311,6 @@ the inventory file:
 router_packages_list:
   - busybox
   - openwrt-keyring
-  - snmpd
-  - xinetd
 ```
 
 For `router2`, create `host_vars/router2.yml`:
@@ -308,6 +329,32 @@ Host-specific values override group variables. A host's
 merge the two lists automatically. If you want common packages on every
 router, keep them in the group list and repeat the full desired list in each
 host-specific override.
+
+#### Map a custom managed service to packages
+
+If you add a service to `router_base_services`, add its package mapping too.
+For example, if the `example-daemon` service is provided by the
+`example-package` package, define both variables in inventory:
+
+```yaml
+---
+router_base_services:
+  - snmpd
+  - example-daemon
+
+router_packages_service_package_map:
+  snmpd:
+    - snmpd
+  xinetd:
+    - xinetd
+  example-daemon:
+    - example-package
+```
+
+The mapping variable replaces the default mapping when set in inventory;
+include every mapping entry you still need, including the defaults for
+services you continue to manage. To make one service install multiple
+packages, list all of those package names under that service.
 
 You can combine group and host variables with the same unchanged playbook:
 

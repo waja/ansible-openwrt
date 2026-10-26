@@ -13,5 +13,7 @@
     - community.openwrt.init
     - router_system
     - router_firewall
-    - router_packages
+    - role: router_packages
+      vars:
+        router_packages_managed_services: "{{ router_base_services }}"
     - router_base

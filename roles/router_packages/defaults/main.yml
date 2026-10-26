@@ -1,16 +1,20 @@
 # roles/router_packages/defaults/main.yml
 ---
+router_packages_managed_services: []
+
 router_packages_list:
   - busybox
   - openwrt-keyring
-  - snmpd
   - muninlite
   - rsync
   - uhttpd
   - uhttpd-mod-ubus
   - rpcd
-  - xinetd
 
-router_packages_required_services:
-  - snmpd
-  - xinetd
+# Map managed service names to the packages that provide them.
+# A service may require multiple packages, and names may differ.
+router_packages_service_package_map:
+  snmpd:
+    - snmpd
+  xinetd:
+    - xinetd

@@ -53,12 +53,21 @@
     - name: Apply router packages role
       ansible.builtin.include_role:
         name: router_packages
+        public: true
       vars:
+        router_packages_managed_services:
+          - snmpd
+          - xinetd
         router_packages_list:
           - busybox
           - openwrt-keyring
-          - snmpd
-          - xinetd
+
+    - name: Verify package list used by the package installation role
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_packages_install_list ==
+            ['busybox', 'openwrt-keyring', 'snmpd', 'xinetd']
 
     - name: Create obsolete SNMP configuration for the cleanup test
       community.openwrt.file:
@@ -70,6 +79,10 @@
     - name: Apply router base role
       ansible.builtin.include_role:
         name: router_base
+      vars:
+        router_base_services:
+          - snmpd
+          - xinetd
 
     - name: Verify required services are enabled and running
       ansible.builtin.raw: |
@@ -128,3 +141,19 @@
           - "'asu_login_check_for_upgrades=1' in router_system_uci.stdout"
           - "'asu_upgrade_packages=1' in router_system_uci.stdout"
           - "'log_ip=192.0.2.234' in router_system_uci.stdout"
+
+    - name: Calculate package list for a changed managed service list
+      ansible.builtin.include_role:
+        name: router_packages
+        tasks_from: calculate_package_list.yml
+      vars:
+        router_packages_managed_services:
+          - snmpd
+        router_packages_list:
+          - busybox
+          - snmpd
+
+    - name: Verify changed service list and package deduplication
+      ansible.builtin.assert:
+        that:
+          - router_packages_install_list == ['busybox', 'snmpd']
