@@ -88,7 +88,11 @@ docker run --rm -it \
     --collections-path /home/ansible/.ansible/collections --force'
 ```
 
-Once the dependencies are installed, run the playbook:
+Once the dependencies are installed, use the same Docker invocation for all
+validation and execution steps. The examples below assume that `inventory.ini`
+is in the repository directory mounted at `/ansible`.
+
+Check the playbook syntax first. This does not connect to the router:
 
 ```bash
 docker run --rm -it \
@@ -98,8 +102,45 @@ docker run --rm -it \
   --env PYTHONPATH=/home/ansible/.ansible/python \
   --workdir /ansible \
   willhallonline/ansible:latest \
-  ansible-playbook -i inventory.ini playbooks/site.yml
+  ansible-playbook -i inventory.ini playbooks/site.yml --syntax-check
 ```
+
+Then test SSH access and execute a command on OpenWrt without requiring
+Python on the router:
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/ansible" \
+  -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
+  -v "$HOME/.ansible:/home/ansible/.ansible" \
+  --env PYTHONPATH=/home/ansible/.ansible/python \
+  --workdir /ansible \
+  willhallonline/ansible:latest \
+  ansible -i inventory.ini openwrt -m ansible.builtin.raw \
+    -a 'ubus call system board' -e ansible_connection=ssh
+```
+
+Finally, apply the configuration only after reviewing the intended inventory
+and network variables. The `router_network` role can change connectivity:
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/ansible" \
+  -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
+  -v "$HOME/.ansible:/home/ansible/.ansible" \
+  --env PYTHONPATH=/home/ansible/.ansible/python \
+  --workdir /ansible \
+  willhallonline/ansible:latest \
+  ansible-playbook -i inventory.ini playbooks/site.yml \
+    -e ansible_connection=ssh
+```
+
+To target one router, add `--limit router1` to the relevant Ansible command.
+The examples assume SSH host keys are already present in
+`~/.ssh/known_hosts`. If your SSH configuration contains options that are
+specific to macOS, such as `UseKeychain`, the Linux SSH client in the
+container may not support them. Adjust the SSH configuration used by the
+container as needed.
 
 These examples assume SSH host keys are already present in
 `~/.ssh/known_hosts`. If your SSH configuration contains options that are
@@ -134,41 +175,19 @@ of your routers. Configure SSH authentication as appropriate for your
 environment. The names `router1` and `router2` are inventory hostnames;
 they are also used when defining host-specific variables.
 
-Check SSH connectivity without requiring Python on the router:
+The Docker-based syntax check and `ubus` connectivity test are documented
+in the Docker section above. The `ubus` test uses Ansible's raw module, so
+it does not require Python on the OpenWrt target. It also checks that
+`ubus` is available, so a failure may indicate an issue beyond SSH itself.
 
-```bash
-ansible -i inventory.ini openwrt \
-  -m ansible.builtin.raw -a 'ubus call system board'
-```
-
-This runs `ubus call system board` over SSH using Ansible's raw module.
-It verifies that Ansible can connect and execute a command on OpenWrt
-without requiring Python on the target. It also checks that `ubus` is
-available, so a failure may indicate an issue beyond SSH connectivity.
-
-On targets that have a usable Python environment, you can additionally
-use Ansible's normal ping module:
-
-```bash
-ansible -i inventory.ini openwrt -m ansible.builtin.ping
-```
-
-The ping module requires Python on the target and will fail on Python-free
-OpenWrt images even when SSH connectivity works.
+Ansible's normal ping module requires Python on the target and is therefore
+not a suitable connectivity test for Python-free OpenWrt images.
 
 ## Configure the routers
 
-Apply the standard configuration to all routers in the inventory group:
-
-```bash
-ansible-playbook -i inventory.ini playbooks/site.yml
-```
-
-Target just one router with `--limit`:
-
-```bash
-ansible-playbook -i inventory.ini playbooks/site.yml --limit router1
-```
+Apply the standard configuration using the Docker command shown in the
+Docker section above. To target one router, add `--limit router1` to that
+`ansible-playbook` command.
 
 The `site.yml` playbook runs the initialization role first, then installs
 the configured packages, and finally configures base services and removes
