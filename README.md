@@ -34,7 +34,7 @@ Install the pinned dependencies into the standard user Ansible paths:
 ansible-galaxy role install -r requirements.yml \
   --roles-path ~/.ansible/roles
 ansible-galaxy collection install -r requirements.yml \
-  --collections-path ~/.ansible/collections --force
+  --collections-path ~/.ansible/collections
 ```
 
 ### Run Ansible in Docker with `willhallonline/ansible`
@@ -86,7 +86,7 @@ docker run --rm -it \
   /bin/sh -c 'ansible-galaxy role install -r requirements.yml \
     --roles-path /home/ansible/.ansible/roles &&
     ansible-galaxy collection install -r requirements.yml \
-    --collections-path /home/ansible/.ansible/collections --force'
+    --collections-path /home/ansible/.ansible/collections'
 ```
 
 Once the dependencies are installed, use the same Docker invocation for all

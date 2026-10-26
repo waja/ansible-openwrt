@@ -314,7 +314,18 @@ and collections separately because they use different destination paths:
     ansible-galaxy collection install -r requirements.yml \
       --collections-path ~/.ansible/collections
 
-Ansible's default search paths include these user-specific directories.
+Without `--force`, `ansible-galaxy collection install` checks the
+configured collection paths and skips a requested collection when an
+installed version satisfies the pinned requirement. It installs a missing
+or unsatisfied version into the first configured path. This matters for
+Docker images that already include a pinned collection: forcing installation
+can download and overwrite that collection unnecessarily. Do not use
+`--force` for routine dependency installation; reserve it for an
+intentional reinstall or overwrite. The pin in `requirements.yml` expresses
+the version this project requires; it does not mean that every environment
+must download that version again when it is already available and satisfies
+the requirement. Verify the actual version and search paths with
+`ansible-galaxy collection list` when behavior is unclear.
 The Renovate configuration extends `config:recommended`, which enables
 the Ansible Galaxy manager to propose updates for role and collection
 entries in `requirements.yml`.
@@ -369,6 +380,34 @@ with it.
 
 When changing the workflow, update this section to reflect actual job
 dependencies, conditions, matrix, and commands.
+
+### Docker Ansible CI (`.github/workflows/docker-ansible.yml`)
+
+- Triggers on pull requests, pushes to `development`/`master`,
+  manual dispatch, and a weekly Sunday smoke test at 04:17 UTC. Scheduled
+  runs execute only when this workflow is on the repository's default
+  branch. No path filter is used, so the workflow always reports a status
+  on pull requests.
+- Pulls `willhallonline/ansible:latest` explicitly before testing, so the
+  smoke test checks the current mutable tag rather than a cached local
+  image. Logs and the GitHub Actions step summary record the image ID and
+  repository digest(s) used for the run.
+- Uses `willhallonline/ansible:latest` to verify that the image's
+  preinstalled collections are reused when their versions satisfy
+  `requirements.yml`. This is a separate image check; the README's usage
+  examples use the same image.
+- Lists `community.docker` before installation, installs pinned roles
+  and collections from `requirements.yml` using Ansible's default paths,
+  then lists the collection again. Collection installation uses verbose
+  output so CI logs show whether an installed version was reused or a
+  collection was installed.
+- Uses the same mounted Ansible home in a separate container to verify
+  that dependencies remain available across container runs.
+- Syntax-checks both playbooks with a temporary local inventory; it does
+  not connect to routers and requires no secrets.
+- This workflow checks the Will Hall Online image's dependency behavior
+  and playbook syntax. It does not replace the lint and Molecule checks in
+  `.github/workflows/molecule.yml`.
 
 ## Troubleshooting
 

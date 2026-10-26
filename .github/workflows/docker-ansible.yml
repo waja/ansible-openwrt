@@ -1,0 +1,98 @@
+# .github/workflows/docker-ansible.yml
+---
+name: Docker Ansible CI
+
+"on":
+  pull_request:
+  schedule:
+    # Weekly smoke test of the mutable latest tag; use an off-hour minute.
+    - cron: "17 4 * * 0"
+  push:
+    branches:
+      - development
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-ansible:
+    name: Docker Ansible documentation check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v7
+
+      - name: Prepare persistent Ansible dependency directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/ansible-home"
+          sudo chown -R 1000:1000 "$RUNNER_TEMP/ansible-home"
+
+      - name: Pull and report the image digest
+        run: |
+          set -euo pipefail
+          docker pull willhallonline/ansible:latest
+          image_id="$(
+            docker image inspect \
+              --format '{{.Id}}' willhallonline/ansible:latest
+          )"
+          repo_digests="$(
+            docker image inspect \
+              --format '{{json .RepoDigests}}' willhallonline/ansible:latest
+          )"
+          echo "Image: willhallonline/ansible:latest"
+          echo "Image ID: $image_id"
+          echo "Repository digests: $repo_digests"
+          {
+            echo "### Docker Ansible image"
+            echo '- Tag: willhallonline/ansible:latest'
+            echo "- Image ID: $image_id"
+            echo "- Repository digests: $repo_digests"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the documented image
+        run: |
+          docker run --rm willhallonline/ansible:latest ansible --version
+
+      - name: Install roles and collections
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/ansible" \
+            -v "$RUNNER_TEMP/ansible-home:/home/ansible/.ansible" \
+            --workdir /ansible \
+            willhallonline/ansible:latest \
+            /bin/sh -ec '
+              echo "=== community.docker before installation ==="
+              ansible-galaxy collection list community.docker
+              echo "=== Install pinned dependencies ==="
+              ansible-galaxy role install -r requirements.yml
+              ansible-galaxy collection install -vv -r requirements.yml
+              echo "=== community.docker after installation ==="
+              ansible-galaxy collection list community.docker
+            '
+
+      - name: Verify dependencies in a separate container
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/ansible" \
+            -v "$RUNNER_TEMP/ansible-home:/home/ansible/.ansible" \
+            --workdir /ansible \
+            willhallonline/ansible:latest \
+            /bin/sh -ec 'ansible-galaxy role list \
+              --roles-path /home/ansible/.ansible/roles &&
+              ansible-galaxy collection list'
+
+      - name: Syntax-check playbooks
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/ansible" \
+            -v "$RUNNER_TEMP/ansible-home:/home/ansible/.ansible" \
+            --workdir /ansible \
+            willhallonline/ansible:latest \
+            /bin/sh -ec 'printf "%s\\n" "[openwrt]" \
+              "localhost ansible_connection=local" > /tmp/inventory.ini &&
+              ansible-playbook -i /tmp/inventory.ini --syntax-check \
+                playbooks/site.yml &&
+              ansible-playbook -i /tmp/inventory.ini --syntax-check \
+                playbooks/audit_packages.yml'
