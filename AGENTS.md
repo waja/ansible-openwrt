@@ -13,6 +13,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 
 - `playbooks/site.yml` – standard configuration for all OpenWrt routers
 - `playbooks/audit_packages.yml` – optional installed-package comparison
+- `scripts/owrt-extra.sh` – read-only OpenWrt state discovery for Ansible migration
 - `extensions/molecule/default/` – Molecule scenario for hostname,
   packages, and base services
 - `extensions/molecule/network-static/` – isolated configuration-only
