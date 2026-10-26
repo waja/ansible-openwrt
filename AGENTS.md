@@ -341,8 +341,8 @@ The workflow file is the source of truth. Keep this section synchronized
 with it.
 
 - Python version: `3.14`
-- Triggers: `workflow_dispatch`, `pull_request`, and pushes to
-  `development` and `master`.
+- Triggers: `workflow_dispatch`, a weekly schedule (Sunday at 06:17 UTC),
+  `pull_request`, and pushes to `development` and `master`.
   **Note:** `$default-branch` is only a template macro for starter
   workflows, not a runtime expression in `branches` filters. Use the
   actual branch name.
@@ -376,10 +376,17 @@ with it.
     Each combination runs in a separate job.
   - Passes the selected release as `OPENWRT_VERSION`. Scenario configs
     use it for both the image tag and platform name.
+  - Pulls `openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}` before
+    testing and logs its image ID and available repository digests.
   - Runs `molecule test -s "${{ matrix.scenario }}" --destroy=never`
     to preserve a failed scenario's container for diagnostics.
-  - Prints diagnostics for the container name derived from
-    `OPENWRT_VERSION` and the scenario.
+  - Logs the tested container's image ID and prints detailed diagnostics
+    on failure: Docker configuration, network interfaces/routes/DNS,
+    OpenWrt release and opkg version, network/firewall init links,
+    firewall rules, recent system log, filesystem space, and container
+    logs. Container names derive from `OPENWRT_VERSION` and scenario.
+  - Runs weekly to detect regressions caused by changes behind the
+    moving OpenWrt 25.12 image tag.
   - Destroys only the scenario assigned to that job in an unconditional
     cleanup step.
 

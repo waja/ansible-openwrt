@@ -7,6 +7,8 @@ env:
 
 "on":
   workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 0'
   # execute on pull request event
   pull_request:
   push:
@@ -190,24 +192,43 @@ jobs:
           echo "ANSIBLE_ROLES_PATH=$GITHUB_WORKSPACE/roles:"\
           "$HOME/.ansible/roles:/usr/share/ansible/roles" >> "$GITHUB_ENV"
 
+      - name: Pull and identify OpenWrt image
+        run: |
+          set -euo pipefail
+          image="openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}"
+          docker pull "$image"
+          docker image inspect "$image" \
+            --format 'Image ID: {{.Id}}'
+          docker image inspect "$image" \
+            --format 'Repo digests: {{json .RepoDigests}}'
+
       - name: Test ${{ matrix.scenario }} scenario
         run: molecule test -s "${{ matrix.scenario }}" --destroy=never
         env:
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
 
-      - name: Show container network diagnostics
+      - name: Record tested container image
         if: always()
+        run: |
+          container="openwrt-${OPENWRT_VERSION}-${{ matrix.scenario }}"
+          docker inspect "$container" \
+            --format 'Container image ID: {{.Image}}' || true
+
+      - name: Show container network diagnostics
+        if: failure()
         run: |
           docker ps -a
           container="openwrt-${OPENWRT_VERSION}-${{ matrix.scenario }}"
-          echo "=== Docker network mode ==="
+          echo "=== Docker container configuration ==="
           docker inspect --format \
-            'NetworkMode={{.HostConfig.NetworkMode}}' "$container" || true
-          echo "=== Docker capabilities ==="
+            'status={{.State.Status}} exit={{.State.ExitCode}}' \
+            "$container" || true
+          docker inspect --format \
+            'image={{.Image}} network={{.HostConfig.NetworkMode}}' \
+            "$container" || true
           docker inspect --format \
             'CapAdd={{json .HostConfig.CapAdd}}' "$container" || true
-          echo "=== Docker networks ==="
           docker inspect --format \
             'Networks={{json .NetworkSettings.Networks}}' "$container" || true
           echo "=== Container network state ==="
@@ -218,6 +239,18 @@ jobs:
             ip route 2>&1 || true
             echo "--- resolver ---"
             cat /etc/resolv.conf 2>&1 || true
+            echo "--- OpenWrt release and package manager ---"
+            cat /etc/openwrt_release 2>&1 || true
+            opkg --version 2>&1 || true
+            echo "--- Network/firewall init links ---"
+            ls -l /etc/rc.d/S*network /etc/rc.d/S*dnsmasq \\
+              /etc/rc.d/S*firewall /etc/rc.d/S*odhcpd 2>&1 || true
+            echo "--- Firewall rules ---"
+            nft list ruleset 2>&1 || iptables-save 2>&1 || true
+            echo "--- Recent system log ---"
+            logread 2>&1 | tail -100 || true
+            echo "--- Filesystem space ---"
+            df -h / /tmp 2>&1 || true
             echo "--- OpenWrt interfaces ---"
             ubus call network.interface dump 2>&1 || true
           ' || true
