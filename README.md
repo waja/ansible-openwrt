@@ -37,81 +37,126 @@ ansible-galaxy collection install -r requirements.yml \
   --collections-path ~/.ansible/collections --force
 ```
 
-### Run Ansible in Docker with `serversideup/ansible`
+### Run Ansible in Docker with `willhallonline/ansible`
 
-The [serversideup/ansible image](https://github.com/serversideup/docker-ansible)
+The [willhallonline/ansible image](https://github.com/willhallonline/ansible)
 provides Ansible and Python in a container, so they do not need to be
 installed on the control node. The examples run Ansible from this repository
 directory and keep the inventory and playbooks on the host.
 
-Choose a specific image tag from the
-[available tags](https://hub.docker.com/r/serversideup/ansible/tags).
-Pin the tag rather than using `latest`, so deployments use a predictable
-Ansible and Python environment. Replace `<pinned-tag>` in the examples
-with the tag you selected.
+The examples use `latest`, matching the tested setup. For reproducible
+runs, choose a specific tag from the
+[available image tags](https://hub.docker.com/r/willhallonline/ansible/tags)
+and use it consistently in place of `latest`.
 
-The image uses `/ansible` as its working directory and `/ssh` for SSH
-configuration. Mount the repository at `/ansible` and your SSH directory
-at `/ssh`. The SSH directory is mounted read-only below; do not copy
-private keys into the image or commit them to the repository.
+Mount the repository at `/ansible`, your SSH directory at
+`/home/ansible/.ssh`, and your Ansible dependency directory at
+`/home/ansible/.ansible`. The SSH directory is mounted read-only; do not
+copy private keys into the image or commit them to the repository.
 
-First, verify that the selected image can run Ansible:
+First, verify that the image can run Ansible:
 
 ```bash
-docker run --rm serversideup/ansible:<pinned-tag> ansible --version
+docker run --rm willhallonline/ansible:latest ansible --version
 ```
 
-The container also needs the role and collection dependencies from
-`requirements.yml`. For a simple first run, install them and execute the
-playbook in the same container invocation:
+The `ansible.utils.ipaddr` filter also requires the Python package
+`netaddr` on the Ansible control node. The image container is disposable,
+so install it into the persistent `~/.ansible/python` directory once and
+add that directory to `PYTHONPATH` whenever Ansible runs:
+
+```bash
+docker run --rm -it \
+  -v "$HOME/.ansible:/home/ansible/.ansible" \
+  willhallonline/ansible:latest \
+  python -m pip install --target /home/ansible/.ansible/python netaddr==1.3.0
+```
+
+Install the pinned role and collection dependencies from `requirements.yml`.
+The `~/.ansible` mount keeps them available for later runs:
 
 ```bash
 docker run --rm -it \
   -v "$PWD:/ansible" \
-  -v "$HOME/.ssh:/ssh:ro" \
-  -e PUID="$(id -u)" \
-  -e PGID="$(id -g)" \
-  serversideup/ansible:<pinned-tag> \
-  sh -lc 'ansible-galaxy role install -r requirements.yml \
-    --roles-path /tmp/ansible-roles &&
+  -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
+  -v "$HOME/.ansible:/home/ansible/.ansible" \
+  --env PYTHONPATH=/home/ansible/.ansible/python \
+  --workdir /ansible \
+  willhallonline/ansible:latest \
+  /bin/sh -c 'ansible-galaxy role install -r requirements.yml \
+    --roles-path /home/ansible/.ansible/roles &&
     ansible-galaxy collection install -r requirements.yml \
-    --collections-path /tmp/ansible-collections &&
-    ANSIBLE_ROLES_PATH=/tmp/ansible-roles \
-    ANSIBLE_COLLECTIONS_PATH=/tmp/ansible-collections \
-    ansible-playbook -i inventory.ini playbooks/site.yml'
+    --collections-path /home/ansible/.ansible/collections --force'
 ```
 
-This downloads the pinned dependencies on each fresh run. For frequent use,
-build a small image on top of `serversideup/ansible` that installs the
-repository's `requirements.yml` at build time. The shorter invocation then
-works with the same volume mounts:
+Once the dependencies are installed, use the same Docker invocation for all
+validation and execution steps. The examples below assume that `inventory.ini`
+is in the repository directory mounted at `/ansible`.
+
+Check the playbook syntax first. This does not connect to the router:
 
 ```bash
 docker run --rm -it \
   -v "$PWD:/ansible" \
-  -v "$HOME/.ssh:/ssh:ro" \
-  -e PUID="$(id -u)" \
-  -e PGID="$(id -g)" \
-  ansible-openwrt:<pinned-tag> \
-  ansible-playbook -i inventory.ini playbooks/site.yml
+  -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
+  -v "$HOME/.ansible:/home/ansible/.ansible" \
+  --env PYTHONPATH=/home/ansible/.ansible/python \
+  --workdir /ansible \
+  willhallonline/ansible:latest \
+  ansible-playbook -i inventory.ini playbooks/site.yml --syntax-check
 ```
 
-Keep the base image tag and dependency versions pinned so the control-node
-environment is reproducible. The examples assume SSH host keys are already
-present in `~/.ssh/known_hosts`; if your SSH configuration needs to update
-that file, provide a writable known-hosts file as described in the upstream
-image documentation.
+Then test SSH access and execute a command on OpenWrt without requiring
+Python on the router:
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/ansible" \
+  -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
+  -v "$HOME/.ansible:/home/ansible/.ansible" \
+  --env PYTHONPATH=/home/ansible/.ansible/python \
+  --workdir /ansible \
+  willhallonline/ansible:latest \
+  ansible -i inventory.ini openwrt -m ansible.builtin.raw \
+    -a 'ubus call system board' -e ansible_connection=ssh
+```
+
+Finally, apply the configuration only after reviewing the intended inventory
+and network variables. The `router_network` role can change connectivity:
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/ansible" \
+  -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
+  -v "$HOME/.ansible:/home/ansible/.ansible" \
+  --env PYTHONPATH=/home/ansible/.ansible/python \
+  --workdir /ansible \
+  willhallonline/ansible:latest \
+  ansible-playbook -i inventory.ini playbooks/site.yml \
+    -e ansible_connection=ssh
+```
+
+To target one router, add `--limit router1` to the relevant Ansible command.
+The examples assume SSH host keys are already present in
+`~/.ssh/known_hosts`. If your SSH configuration contains options that are
+specific to macOS, such as `UseKeychain`, the Linux SSH client in the
+container may not support them. Adjust the SSH configuration used by the
+container as needed.
+
+These examples assume SSH host keys are already present in
+`~/.ssh/known_hosts`. If your SSH configuration contains options that are
+specific to macOS, such as `UseKeychain`, the Linux SSH client in the
+container may not support them. Adjust the SSH configuration used by the
+container as needed.
 
 To run the package audit instead, replace the playbook path with
 `playbooks/audit_packages.yml`. To target one router, add
 `--limit router1` to the `ansible-playbook` command.
 
-The container still needs network access to the routers and valid SSH
+The container needs network access to the routers and valid SSH
 authentication. The image does not make Python available on the OpenWrt
 targets; the project's tasks must remain compatible with Python-free
-OpenWrt systems. See the upstream
-[image documentation](https://github.com/serversideup/docker-ansible)
-for SSH-agent forwarding and other configuration options.
+OpenWrt systems.
 
 ## Define your routers
 
@@ -131,41 +176,19 @@ of your routers. Configure SSH authentication as appropriate for your
 environment. The names `router1` and `router2` are inventory hostnames;
 they are also used when defining host-specific variables.
 
-Check SSH connectivity without requiring Python on the router:
+The Docker-based syntax check and `ubus` connectivity test are documented
+in the Docker section above. The `ubus` test uses Ansible's raw module, so
+it does not require Python on the OpenWrt target. It also checks that
+`ubus` is available, so a failure may indicate an issue beyond SSH itself.
 
-```bash
-ansible -i inventory.ini openwrt \
-  -m ansible.builtin.raw -a 'ubus call system board'
-```
-
-This runs `ubus call system board` over SSH using Ansible's raw module.
-It verifies that Ansible can connect and execute a command on OpenWrt
-without requiring Python on the target. It also checks that `ubus` is
-available, so a failure may indicate an issue beyond SSH connectivity.
-
-On targets that have a usable Python environment, you can additionally
-use Ansible's normal ping module:
-
-```bash
-ansible -i inventory.ini openwrt -m ansible.builtin.ping
-```
-
-The ping module requires Python on the target and will fail on Python-free
-OpenWrt images even when SSH connectivity works.
+Ansible's normal ping module requires Python on the target and is therefore
+not a suitable connectivity test for Python-free OpenWrt images.
 
 ## Configure the routers
 
-Apply the standard configuration to all routers in the inventory group:
-
-```bash
-ansible-playbook -i inventory.ini playbooks/site.yml
-```
-
-Target just one router with `--limit`:
-
-```bash
-ansible-playbook -i inventory.ini playbooks/site.yml --limit router1
-```
+Apply the standard configuration using the Docker command shown in the
+Docker section above. To target one router, add `--limit router1` to that
+`ansible-playbook` command.
 
 The `site.yml` playbook runs initialization first, installs the configured
 packages, configures base services and removes obsolete configuration files,
