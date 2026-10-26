@@ -148,6 +148,14 @@ for release versions, image tags, container names, paths, and CI matrix values.
 - Do not use `command`/`shell` when a module exists.
 - `ansible.builtin.raw` is allowed in `prepare.yml` because no Python
   environment is available on the target yet.
+- Shared service-lock tasks live in
+  `includes/router_service_restart_lock/` and are included by
+  `router_base` and `router_packages`. They coordinate service operations
+  on Python-free OpenWrt targets; do not copy this locking design into new
+  features without a separate design review.
+- Set `router_service_restart_lock_timeout` to override the shared lock
+  timeout (default 1860 seconds). Legacy role-specific timeout variables
+  remain accepted as fallbacks.
 - A narrow additional exception is allowed when one remote operation must
   be followed immediately by a related state marker and no Ansible module
   can perform both actions together. In `router_base`, the service restart
