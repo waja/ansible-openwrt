@@ -13,6 +13,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 
 - `playbooks/site.yml` – standard configuration for all OpenWrt routers
 - `playbooks/audit_packages.yml` – optional installed-package comparison
+- `docs/configuration.md` – detailed router configuration and inventory guide
 - `scripts/owrt-extra.sh` – read-only OpenWrt state discovery for Ansible migration
 - `extensions/molecule/default/` – Molecule scenario for hostname,
   packages, and base services
@@ -46,12 +47,15 @@ Their absence is the normal state, not a defect.
 ## Documentation maintenance
 
 Keep `README.md` in sync with the actual repository behavior and usage.
-Whenever a change affects playbooks, roles, variables/defaults, inventory
-configuration, dependencies, supported OpenWrt versions, or user-facing
-commands, review the README and update it when needed. Add or revise
+Keep detailed router configuration instructions in `docs/configuration.md`;
+the README should remain the entry point and link to that guide rather than
+duplicating its full configuration section. Whenever a change affects
+playbooks, roles, variables/defaults, inventory configuration, dependencies,
+supported OpenWrt versions, or user-facing commands, review the README and
+the configuration guide and update whichever is affected. Add or revise
 examples when the supported way to use the project changes. Do not document
 behavior that has not been implemented or verified. If a change genuinely
-needs no README update, no documentation-only edit is required.
+needs no documentation update, no documentation-only edit is required.
 
 Keep the relevant operational details in `AGENTS.md` synchronized too,
 especially when changing development instructions, repository conventions,
