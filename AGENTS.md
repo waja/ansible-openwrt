@@ -189,6 +189,9 @@ for release versions, image tags, container names, paths, and CI matrix values.
   remains supported as a legacy hostname input
 - Define defaults in `roles/<name>/defaults/main.yml` so the role runs
   without explicitly set variables
+- Keep service-to-package relationships in
+  `router_packages_service_package_map`; do not maintain a second required
+  service-package list
 - Do not use `vars:` in `tasks/main.yml` for values that should be
   overridable
 
@@ -201,9 +204,7 @@ Always select dynamically via the fact set by
     - name: Install requested and required packages dynamically
       action: "community.openwrt.{{ openwrt_package_manager }}"
       args:
-        name: >-
-          {{ (router_packages_list + router_packages_required_services)
-             | unique | join(',') }}
+        name: "{{ router_packages_install_list | join(',') }}"
         state: present
         update_cache: true
       register: router_packages_install_result
@@ -216,7 +217,9 @@ Always select dynamically via the fact set by
   `router_packages_install_result`; restart-marker handling depends on
   its `changed` value.
 - `router_packages` owns package installation; base service configuration
-  belongs in `router_base`.
+  belongs in `router_base`. The package role derives service packages from
+  `router_packages_managed_services` through `router_packages_service_package_map`;
+  every managed service must have a mapping to one or more packages.
 - `router_network` owns explicitly listed IPv4 interface addressing
   (`dhcp` or `static`) and per-section DHCP server status
   (`enabled`/`disabled`). Empty interface and DHCP mappings are no-ops.

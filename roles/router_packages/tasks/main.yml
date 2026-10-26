@@ -6,6 +6,9 @@
 
 - name: Install requested and required service packages
   block:
+    - name: Calculate package list from requested packages and managed services
+      ansible.builtin.include_tasks: calculate_package_list.yml
+
     - name: Check for a pending service restart from an earlier run
       community.openwrt.stat:
         path: /tmp/router-packages-restart-pending
@@ -21,9 +24,7 @@
     - name: Install requested and required packages dynamically
       action: "community.openwrt.{{ openwrt_package_manager }}"
       args:
-        name: >-
-          {{ (router_packages_list + router_packages_required_services)
-             | unique | join(',') }}
+        name: "{{ router_packages_install_list | join(',') }}"
         state: present
         update_cache: true
       register: router_packages_install_result

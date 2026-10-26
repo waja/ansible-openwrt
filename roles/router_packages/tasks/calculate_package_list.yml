@@ -1,0 +1,27 @@
+# roles/router_packages/tasks/calculate_package_list.yml
+---
+- name: Validate that managed services have package mappings
+  ansible.builtin.assert:
+    that:
+      - router_packages_managed_services is defined
+      - >-
+        (router_packages_managed_services
+         | difference(router_packages_service_package_map.keys() | list)
+         | length) == 0
+    fail_msg: >-
+      Define router_packages_managed_services and ensure every managed
+      service has an entry in router_packages_service_package_map.
+
+- name: Calculate the requested package installation list
+  ansible.builtin.set_fact:
+    router_packages_install_list: >-
+      {{
+        (
+          router_packages_list
+          + (
+            router_packages_managed_services
+            | map('extract', router_packages_service_package_map)
+            | flatten
+          )
+        ) | unique | list
+      }}
