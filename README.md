@@ -237,15 +237,72 @@ ansible-playbook -i inventory.ini playbooks/site.yml --limit router2
 
 ### Configure network settings
 
-The `router_network` role is the home for network configuration. Its first
-feature explicitly configures IPv4 DHCP status per OpenWrt DHCP section.
-The standard `site.yml` playbook includes this role. Set each managed
-section to `enabled` or `disabled`; sections omitted from the mapping are
-left unchanged. The default empty mapping therefore preserves existing
-DHCP settings.
+The `router_network` role can configure IPv4 addressing on explicitly
+listed OpenWrt network interface sections. The default mode is `dhcp`, but
+the default empty `router_network_interfaces` mapping makes no interface
+changes. Only list interfaces that this role should manage.
 
-For example, to disable IPv4 DHCP on LAN and enable it on the guest network
-for every router, add this to `group_vars/openwrt.yml`:
+#### Obtain interface address, route, and DNS through DHCP
+
+For example, to configure the `wan` interface as a DHCP client:
+
+```yaml
+---
+router_network_interface_mode: dhcp
+router_network_interfaces:
+  wan: {}
+```
+
+In DHCP mode, the role sets `proto=dhcp`, enables peer-provided DNS, and
+removes static address, netmask, gateway, and DNS options for each listed
+interface. The DHCP server must provide a default route and DNS information
+for those to become available.
+
+#### Configure a static interface
+
+For static mode, each listed interface needs an IPv4 address and netmask.
+Gateway and DNS are optional:
+
+```yaml
+---
+router_network_interface_mode: static
+router_network_interfaces:
+  lan:
+    ipaddr: 192.0.2.1
+    netmask: 255.255.255.0
+    gateway: 192.0.2.254
+    dns:
+      - 192.0.2.53
+      - 192.0.2.54
+```
+
+Static mode disables peer-provided DNS and configures the supplied gateway
+and DNS servers. Omit `gateway` to remove a configured gateway, and omit
+`dns` to remove configured DNS servers. Interface changes trigger a network
+reload and may interrupt connectivity; apply them carefully on real routers.
+
+For controlled configuration-only runs, set
+`router_network_apply_runtime_changes: false`. The role still commits UCI
+settings, but it skips the network reload and dnsmasq restart handlers. This
+is intended for tests or carefully planned maintenance, not normal router
+configuration; the runtime settings remain unapplied until the relevant
+services are reloaded.
+
+The current implementation uses one addressing mode for all interfaces
+listed in `router_network_interfaces`. Mixed DHCP/static interface modes
+are intentionally not supported yet. IPv6 configuration is outside this
+feature's scope.
+
+#### Configure the IPv4 DHCP server
+
+The separate `router_network_dhcp_interfaces` mapping controls whether the
+DHCP server runs on each OpenWrt DHCP section. This is independent of whether
+the router's own interface acts as a DHCP client. Set each managed DHCP
+section to `enabled` or `disabled`; sections omitted from the mapping are
+left unchanged.
+
+For example, to disable IPv4 DHCP on LAN and enable it on the guest network,
+add this to `group_vars/openwrt.yml`:
 
 ```yaml
 ---
@@ -254,17 +311,11 @@ router_network_dhcp_interfaces:
   guest: enabled
 ```
 
-You can instead define the variable in `host_vars/<inventory_hostname>.yml`
-to configure DHCP only on specific routers. Keys are existing OpenWrt DHCP
-configuration section names, such as `lan` or `guest`. Each key should name
-an existing DHCP section, and each value must be `enabled` or `disabled`.
-Invalid values fail validation rather than silently changing other interfaces.
-
-The role sets `dhcp.<interface>.ignore=0` for `enabled` and `1` for
+The role sets `dhcp.<section>.ignore=0` for `enabled` and `1` for
 `disabled`. This controls IPv4 DHCP only; it does not configure DHCPv6 or
 IPv6 Router Advertisements. Configure those separately if needed.
 
-The role restarts dnsmasq when the UCI configuration changes. If a
+The role restarts dnsmasq when the DHCP server configuration changes. If a
 previous dnsmasq restart failed, set `router_network_force_restart: true`
 for a run to request another restart even when the DHCP settings are already
 correct. The default is `false`.
@@ -321,10 +372,12 @@ than both.
 - `playbooks/audit_packages.yml` — installed-package audit
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
-- `roles/router_network/` — network configuration, initially IPv4 DHCP control
+- `roles/router_network/` — IPv4 interface addressing and DHCP server control
 - `roles/router_package_audit/` — package baseline comparison
 - `requirements.yml` — pinned Ansible role and collection dependencies
 - `extensions/molecule/default/` — Molecule test scenario
+- `extensions/molecule/network-static/` — static network configuration tests
+- `extensions/molecule/network-dhcp/` — DHCP configuration tests
 - `.github/workflows/molecule.yml` — lint and Molecule CI workflow
 
 ## Development checks

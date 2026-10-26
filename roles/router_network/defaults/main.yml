@@ -1,5 +1,14 @@
 # roles/router_network/defaults/main.yml
 ---
+# Interface addressing mode applied to every configured network interface.
+# Supported values are "dhcp" and "static".
+router_network_interface_mode: dhcp
+
+# Existing OpenWrt network interface sections to manage.
+# In static mode, each section needs ipaddr and netmask.
+# Optional static settings are gateway and dns (a list of DNS servers).
+router_network_interfaces: {}
+
 # Explicit IPv4 DHCP status per DHCP configuration section.
 # Supported values are "enabled" and "disabled".
 # Unlisted sections are left untouched.
@@ -7,3 +16,7 @@ router_network_dhcp_interfaces: {}
 
 # Set to true to retry a dnsmasq restart after a previous handler failure.
 router_network_force_restart: false
+
+# Set to false to commit UCI settings without reloading network services.
+# Intended for configuration-only tests and controlled maintenance.
+router_network_apply_runtime_changes: true

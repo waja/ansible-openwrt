@@ -3,8 +3,8 @@
 ## Project context
 
 Ansible project `waja.ansible_openwrt` for configuring OpenWrt routers.
-Tested with Molecule in Docker containers against OpenWrt 24.10 (opkg) and
-25.12 (apk). CI runs on GitHub Actions.
+Molecule tests run in Docker against the OpenWrt release selected by the CI
+matrix. CI runs on GitHub Actions.
 
 Pull requests target `development`, not `master`. A dedicated workflow
 warns on PRs that target `master` and adds the `needs-rebase` label.
@@ -13,11 +13,16 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 
 - `playbooks/site.yml` – standard configuration for all OpenWrt routers
 - `playbooks/audit_packages.yml` – optional installed-package comparison
-- `extensions/molecule/default/` – Molecule scenario
-  (`molecule.yml`, `prepare.yml`, `converge.yml`)
+- `extensions/molecule/default/` – Molecule scenario for hostname,
+  packages, and base services
+- `extensions/molecule/network-static/` – isolated configuration-only
+  tests for static IPv4 settings
+- `extensions/molecule/network-dhcp/` – isolated configuration-only
+  tests for DHCP client settings and IPv4 DHCP server status
 - `roles/router_packages/` – dynamically installs the default package list
 - `roles/router_base/` – enables core services and removes obsolete config
-- `roles/router_network/` – manages network configuration, initially IPv4 DHCP
+- `roles/router_network/` – manages explicitly configured IPv4 interface
+  addressing and DHCP server settings
 - `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
   `defaults/main.yml`
@@ -120,18 +125,30 @@ Always select dynamically via the fact set by
   its `changed` value.
 - `router_packages` owns package installation; base service configuration
   belongs in `router_base`.
-- `router_network` owns network configuration, initially explicit per-section
-  IPv4 DHCP status (`enabled`/`disabled`); unlisted sections stay unchanged.
-  DHCPv6 and IPv6 Router Advertisements are outside its first scope.
+- `router_network` owns explicitly listed IPv4 interface addressing
+  (`dhcp` or `static`) and per-section DHCP server status
+  (`enabled`/`disabled`). Empty interface and DHCP mappings are no-ops.
+  Mixed interface modes, DHCPv6, and IPv6 Router Advertisements are out
+  of scope.
 - `router_package_audit` is optional because it requires the saved
   baseline file `/etc/backup/installed_packages.txt`.
 
 ## Molecule / OpenWrt containers (current state)
 
-- `driver: docker` with `command: /sbin/init` and
+- All scenarios use `driver: docker`, `command: /sbin/init`, and
   `pre_build_image: true`
 - `tmpfs: /tmp:exec,mode=1777` – required so Ansible can write there
-- Image tag: `openwrt/rootfs:x86_64-openwrt-<version>`
+- The `default` scenario tests hostname, packages, and base services.
+  The `network-static` and `network-dhcp` scenarios test UCI values and
+  verify that `eth0`, the default route, and resolver configuration
+  remain unchanged.
+- The network scenarios intentionally do not add `NET_ADMIN` or reload
+  networking/restart dnsmasq. They test configuration only;
+  runtime DHCP and route behavior are out of scope.
+- The network role's `router_network_apply_runtime_changes` variable
+  defaults to `true`. Tests set it to `false` so handlers do not apply
+  the committed configuration to the running container.
+- Image tag: `openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}`
 - Inventory variables for all hosts:
   - `ansible_connection: docker`
   - `ansible_remote_tmp: /tmp`
@@ -140,11 +157,14 @@ Always select dynamically via the fact set by
   `/var/run/ubus/ubus.sock` and `ubus list`
 - `community.openwrt.init` must run before all other roles in
   `converge.yml`
-- Currently only `openwrt-25.12` is defined in `platforms:`. The CI
-  matrix lists `24.10` and `25.12`, but no platform selector is passed
-  to `molecule test`, so both matrix jobs currently run the same
-  scenario. Do not claim that both versions are tested until this is
-  fixed.
+- Each scenario defines one platform using Molecule environment
+  interpolation: `OPENWRT_VERSION` selects the image tag and
+  `MOLECULE_SCENARIO_NAME` selects the instance name.
+- The CI matrix is the single source of truth for tested OpenWrt versions.
+  It passes the selected release as `OPENWRT_VERSION`; diagnostics derive
+  the container name from that same variable and the scenario name.
+- To add a release, add its version to the CI matrix only. Do not duplicate
+  version-specific platform entries in individual scenario files.
 
 ## Adding a new role (checklist)
 
@@ -161,20 +181,15 @@ Always select dynamically via the fact set by
    community.openwrt community.docker`), then run `yamllint .`,
    `ansible-lint` and `ansible-playbook --syntax-check` locally.
 
-## Adding a new OpenWrt version (checklist)
+## Adding a new OpenWrt version
 
-1. Add the platform to `platforms:` in
-   `extensions/molecule/default/molecule.yml` with the matching
-   `openwrt/rootfs:x86_64-openwrt-<version>` image.
-2. Add the same platform name to the matrix in
+1. Add the release version to the `openwrt_version` matrix in
    `.github/workflows/molecule.yml`.
-3. Pass the platform to Molecule, e.g.
-   `--platform-name "${{ matrix.platform }}"`, or split the scenario
-   per version.
-4. Verify that `community.openwrt.init` supports the version and sets
+2. Verify that `community.openwrt.init` supports the version and sets
    `openwrt_package_manager` correctly.
-5. If the version uses a different package manager, no role change is
-   needed – the dynamic pattern handles it.
+3. Check the CI results for every Molecule scenario. The scenario files
+   interpolate the image tag and container name from environment variables;
+   do not add duplicate per-version platform entries.
 
 ## Important commands
 
@@ -189,9 +204,10 @@ Run these after installing collections (see below).
 ### Full test run (CI task, requires Docker)
 
     # run the test, keep containers on failure
+    export OPENWRT_VERSION="<release>"
     molecule test --destroy=never
-    # inspect a failed container
-    molecule login --host openwrt-25.12
+    # inspect a failed container (scenario name shown by molecule list)
+    molecule login --host "openwrt-${OPENWRT_VERSION}-default"
     # clean up afterwards
     molecule destroy
 
@@ -250,14 +266,19 @@ with it.
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
   - Uses `if: ${{ !cancelled() && !failure() }}` so it still runs when
     `sanity`/`units` are skipped.
-  - Matrix lists `24.10` and `25.12`, `fail-fast: false`. **Note:**
-    no platform selector is passed, so both jobs currently run the
-    same scenario. Fix this before relying on the matrix for version
-    coverage.
-  - Selects scenarios via `MOLECULE_GLOB`.
-  - Runs `molecule test --destroy=never` to preserve failed containers.
-  - Prints container diagnostics on failure.
-  - Destroys containers in an unconditional cleanup step.
+  - Sets `MOLECULE_GLOB` to discover scenarios under
+    `extensions/molecule/`.
+  - Matrix lists OpenWrt release versions and scenarios `default`,
+    `network-static`, and `network-dhcp`, with `fail-fast: false`.
+    Each combination runs in a separate job.
+  - Passes the selected release as `OPENWRT_VERSION`. Scenario configs
+    use it for both the image tag and platform name.
+  - Runs `molecule test -s "${{ matrix.scenario }}" --destroy=never`
+    to preserve a failed scenario's container for diagnostics.
+  - Prints diagnostics for the container name derived from
+    `OPENWRT_VERSION` and the scenario.
+  - Destroys only the scenario assigned to that job in an unconditional
+    cleanup step.
 
 When changing the workflow, update this section to reflect actual job
 dependencies, conditions, matrix, and commands.
@@ -266,8 +287,9 @@ dependencies, conditions, matrix, and commands.
 
 - `No such container`, `mkdir` failing in `/tmp`, or
   `create: Successful` without a container: check for `--limit` first.
-- `ip: RTNETLINK answers: Operation not permitted` in container logs
-  is harmless (unprivileged container).
+- `ip: RTNETLINK answers: Operation not permitted` can occur in an
+  unprivileged container. In the network scenarios, do not dismiss it
+  automatically: check whether it explains a failed network reload.
 - ansible-lint warning `Unable to load module
   community.openwrt.{{ … }}` is expected for the dynamic package
   manager pattern. Do not hardcode the module to silence it.
@@ -308,8 +330,8 @@ dependencies, conditions, matrix, and commands.
 - `roles/router_hostname` is the minimal role example: a single task
   using `community.openwrt.uci`, with an overridable default in
   `defaults/main.yml`
-- `roles/router_network` demonstrates explicit per-interface UCI configuration
-  through the `router_network_dhcp_interfaces` mapping
+- `roles/router_network` demonstrates explicit UCI configuration through
+  `router_network_interfaces` and `router_network_dhcp_interfaces`
 - `converge.yml` shows how test values are passed via `vars:` to
   `include_role`
 - Before pushing, run the fast local checks above (after installing
