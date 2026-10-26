@@ -1,0 +1,22 @@
+# extensions/molecule/network-static/molecule.yml
+---
+driver:
+  name: docker
+platforms:
+  - name: openwrt-${OPENWRT_VERSION}-${MOLECULE_SCENARIO_NAME}
+    image: openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}
+    command: /sbin/init
+    pre_build_image: true
+    tmpfs:
+      - /tmp:exec,mode=1777
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      roles_path: ../../../roles:~/.ansible/roles:/usr/share/ansible/roles
+  inventory:
+    group_vars:
+      all:
+        ansible_connection: docker
+        ansible_remote_tmp: /tmp
+        openwrt_remote_tmp: /tmp

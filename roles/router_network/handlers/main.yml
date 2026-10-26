@@ -1,0 +1,11 @@
+# roles/router_network/handlers/main.yml
+---
+- name: Restart dnsmasq
+  ansible.builtin.raw: /etc/init.d/dnsmasq restart
+  changed_when: true
+  when: router_network_apply_runtime_changes | bool
+
+- name: Reload network
+  ansible.builtin.raw: /etc/init.d/network reload
+  changed_when: true
+  when: router_network_apply_runtime_changes | bool
