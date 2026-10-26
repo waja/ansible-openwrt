@@ -19,6 +19,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   tests for static IPv4 settings
 - `extensions/molecule/network-dhcp/` – isolated configuration-only
   tests for DHCP client settings and IPv4 DHCP server status
+- `roles/router_system/` – manages hostname, timezone, NTP, logging, and
+  ASU settings
 - `roles/router_packages/` – dynamically installs the default package list
 - `roles/router_base/` – enables core services and removes obsolete config
 - `roles/router_network/` – manages explicitly configured IPv4 interface
@@ -181,7 +183,8 @@ for release versions, image tags, container names, paths, and CI matrix values.
 
 ### Role variables
 - Must be prefixed with the role name:
-  `router_hostname_value`, `router_packages_list`
+  `router_system_hostname`, `router_packages_list`; `router_hostname_value`
+  remains supported as a legacy hostname input
 - Define defaults in `roles/<name>/defaults/main.yml` so the role runs
   without explicitly set variables
 - Do not use `vars:` in `tasks/main.yml` for values that should be
@@ -453,9 +456,10 @@ dependencies, conditions, matrix, and commands.
 
 ## When in doubt
 
-- `roles/router_hostname` is the minimal role example: a single task
-  using `community.openwrt.uci`, with an overridable default in
-  `defaults/main.yml`
+- `roles/router_system` manages OpenWrt system settings with
+  `community.openwrt.uci` and overridable role defaults, including ASU client
+  options. The ASU package must be installed separately; the remote syslog
+  address (`router_system_log_ip`) intentionally has no default.
 - `roles/router_network` demonstrates explicit UCI configuration through
   `router_network_interfaces` and `router_network_dhcp_interfaces`
 - `converge.yml` shows how test values are passed via `vars:` to

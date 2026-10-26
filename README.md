@@ -190,9 +190,43 @@ Apply the standard configuration using the Docker command shown in the
 Docker section above. To target one router, add `--limit router1` to that
 `ansible-playbook` command.
 
-The `site.yml` playbook runs initialization first, installs the configured
-packages, configures base services and removes obsolete configuration files,
-then applies the network configuration through `router_network`.
+The `site.yml` playbook configures explicitly selected network settings first,
+then initializes OpenWrt, applies system settings, installs the configured
+packages, and configures base services and removes obsolete configuration files.
+
+### Configure system settings
+
+The `router_system` role manages the hostname, timezone, NTP client, system
+logging options, and Attended Sysupgrade (ASU) client settings. Its defaults
+are defined in `roles/router_system/defaults/main.yml`.
+
+The logging defaults are `router_system_log_proto: udp`,
+`router_system_conloglevel: 8`, and `router_system_cronloglevel: 7`.
+The remote syslog destination has no default: set `router_system_log_ip`
+only for routers that should send logs to a central server. For example, in
+`host_vars/router1.yml`:
+
+```yaml
+---
+router_system_log_ip: 192.0.2.234
+```
+
+Replace the documentation-only address with your actual syslog server
+address. If `router_system_log_ip` is undefined, the role leaves the
+existing UCI option unchanged.
+
+The role also configures these ASU client options:
+
+- `router_system_asu_auto_search: 0`
+- `router_system_asu_login_check_for_upgrades: 1`
+- `router_system_asu_upgrade_packages: 1`
+
+These settings only have an effect when the relevant ASU client components
+are installed. The role configures UCI options only; it does not install the
+package. Add `luci-app-attendedsysupgrade` to `router_packages_list` if it is
+not already present on the router. See the
+[OpenWrt ASU documentation](
+https://openwrt.org/docs/guide-user/installation/attended.sysupgrade).
 
 ### Configure packages per router
 
@@ -393,6 +427,7 @@ than both.
 
 - `playbooks/site.yml` — standard router configuration
 - `playbooks/audit_packages.yml` — installed-package audit
+- `roles/router_system/` — hostname, timezone, NTP, logging, and ASU settings
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
 - `roles/router_network/` — IPv4 interface addressing and DHCP server control

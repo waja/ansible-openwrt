@@ -1,0 +1,17 @@
+# roles/router_system/defaults/main.yml
+---
+router_system_hostname: "{{ router_hostname_value | default('openwrt') }}"
+router_system_timezone: UTC
+router_system_timezone_name: Etc/UTC
+router_system_ntp_enabled: true
+router_system_ntp_servers:
+  - 0.openwrt.pool.ntp.org
+  - 1.openwrt.pool.ntp.org
+  - 2.openwrt.pool.ntp.org
+  - 3.openwrt.pool.ntp.org
+router_system_log_proto: udp
+router_system_conloglevel: 8
+router_system_cronloglevel: 7
+router_system_asu_auto_search: 0
+router_system_asu_login_check_for_upgrades: 1
+router_system_asu_upgrade_packages: 1
