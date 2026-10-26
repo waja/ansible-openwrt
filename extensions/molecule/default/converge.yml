@@ -8,11 +8,24 @@
       ansible.builtin.include_role:
         name: community.openwrt.init
 
-    - name: Apply router hostname role
+    - name: Apply router system role
       ansible.builtin.include_role:
-        name: router_hostname
+        name: router_system
       vars:
-        router_hostname_value: molecule-test-router
+        router_system_hostname: molecule-test-router
+        router_system_timezone: UTC
+        router_system_timezone_name: Etc/UTC
+        router_system_ntp_enabled: false
+        router_system_ntp_servers:
+          - 0.example.invalid
+          - 1.example.invalid
+        router_system_log_proto: udp
+        router_system_conloglevel: 8
+        router_system_cronloglevel: 7
+        router_system_asu_auto_search: 0
+        router_system_asu_login_check_for_upgrades: 1
+        router_system_asu_upgrade_packages: 1
+        router_system_log_ip: 192.0.2.234
 
     - name: Apply router packages role
       ansible.builtin.include_role:
@@ -53,3 +66,42 @@
         that:
           - not router_obsolete_snmp_config.stat.exists
         fail_msg: The obsolete snmpd-opkg configuration still exists.
+
+    - name: Read configured system values
+      ansible.builtin.raw: |
+        printf 'hostname='; uci -q get system.@system[0].hostname || exit 1
+        printf 'timezone='; uci -q get system.@system[0].timezone || exit 1
+        printf 'zonename='; uci -q get system.@system[0].zonename || exit 1
+        printf 'ntp_enabled='; uci -q get system.ntp.enabled || exit 1
+        printf 'ntp_servers='; uci -q show system.ntp
+        printf 'log_proto='; uci -q get system.@system[0].log_proto || exit 1
+        printf 'conloglevel='
+        uci -q get system.@system[0].conloglevel || exit 1
+        printf 'cronloglevel='
+        uci -q get system.@system[0].cronloglevel || exit 1
+        printf 'asu_auto_search='
+        uci -q get attendedsysupgrade.client.auto_search || exit 1
+        printf 'asu_login_check_for_upgrades='
+        uci -q get attendedsysupgrade.client.login_check_for_upgrades || exit 1
+        printf 'asu_upgrade_packages='
+        uci -q get attendedsysupgrade.client.upgrade_packages || exit 1
+        printf 'log_ip='; uci -q get system.@system[0].log_ip || exit 1
+      register: router_system_uci
+      changed_when: false
+
+    - name: Assert configured system values
+      ansible.builtin.assert:
+        that:
+          - "'hostname=molecule-test-router' in router_system_uci.stdout"
+          - "'timezone=UTC' in router_system_uci.stdout"
+          - "'zonename=Etc/UTC' in router_system_uci.stdout"
+          - "'ntp_enabled=0' in router_system_uci.stdout"
+          - "'0.example.invalid' in router_system_uci.stdout"
+          - "'1.example.invalid' in router_system_uci.stdout"
+          - "'log_proto=udp' in router_system_uci.stdout"
+          - "'conloglevel=8' in router_system_uci.stdout"
+          - "'cronloglevel=7' in router_system_uci.stdout"
+          - "'asu_auto_search=0' in router_system_uci.stdout"
+          - "'asu_login_check_for_upgrades=1' in router_system_uci.stdout"
+          - "'asu_upgrade_packages=1' in router_system_uci.stdout"
+          - "'log_ip=192.0.2.234' in router_system_uci.stdout"
