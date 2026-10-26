@@ -27,6 +27,29 @@
         router_system_asu_upgrade_packages: 1
         router_system_log_ip: 192.0.2.234
 
+    - name: Apply router firewall role
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_input: ACCEPT
+        router_firewall_forward: ACCEPT
+        router_firewall_output: ACCEPT
+
+    - name: Verify firewall defaults
+      ansible.builtin.raw: |
+        printf 'input='; uci -q get firewall.@defaults[0].input || exit 1
+        printf 'forward='; uci -q get firewall.@defaults[0].forward || exit 1
+        printf 'output='; uci -q get firewall.@defaults[0].output || exit 1
+      register: router_firewall_uci
+      changed_when: false
+
+    - name: Assert firewall defaults
+      ansible.builtin.assert:
+        that:
+          - "'input=ACCEPT' in router_firewall_uci.stdout"
+          - "'forward=ACCEPT' in router_firewall_uci.stdout"
+          - "'output=ACCEPT' in router_firewall_uci.stdout"
+
     - name: Apply router packages role
       ansible.builtin.include_role:
         name: router_packages

@@ -12,5 +12,6 @@
   roles:
     - community.openwrt.init
     - router_system
+    - router_firewall
     - router_packages
     - router_base
