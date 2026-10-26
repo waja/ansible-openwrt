@@ -17,6 +17,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   (`molecule.yml`, `prepare.yml`, `converge.yml`)
 - `roles/router_packages/` – dynamically installs the default package list
 - `roles/router_base/` – enables core services and removes obsolete config
+- `roles/router_network/` – manages network configuration, initially IPv4 DHCP
 - `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
   `defaults/main.yml`
@@ -117,8 +118,11 @@ Always select dynamically via the fact set by
 - Keep the installation result registered as
   `router_packages_install_result`; restart-marker handling depends on
   its `changed` value.
-- `router_packages` owns package installation; service configuration
+- `router_packages` owns package installation; base service configuration
   belongs in `router_base`.
+- `router_network` owns network configuration, initially explicit per-section
+  IPv4 DHCP status (`enabled`/`disabled`); unlisted sections stay unchanged.
+  DHCPv6 and IPv6 Router Advertisements are outside its first scope.
 - `router_package_audit` is optional because it requires the saved
   baseline file `/etc/backup/installed_packages.txt`.
 
@@ -304,6 +308,8 @@ dependencies, conditions, matrix, and commands.
 - `roles/router_hostname` is the minimal role example: a single task
   using `community.openwrt.uci`, with an overridable default in
   `defaults/main.yml`
+- `roles/router_network` demonstrates explicit per-interface UCI configuration
+  through the `router_network_dhcp_interfaces` mapping
 - `converge.yml` shows how test values are passed via `vars:` to
   `include_role`
 - Before pushing, run the fast local checks above (after installing

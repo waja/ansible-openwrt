@@ -35,6 +35,26 @@
       ansible.builtin.include_role:
         name: router_base
 
+    - name: Apply router network role
+      ansible.builtin.include_role:
+        name: router_network
+      vars:
+        router_network_dhcp_interfaces:
+          lan: disabled
+
+    - name: Read LAN DHCP ignore setting
+      community.openwrt.uci:
+        command: get
+        key: dhcp.lan.ignore
+      register: router_network_lan_dhcp_ignore
+      changed_when: false
+
+    - name: Verify LAN IPv4 DHCP is disabled
+      ansible.builtin.assert:
+        that:
+          - router_network_lan_dhcp_ignore.result == '1'
+        fail_msg: The LAN IPv4 DHCP server is not disabled.
+
     - name: Verify required services are enabled and running
       ansible.builtin.raw: |
         for service in snmpd xinetd; do
