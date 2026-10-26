@@ -59,6 +59,18 @@ First, verify that the image can run Ansible:
 docker run --rm willhallonline/ansible:latest ansible --version
 ```
 
+The `ansible.utils.ipaddr` filter also requires the Python package
+`netaddr` on the Ansible control node. The image container is disposable,
+so install it into the persistent `~/.ansible/python` directory once and
+add that directory to `PYTHONPATH` whenever Ansible runs:
+
+```bash
+docker run --rm -it \
+  -v "$HOME/.ansible:/home/ansible/.ansible" \
+  willhallonline/ansible:latest \
+  python -m pip install --target /home/ansible/.ansible/python netaddr==1.3.0
+```
+
 Install the pinned role and collection dependencies from `requirements.yml`.
 The `~/.ansible` mount keeps them available for later runs:
 
@@ -67,6 +79,7 @@ docker run --rm -it \
   -v "$PWD:/ansible" \
   -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
   -v "$HOME/.ansible:/home/ansible/.ansible" \
+  --env PYTHONPATH=/home/ansible/.ansible/python \
   --workdir /ansible \
   willhallonline/ansible:latest \
   /bin/sh -c 'ansible-galaxy role install -r requirements.yml \
@@ -82,6 +95,7 @@ docker run --rm -it \
   -v "$PWD:/ansible" \
   -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
   -v "$HOME/.ansible:/home/ansible/.ansible" \
+  --env PYTHONPATH=/home/ansible/.ansible/python \
   --workdir /ansible \
   willhallonline/ansible:latest \
   ansible-playbook -i inventory.ini playbooks/site.yml
