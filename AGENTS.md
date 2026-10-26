@@ -74,6 +74,25 @@ rewriting the branch is safe; never rewrite unrelated commits or shared work.
 Prefer a clean follow-up commit over history rewriting when the branch has
 other contributors or its history is already in use.
 
+## Change scope and technical decisions
+
+Prefer the smallest focused change that solves the problem reliably and fits
+the repository's existing conventions, runtime environment, and security
+model. Avoid unrelated refactoring and unnecessary changes to permissions,
+dependencies, infrastructure, or test setup.
+
+Before introducing a significant deviation from the existing approach, first
+check whether a simpler solution can work. If multiple viable options remain,
+summarize their trade-offs and discuss them with the developer before
+implementing the deviation. This is especially important for broader
+refactors, additional privileges, new dependencies, or changes to the normal
+runtime or CI environment.
+
+A minimal diff is a preference, not an absolute goal: do not sacrifice
+correctness, security, reliability, test coverage, or maintainability merely
+to reduce the number of changed lines. Explain when a larger change is
+necessary and why.
+
 ## Code style
 
 ### Line length
