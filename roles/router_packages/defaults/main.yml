@@ -14,5 +14,3 @@ router_packages_list:
 router_packages_required_services:
   - snmpd
   - xinetd
-
-router_packages_service_restart_lock_timeout: 120

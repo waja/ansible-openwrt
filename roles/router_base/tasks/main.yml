@@ -1,19 +1,8 @@
 # roles/router_base/tasks/main.yml
 ---
 - name: Acquire the shared service restart lock
-  ansible.builtin.raw: |
-    lock=/tmp/router-packages-restart-lock
-    timeout={{ router_base_service_restart_lock_timeout | int }}
-    waited=0
-    until mkdir "$lock" 2>/dev/null; do
-      if [ "$waited" -ge "$timeout" ]; then
-        echo "Timed out waiting for service restart lock: $lock" >&2
-        exit 1
-      fi
-      sleep 1
-      waited=$((waited + 1))
-    done
-  changed_when: false
+  ansible.builtin.include_tasks:
+    file: ../../../includes/router_service_restart_lock/acquire.yml
 
 - name: Apply base service configuration while holding the lock
   block:
@@ -51,6 +40,5 @@
 
   always:
     - name: Release the shared service restart lock
-      ansible.builtin.raw: >-
-        rmdir /tmp/router-packages-restart-lock
-      changed_when: false
+      ansible.builtin.include_tasks:
+        file: ../../../includes/router_service_restart_lock/release.yml
