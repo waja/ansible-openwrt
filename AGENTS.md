@@ -157,6 +157,20 @@ for release versions, image tags, container names, paths, and CI matrix values.
   unnecessary restart on the next run. Do not use `raw` as a general
   replacement for available modules.
 
+### Input validation
+
+- Validate values when they have a defined set or range of allowed inputs and
+  an invalid value could cause a confusing failure or unintended change.
+- Prefer checks that fail early with a clear, actionable error message.
+- Do not add validation merely for completeness. First check whether the
+  responsible module or target system already validates the value reliably
+  and reports invalid input clearly.
+- Avoid duplicating checks that the module or target system already performs,
+  unless an additional check materially improves safety or the error message.
+- Pay particular attention to values where a typo could silently select a
+  different behavior, especially for security-sensitive or disruptive changes.
+- Keep validation proportional to the risk and complexity of the input.
+
 ### Role variables
 - Must be prefixed with the role name:
   `router_hostname_value`, `router_packages_list`
