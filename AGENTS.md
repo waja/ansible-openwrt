@@ -93,6 +93,25 @@ correctness, security, reliability, test coverage, or maintainability merely
 to reduce the number of changed lines. Explain when a larger change is
 necessary and why.
 
+### Avoid duplicated moving values
+
+When a value is expected to change, keep one authoritative source and derive
+related configuration from it wherever practical. This is especially useful
+for release versions, image tags, container names, paths, and CI matrix values.
+
+- Do not repeat the same changeable value across workflow matrices, scenario
+  files, scripts, diagnostics, and documentation when it can be derived.
+- Prefer explicit variables or matrix values for a setting that drives several
+  related values; keep generated names and paths consistent with that source.
+- Before changing a version, image, or other moving target, search the
+  repository for related references and update the affected consumers.
+- Keep intentional pins and fixed test fixtures explicit. Centralization is
+  not a reason to make stable values configurable or to add unnecessary
+  abstraction for a value used only once.
+- Treat mutable tags such as `latest` as deliberate moving targets. Where
+  reproducibility matters, prefer an explicit version or digest and document
+  why a moving tag is needed.
+
 ## Code style
 
 ### Line length
