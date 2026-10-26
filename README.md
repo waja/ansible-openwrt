@@ -191,8 +191,32 @@ Docker section above. To target one router, add `--limit router1` to that
 `ansible-playbook` command.
 
 The `site.yml` playbook configures explicitly selected network settings first,
-then initializes OpenWrt, applies system settings, installs the configured
-packages, and configures base services and removes obsolete configuration files.
+then initializes OpenWrt, applies system and firewall settings, installs the
+configured packages, and configures base services while removing obsolete
+configuration files.
+
+### Configure firewall defaults
+
+The `router_firewall` role manages only the default firewall policies for
+input, forwarding, and output. Its defaults are `REJECT`, `REJECT`, and
+`ACCEPT`, respectively. These defaults preserve the usual OpenWrt firewall
+policy.
+
+For an access point that should pass traffic without filtering at the
+firewall-defaults level, override the values in its `host_vars` file, for
+example `host_vars/accesspoint.yml`:
+
+```yaml
+---
+router_firewall_input: ACCEPT
+router_firewall_forward: ACCEPT
+router_firewall_output: ACCEPT
+```
+
+**Caution:** `input: ACCEPT` allows traffic to services on the router, and
+`forward: ACCEPT` removes the default forwarding restriction. Use these
+settings only where appropriate for your network design. The role does not
+manage zones, individual rules, or SYN-flood protection.
 
 ### Configure system settings
 
@@ -428,6 +452,7 @@ than both.
 - `playbooks/site.yml` — standard router configuration
 - `playbooks/audit_packages.yml` — installed-package audit
 - `roles/router_system/` — hostname, timezone, NTP, logging, and ASU settings
+- `roles/router_firewall/` — configurable firewall default policies
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
 - `roles/router_network/` — IPv4 interface addressing and DHCP server control

@@ -21,6 +21,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   tests for DHCP client settings and IPv4 DHCP server status
 - `roles/router_system/` – manages hostname, timezone, NTP, logging, and
   ASU settings
+- `roles/router_firewall/` – configures firewall default policies
 - `roles/router_packages/` – dynamically installs the default package list
 - `roles/router_base/` – enables core services and removes obsolete config
 - `roles/router_network/` – manages explicitly configured IPv4 interface

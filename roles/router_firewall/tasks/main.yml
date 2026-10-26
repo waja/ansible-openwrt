@@ -1,0 +1,19 @@
+# roles/router_firewall/tasks/main.yml
+---
+- name: Configure firewall input policy
+  community.openwrt.uci:
+    command: set
+    key: firewall.@defaults[0].input
+    value: "{{ router_firewall_input }}"
+
+- name: Configure firewall forwarding policy
+  community.openwrt.uci:
+    command: set
+    key: firewall.@defaults[0].forward
+    value: "{{ router_firewall_forward }}"
+
+- name: Configure firewall output policy
+  community.openwrt.uci:
+    command: set
+    key: firewall.@defaults[0].output
+    value: "{{ router_firewall_output }}"
