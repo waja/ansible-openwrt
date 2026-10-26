@@ -239,6 +239,18 @@ jobs:
             ip route 2>&1 || true
             echo "--- resolver ---"
             cat /etc/resolv.conf 2>&1 || true
+            echo "--- OpenWrt release and package manager ---"
+            cat /etc/openwrt_release 2>&1 || true
+            opkg --version 2>&1 || true
+            echo "--- Network/firewall init links ---"
+            ls -l /etc/rc.d/S*network /etc/rc.d/S*dnsmasq \\
+              /etc/rc.d/S*firewall /etc/rc.d/S*odhcpd 2>&1 || true
+            echo "--- Firewall rules ---"
+            nft list ruleset 2>&1 || iptables-save 2>&1 || true
+            echo "--- Recent system log ---"
+            logread 2>&1 | tail -100 || true
+            echo "--- Filesystem space ---"
+            df -h / /tmp 2>&1 || true
             echo "--- OpenWrt interfaces ---"
             ubus call network.interface dump 2>&1 || true
           ' || true

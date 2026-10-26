@@ -380,9 +380,11 @@ with it.
     testing and logs its image ID and available repository digests.
   - Runs `molecule test -s "${{ matrix.scenario }}" --destroy=never`
     to preserve a failed scenario's container for diagnostics.
-  - Logs the tested container's image ID and prints detailed network
-    diagnostics on failure. Container names derive from
-    `OPENWRT_VERSION` and the scenario.
+  - Logs the tested container's image ID and prints detailed diagnostics
+    on failure: Docker configuration, network interfaces/routes/DNS,
+    OpenWrt release and opkg version, network/firewall init links,
+    firewall rules, recent system log, filesystem space, and container
+    logs. Container names derive from `OPENWRT_VERSION` and scenario.
   - Runs weekly to detect regressions caused by changes behind the
     moving OpenWrt 25.12 image tag.
   - Destroys only the scenario assigned to that job in an unconditional
