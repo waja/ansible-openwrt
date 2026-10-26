@@ -3,8 +3,8 @@
 driver:
   name: docker
 platforms:
-  - name: openwrt-25.12
-    image: openwrt/rootfs:x86_64-openwrt-25.12
+  - name: openwrt-${OPENWRT_VERSION}-${MOLECULE_SCENARIO_NAME}
+    image: openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}
     command: /sbin/init
     pre_build_image: true
     tmpfs:

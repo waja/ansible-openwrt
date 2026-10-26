@@ -1,0 +1,101 @@
+# extensions/molecule/network-dhcp/converge.yml
+---
+- name: Test DHCP network configuration without runtime changes
+  hosts: all
+  gather_facts: false
+  vars:
+    router_network_apply_runtime_changes: false
+  tasks:
+    - name: Include role community.openwrt.init
+      ansible.builtin.include_role:
+        name: community.openwrt.init
+
+    - name: Capture Docker management network state before role tests
+      ansible.builtin.raw: |
+        printf '%s\n' '--- eth0 ---'
+        ip addr show dev eth0
+        printf '%s\n' '--- default route ---'
+        ip route show default
+        printf '%s\n' '--- resolver ---'
+        cat /etc/resolv.conf
+      register: router_network_state_before
+      changed_when: false
+
+    - name: Verify Docker management networking is available
+      ansible.builtin.assert:
+        that:
+          - "'inet ' in router_network_state_before.stdout"
+          - "'default via ' in router_network_state_before.stdout"
+        fail_msg: >-
+          The container must retain its Docker-managed eth0 address and
+          default route before configuration-only tests begin.
+
+    - name: Apply DHCP client settings and disable LAN DHCP server
+      ansible.builtin.include_role:
+        name: router_network
+      vars:
+        router_network_interface_mode: dhcp
+        router_network_interfaces:
+          lan: {}
+        router_network_dhcp_interfaces:
+          lan: disabled
+
+    - name: Read DHCP LAN network settings
+      community.openwrt.uci:
+        command: get
+        key: "{{ item.key }}"
+      loop:
+        - key: network.lan.proto
+          expected: dhcp
+        - key: network.lan.peerdns
+          expected: '1'
+        - key: dhcp.lan.ignore
+          expected: '1'
+      register: router_network_dhcp_settings
+      changed_when: false
+
+    - name: Verify DHCP LAN network settings
+      ansible.builtin.assert:
+        that:
+          - item.result == item.item.expected
+        fail_msg: "Unexpected value for {{ item.item.key }}."
+      loop: "{{ router_network_dhcp_settings.results }}"
+
+    - name: Check that static LAN settings were removed
+      ansible.builtin.raw: "uci -q get {{ item }}"
+      loop:
+        - network.lan.ipaddr
+        - network.lan.netmask
+        - network.lan.gateway
+        - network.lan.dns
+      register: router_network_removed_static_settings
+      changed_when: false
+      failed_when: false
+
+    - name: Verify that static LAN settings are absent
+      ansible.builtin.assert:
+        that:
+          - item.rc != 0
+        fail_msg: "Static setting {{ item.item }} was not removed."
+      loop: "{{ router_network_removed_static_settings.results }}"
+
+    - name: Capture Docker management network state after role tests
+      ansible.builtin.raw: |
+        printf '%s\n' '--- eth0 ---'
+        ip addr show dev eth0
+        printf '%s\n' '--- default route ---'
+        ip route show default
+        printf '%s\n' '--- resolver ---'
+        cat /etc/resolv.conf
+      register: router_network_state_after
+      changed_when: false
+
+    - name: Verify Docker management network state was preserved
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_network_state_after.stdout ==
+            router_network_state_before.stdout
+        fail_msg: >-
+          The network configuration test changed eth0, the default route,
+          or the resolver configuration.

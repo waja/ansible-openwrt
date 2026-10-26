@@ -123,12 +123,16 @@ jobs:
     env:
       MOLECULE_GLOB: >-
         ${{ github.workspace }}/extensions/molecule/*/molecule.yml
+      OPENWRT_VERSION: ${{ matrix.openwrt_version }}
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - openwrt-25.12
-          - openwrt-24.10
+        openwrt_version:
+          - '25.12'
+        scenario:
+          - default
+          - network-static
+          - network-dhcp
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -141,7 +145,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ansible-core molecule molecule-plugins[docker]
+          pip install ansible-core molecule molecule-plugins[docker] netaddr
 
       - name: Install Ansible dependencies
         run: |
@@ -160,24 +164,40 @@ jobs:
           echo "ANSIBLE_ROLES_PATH=$GITHUB_WORKSPACE/roles:"\
           "$HOME/.ansible/roles:/usr/share/ansible/roles" >> "$GITHUB_ENV"
 
-      - name: Run Molecule for ${{ matrix.platform }}
-        run: molecule test --destroy=never
+      - name: Test ${{ matrix.scenario }} scenario
+        run: molecule test -s "${{ matrix.scenario }}" --destroy=never
         env:
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
 
-      - name: Debug containers
-        if: failure()
+      - name: Show container network diagnostics
+        if: always()
         run: |
           docker ps -a
-          docker inspect ${{ matrix.platform }} \
-             --format '{{.State.Status}} exit={{.State.ExitCode}}' \
-             || true
-          docker inspect ${{ matrix.platform }} \
-             --format 'cmd={{.Config.Cmd}} tmpfs={{.HostConfig.Tmpfs}}' \
-             || true
-          docker logs ${{ matrix.platform }} || true
+          container="openwrt-${OPENWRT_VERSION}-${{ matrix.scenario }}"
+          echo "=== Docker network mode ==="
+          docker inspect --format \
+            'NetworkMode={{.HostConfig.NetworkMode}}' "$container" || true
+          echo "=== Docker capabilities ==="
+          docker inspect --format \
+            'CapAdd={{json .HostConfig.CapAdd}}' "$container" || true
+          echo "=== Docker networks ==="
+          docker inspect --format \
+            'Networks={{json .NetworkSettings.Networks}}' "$container" || true
+          echo "=== Container network state ==="
+          docker exec "$container" sh -c '
+            echo "--- interfaces ---"
+            ip addr 2>&1 || true
+            echo "--- routes ---"
+            ip route 2>&1 || true
+            echo "--- resolver ---"
+            cat /etc/resolv.conf 2>&1 || true
+            echo "--- OpenWrt interfaces ---"
+            ubus call network.interface dump 2>&1 || true
+          ' || true
+          echo "=== Container logs ==="
+          docker logs "$container" || true
 
-      - name: Molecule destroy
+      - name: Destroy ${{ matrix.scenario }} scenario
         if: always()
-        run: molecule destroy
+        run: molecule destroy -s "${{ matrix.scenario }}"

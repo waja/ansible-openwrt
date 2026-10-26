@@ -1,5 +1,160 @@
 # roles/router_network/tasks/main.yml
 ---
+- name: Validate network interface configuration
+  ansible.builtin.assert:
+    that:
+      - router_network_interface_mode in ['dhcp', 'static']
+      - router_network_interfaces is mapping
+    fail_msg: >-
+      router_network_interface_mode must be 'dhcp' or 'static', and
+      router_network_interfaces must be a mapping of interface sections
+      to manage.
+
+- name: Validate static interface settings
+  ansible.builtin.assert:
+    that:
+      - item.value is mapping
+      - item.value.ipaddr is defined
+      - item.value.netmask is defined
+      - >-
+        item.value.ipaddr is string and
+        (item.value.ipaddr | ansible.utils.ipv4('address')) == item.value.ipaddr
+      - >-
+        item.value.netmask is string and
+        (item.value.netmask | ansible.utils.ipv4) == item.value.netmask
+      - >-
+        (('0.0.0.0/' ~ item.value.netmask)
+         | ansible.utils.ipaddr('prefix')) is not false
+      - >-
+        item.value.gateway is not defined or
+        (item.value.gateway is string and
+         (item.value.gateway | ansible.utils.ipv4('address'))
+        == item.value.gateway)
+      - >-
+        item.value.dns is not defined or
+        (item.value.dns is sequence and item.value.dns is not string)
+    fail_msg: >-
+      Static interface '{{ item.key }}' needs a valid IPv4 ipaddr and
+      contiguous IPv4 netmask. Optional gateway must be an IPv4 address and
+      dns must be a list of IPv4 DNS server addresses.
+  loop: "{{ router_network_interfaces | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: router_network_interface_mode == 'static'
+
+- name: Validate static DNS server addresses
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - (item | ansible.utils.ipv4('address')) == item
+    fail_msg: "Invalid IPv4 DNS server address: {{ item }}"
+  loop: >-
+    {{ router_network_interfaces
+       | dict2items
+       | map(attribute='value.dns', default=[])
+       | flatten }}
+  when: router_network_interface_mode == 'static'
+
+- name: Initialize network interface operations
+  ansible.builtin.set_fact:
+    router_network_interface_operations: []
+  changed_when: false
+  when: router_network_interfaces | length > 0
+
+- name: Build network interface operations
+  ansible.builtin.set_fact:
+    router_network_interface_operations: >-
+      {{ router_network_interface_operations
+         + [
+             {
+               'command': 'set',
+               'key': 'network.' ~ item.key ~ '.proto',
+               'value': router_network_interface_mode
+             }
+           ]
+         + (
+             [
+               {
+                 'command': 'set',
+                 'key': 'network.' ~ item.key ~ '.peerdns',
+                 'value': '1'
+               },
+               {
+                 'command': 'absent',
+                 'key': 'network.' ~ item.key,
+                 'value': {
+                   'ipaddr': none,
+                   'netmask': none,
+                   'gateway': none,
+                   'dns': none
+                 }
+               }
+             ] if router_network_interface_mode == 'dhcp' else
+             [
+               {
+                 'command': 'set',
+                 'key': 'network.' ~ item.key ~ '.ipaddr',
+                 'value': item.value.ipaddr
+               },
+               {
+                 'command': 'set',
+                 'key': 'network.' ~ item.key ~ '.netmask',
+                 'value': item.value.netmask
+               },
+               {
+                 'command': 'set',
+                 'key': 'network.' ~ item.key ~ '.peerdns',
+                 'value': '0'
+               }
+             ]
+           )
+         + (
+             [
+               {
+                 'command': 'set',
+                 'key': 'network.' ~ item.key ~ '.gateway',
+                 'value': item.value.gateway
+               }
+             ] if router_network_interface_mode == 'static'
+                  and item.value.gateway is defined else
+             [
+               {
+                 'command': 'absent',
+                 'key': 'network.' ~ item.key,
+                 'value': {'gateway': none}
+               }
+             ] if router_network_interface_mode == 'static' else []
+           )
+         + (
+             [
+               {
+                 'command': 'set',
+                 'key': 'network.' ~ item.key ~ '.dns',
+                 'value': item.value.dns
+               }
+             ] if router_network_interface_mode == 'static'
+                  and item.value.dns is defined else
+             [
+               {
+                 'command': 'absent',
+                 'key': 'network.' ~ item.key,
+                 'value': {'dns': none}
+               }
+             ] if router_network_interface_mode == 'static' else []
+           ) }}
+  changed_when: false
+  loop: "{{ router_network_interfaces | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: router_network_interfaces | length > 0
+
+- name: Apply network interface settings in one UCI transaction
+  community.openwrt.uci:
+    autocommit: true
+    operations: "{{ router_network_interface_operations }}"
+  when: router_network_interfaces | length > 0
+  notify: Reload network
+
 - name: Validate DHCP interface settings mapping
   ansible.builtin.assert:
     that:
