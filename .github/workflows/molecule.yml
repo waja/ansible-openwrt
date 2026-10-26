@@ -112,6 +112,32 @@ jobs:
           ansible-test units --docker default \
             --python ${{ env.ANSIBLE_PYTHON_VERSION }}
 
+  script-tests:
+    name: State discovery script smoke test (OpenWrt 25.12)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Check shell syntax and command-line behavior
+        run: |
+          docker run --rm \
+            -v "$PWD/scripts/owrt-extra.sh:/tmp/owrt-extra.sh:ro" \
+            --entrypoint /bin/sh openwrt/rootfs:x86_64-openwrt-25.12 \
+            -c '
+              set -eu
+              sh -n /tmp/owrt-extra.sh
+
+              sh /tmp/owrt-extra.sh -h > /tmp/help.txt
+              grep -q "owrt-extra.sh" /tmp/help.txt
+
+              if sh /tmp/owrt-extra.sh --invalid > /tmp/invalid.txt 2>&1; then
+                echo "Expected an unknown option to fail." >&2
+                exit 1
+              fi
+              grep -q "Unknown option: --invalid" /tmp/invalid.txt
+            '
+
   molecule:
     name: Molecule
     needs:
