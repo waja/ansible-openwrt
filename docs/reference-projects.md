@@ -12,7 +12,7 @@ without understanding their assumptions.
 
 ## Projects
 
-### [lulkien/LinuxConfig](https://github.com/lulkien/LinuxConfig)
+### [lulkien/LinuxConfig][linuxconfig]
 
 - **Ansible path:** `router/openwrt/ansible/`
 
@@ -26,7 +26,7 @@ without understanding their assumptions.
   and reboots the device. Treat it as a device-specific example, not a
   generally safe sequence.
 
-### [thiagoalmeidasa/homelab](https://github.com/thiagoalmeidasa/homelab)
+### [thiagoalmeidasa/homelab][homelab]
 
 - **Ansible path:** `ansible/roles/openwrt_router/`
 
@@ -36,7 +36,7 @@ without understanding their assumptions.
 - **Ideas to examine:** how a role separates feature areas and handles
   optional variable-driven configuration.
 
-### [bairhys/Ansible-Openwrt](https://github.com/bairhys/Ansible-Openwrt)
+### [bairhys/Ansible-Openwrt][bairhys]
 
 - **Focus:** broader router provisioning, including Wi-Fi, WireGuard,
   Tailscale, dynamic DNS and monitoring.
@@ -45,7 +45,7 @@ without understanding their assumptions.
 - **Ideas to examine:** feature coverage, prerequisites, inventory examples,
   and documentation of steps that still require manual platform approval.
 
-### [Lumpiasty/klaster](https://github.com/Lumpiasty/klaster)
+### [Lumpiasty/klaster][klaster]
 
 - **Ansible path:** `ansible/roles/openwrt/` on branch `fresh-start`
 
@@ -56,7 +56,7 @@ without understanding their assumptions.
 - **Ideas to examine:** task decomposition and how dependencies determine
   execution order.
 
-### [3ti-Energy/Rut-config](https://github.com/3ti-Energy/Rut-config)
+### [3ti-Energy/Rut-config][rut-config]
 
 - **Focus:** Ansible-managed configuration for its target router environment.
 - **Useful entry point:** `site.yaml`.
@@ -67,7 +67,7 @@ without understanding their assumptions.
   configuration details. Verify that any technique applies to our target
   devices and supported collection version.
 
-### [Kblack0610/home-config](https://github.com/Kblack0610/home-config)
+### [Kblack0610/home-config][home-config]
 
 - **Ansible path:** `ansible/roles/openwrt-iot-vlan/`
 
@@ -100,6 +100,13 @@ without understanding their assumptions.
 - [community.openwrt collection][openwrt-docs]
 - [community.openwrt.setup module][setup-docs]
 - [community.openwrt.uci module][uci-docs]
+
+[linuxconfig]: https://github.com/lulkien/LinuxConfig/tree/master/router/openwrt/ansible
+[homelab]: https://github.com/thiagoalmeidasa/homelab/tree/main/ansible/roles/openwrt_router
+[bairhys]: https://github.com/bairhys/Ansible-Openwrt/tree/main
+[klaster]: https://github.com/Lumpiasty/klaster/tree/fresh-start/ansible/roles/openwrt
+[rut-config]: https://github.com/3ti-Energy/Rut-config/tree/main
+[home-config]: https://github.com/Kblack0610/home-config/tree/master/ansible/roles/openwrt-iot-vlan
 
 [openwrt-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/index.html
 [setup-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/setup_module.html
