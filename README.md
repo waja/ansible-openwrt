@@ -4,6 +4,12 @@
 This repository provides Ansible playbooks and roles to configure OpenWrt
 routers and compare their installed packages against a saved baseline.
 
+## License
+
+This project is licensed under the GNU General Public License v3.0 or, at
+your option, any later version (`GPL-3.0-or-later`). See [LICENSE](LICENSE)
+for the full license text.
+
 The playbooks use the inventory group `openwrt`. You normally do not need
 to copy or edit the playbooks for your own routers: define your hosts in an
 inventory and customize variables there.
