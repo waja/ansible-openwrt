@@ -8,7 +8,8 @@ env:
 "on":
   workflow_dispatch:
   schedule:
-    - cron: '17 6 * * 0'
+    - cron: '17 6 * * 0' # Regular OpenWrt image
+    - cron: '17 7 * * 0' # OpenWrt snapshot image
   # execute on pull request event
   pull_request:
   push:
@@ -152,6 +153,13 @@ jobs:
       MOLECULE_GLOB: >-
         ${{ github.workspace }}/extensions/molecule/*/molecule.yml
       OPENWRT_VERSION: ${{ matrix.openwrt_version }}
+      OPENWRT_SNAPSHOT: ${{ github.event.schedule == '17 7 * * 0' }}
+      OPENWRT_IMAGE: >-
+        ${{ github.event.schedule == '17 7 * * 0'
+            && format('openwrt/rootfs:x86_64-{0}-SNAPSHOT',
+                      matrix.openwrt_version)
+            || format('openwrt/rootfs:x86_64-openwrt-{0}',
+                      matrix.openwrt_version) }}
     strategy:
       fail-fast: false
       matrix:
@@ -195,11 +203,11 @@ jobs:
       - name: Pull and identify OpenWrt image
         run: |
           set -euo pipefail
-          image="openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}"
-          docker pull "$image"
-          docker image inspect "$image" \
+          echo "Selected image: $OPENWRT_IMAGE"
+          docker pull "$OPENWRT_IMAGE"
+          docker image inspect "$OPENWRT_IMAGE" \
             --format 'Image ID: {{.Id}}'
-          docker image inspect "$image" \
+          docker image inspect "$OPENWRT_IMAGE" \
             --format 'Repo digests: {{json .RepoDigests}}'
 
       - name: Test ${{ matrix.scenario }} scenario
