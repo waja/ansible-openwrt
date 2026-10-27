@@ -61,6 +61,14 @@ Keep the relevant operational details in `AGENTS.md` synchronized too,
 especially when changing development instructions, repository conventions,
 or CI workflows.
 
+Use `docs/reference-projects.md` as a curated set of external
+Ansible/OpenWrt examples when researching relevant design questions,
+implementation patterns, or test cases. Treat those repositories as
+unverified examples, not project requirements: check official module
+documentation and verify compatibility, safety, and behavior before adopting
+an approach. Record lasting decisions in the relevant project documentation
+or issue rather than relying on an external link alone.
+
 ## Development workflow
 
 Keep the PR branch history focused on reviewed, coherent changes. Do not
