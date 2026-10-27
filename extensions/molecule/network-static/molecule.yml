@@ -4,7 +4,7 @@ driver:
   name: docker
 platforms:
   - name: openwrt-${OPENWRT_VERSION}-${MOLECULE_SCENARIO_NAME}
-    image: openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}
+    image: ${OPENWRT_IMAGE}
     command: /sbin/init
     pre_build_image: true
     tmpfs:

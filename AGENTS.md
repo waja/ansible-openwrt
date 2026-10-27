@@ -311,7 +311,8 @@ Run these after installing collections (see below).
 ### Full test run (CI task, requires Docker)
 
     # run the test, keep containers on failure
-    export OPENWRT_VERSION="<release>"
+    export OPENWRT_VERSION="25.12"
+    export OPENWRT_IMAGE="openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}"
     molecule test --destroy=never
     # inspect a failed container (scenario name shown by molecule list)
     molecule login --host "openwrt-${OPENWRT_VERSION}-default"
@@ -378,6 +379,9 @@ with it.
   - Depend on `lint` and `check-structure`.
   - Run only when `has_collection == 'true'`.
   - Use `ansible-test` with `${{ env.ANSIBLE_PYTHON_VERSION }}`.
+- `script-tests`
+  - Runs shell syntax and command-line smoke tests for
+    `scripts/owrt-extra.sh` in the regular OpenWrt 25.12 image.
 - `molecule`
   - Depends on `lint`, `sanity`, `units`.
   - Installs pinned roles and collections from `requirements.yml` into
@@ -389,10 +393,12 @@ with it.
   - Matrix lists OpenWrt release versions and scenarios `default`,
     `network-static`, and `network-dhcp`, with `fail-fast: false`.
     Each combination runs in a separate job.
-  - Passes the selected release as `OPENWRT_VERSION`. Scenario configs
-    use it for both the image tag and platform name.
-  - Pulls `openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}` before
-    testing and logs its image ID and available repository digests.
+  - Sets `OPENWRT_SNAPSHOT` by comparing `github.event.schedule` with the
+    snapshot cron (`17 7 * * 0`). The existing `17 6 * * 0` schedule keeps
+    testing the regular release image.
+  - Defines `OPENWRT_IMAGE` at job level from the snapshot flag and
+    `OPENWRT_VERSION`, so every Molecule command, including cleanup, gets
+    a valid image. The pull step logs its image ID and repository digests.
   - Runs `molecule test -s "${{ matrix.scenario }}" --destroy=never`
     to preserve a failed scenario's container for diagnostics.
   - Logs the tested container's image ID and prints detailed diagnostics
@@ -400,8 +406,9 @@ with it.
     OpenWrt release and opkg version, network/firewall init links,
     firewall rules, recent system log, filesystem space, and container
     logs. Container names derive from `OPENWRT_VERSION` and scenario.
-  - Runs weekly to detect regressions caused by changes behind the
-    moving OpenWrt 25.12 image tag.
+  - The `17 6 * * 0` schedule tests the regular moving OpenWrt 25.12 image;
+    the separate `17 7 * * 0` schedule tests the moving snapshot tag.
+    Pull requests, pushes, and manual runs use the regular image.
   - Destroys only the scenario assigned to that job in an unconditional
     cleanup step.
 
