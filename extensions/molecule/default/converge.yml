@@ -142,6 +142,23 @@
           - "'asu_upgrade_packages=1' in router_system_uci.stdout"
           - "'log_ip=192.0.2.234' in router_system_uci.stdout"
 
+    - name: Verify system settings are persisted
+      ansible.builtin.raw: |
+        grep -F "option hostname 'molecule-test-router'" /etc/config/system || exit 1
+        grep -F "option timezone 'UTC'" /etc/config/system || exit 1
+        grep -F "option zonename 'Etc/UTC'" /etc/config/system || exit 1
+        grep -F "option enabled '0'" /etc/config/system || exit 1
+        grep -F "list server '0.example.invalid'" /etc/config/system || exit 1
+        grep -F "list server '1.example.invalid'" /etc/config/system || exit 1
+        grep -F "option log_proto 'udp'" /etc/config/system || exit 1
+        grep -F "option conloglevel '8'" /etc/config/system || exit 1
+        grep -F "option cronloglevel '7'" /etc/config/system || exit 1
+        grep -F "option auto_search '0'" /etc/config/attendedsysupgrade || exit 1
+        grep -F "option login_check_for_upgrades '1'" /etc/config/attendedsysupgrade || exit 1
+        grep -F "option upgrade_packages '1'" /etc/config/attendedsysupgrade || exit 1
+        grep -F "option log_ip '192.0.2.234'" /etc/config/system || exit 1
+      changed_when: false
+
     - name: Calculate package list for a changed managed service list
       ansible.builtin.include_role:
         name: router_packages
