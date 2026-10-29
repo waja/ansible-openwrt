@@ -53,8 +53,10 @@
       )
       or
       (
-        "firewall.ansible_router_firewall_dropbear_extra_wan.name='Ansible managed Dropbear extra ports WAN'"
-        not in router_firewall_uci.result
+        (
+          "firewall.ansible_router_firewall_dropbear_extra_wan.name="
+          "'Ansible managed Dropbear extra ports WAN'"
+        ) not in router_firewall_uci.result
       )
       or
       (
