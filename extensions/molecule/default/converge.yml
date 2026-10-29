@@ -144,8 +144,7 @@
 
     - name: Verify system settings are applied at runtime
       ansible.builtin.raw: |
-        test "$(cat /proc/sys/kernel/hostname)" = molecule-test-router ||
-          exit 1
+        test "$(cat /proc/sys/kernel/hostname)" = molecule-test-router || exit 1
         if [ -L /tmp/localtime ]; then
           test "$(readlink /tmp/localtime)" = \
             /usr/share/zoneinfo/Europe/Berlin || exit 1
