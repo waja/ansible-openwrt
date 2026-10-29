@@ -113,27 +113,48 @@
       }}
   changed_when: false
 
-- name: Remove obsolete managed Dropbear listeners
-  community.openwrt.uci:
-    command: absent
-    key: "dropbear.ansible_router_system_extra_{{ item }}"
-    autocommit: true
+- name: Initialize Dropbear UCI operations
+  ansible.builtin.set_fact:
+    router_system_dropbear_operations: []
+  changed_when: false
+
+- name: Add obsolete Dropbear listeners to UCI operations
+  ansible.builtin.set_fact:
+    router_system_dropbear_operations: >-
+      {{
+        router_system_dropbear_operations +
+        [{
+          'command': 'absent',
+          'key': 'dropbear.ansible_router_system_extra_' ~ item
+        }]
+      }}
   loop: >-
     {{
       router_system_dropbear_managed_ports
       | difference(router_system_dropbear_extra_ports | map('int') | list)
     }}
-  notify: Restart Dropbear
+  changed_when: false
 
-- name: Configure managed additional Dropbear listeners
-  community.openwrt.uci:
-    command: section
-    config: dropbear
-    type: dropbear
-    name: "ansible_router_system_extra_{{ item }}"
-    value:
-      Port: "{{ item }}"
-    replace: true
-    autocommit: true
+- name: Add configured Dropbear listeners to UCI operations
+  ansible.builtin.set_fact:
+    router_system_dropbear_operations: >-
+      {{
+        router_system_dropbear_operations +
+        [{
+          'command': 'section',
+          'config': 'dropbear',
+          'type': 'dropbear',
+          'name': 'ansible_router_system_extra_' ~ item,
+          'value': {'Port': item | string},
+          'replace': true
+        }]
+      }}
   loop: "{{ router_system_dropbear_extra_ports | map('int') | list }}"
+  changed_when: false
+
+- name: Apply Dropbear listener changes in one UCI transaction
+  community.openwrt.uci:
+    autocommit: true
+    operations: "{{ router_system_dropbear_operations }}"
+  when: router_system_dropbear_operations | length > 0
   notify: Restart Dropbear
