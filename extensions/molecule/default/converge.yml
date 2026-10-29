@@ -144,6 +144,14 @@
 
     - name: Verify system settings are persisted
       ansible.builtin.raw: |
+        test -z "$(uci changes system)" || {
+          echo "Uncommitted changes remain in system UCI configuration"
+          exit 1
+        }
+        test -z "$(uci changes attendedsysupgrade)" || {
+          echo "Uncommitted changes remain in attendedsysupgrade"
+          exit 1
+        }
         grep -F "option hostname 'molecule-test-router'" \
           /etc/config/system || exit 1
         grep -F "option timezone 'UTC'" /etc/config/system || exit 1
