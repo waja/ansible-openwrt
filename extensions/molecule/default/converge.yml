@@ -144,12 +144,25 @@
 
     - name: Verify system settings are applied at runtime
       ansible.builtin.raw: |
-        test "$(cat /proc/sys/kernel/hostname)" = molecule-test-router || exit 1
+        actual_hostname="$(cat /proc/sys/kernel/hostname)"
+        if [ "$actual_hostname" != molecule-test-router ]; then
+          echo "Unexpected runtime hostname: $actual_hostname"
+          exit 1
+        fi
         if [ -L /tmp/localtime ]; then
-          test "$(readlink /tmp/localtime)" = \
-            /usr/share/zoneinfo/Europe/Berlin || exit 1
+          actual_timezone="$(readlink /tmp/localtime)"
+          if [ "$actual_timezone" != \
+            /usr/share/zoneinfo/Europe/Berlin ]; then
+            echo "Unexpected runtime timezone link: $actual_timezone"
+            exit 1
+          fi
         else
-          test "$(cat /tmp/TZ)" = 'CET-1CEST,M3.5.0,M10.5.0/3' || exit 1
+          actual_timezone="$(cat /tmp/TZ)"
+          if [ "$actual_timezone" != \
+            'CET-1CEST,M3.5.0,M10.5.0/3' ]; then
+            echo "Unexpected runtime TZ value: $actual_timezone"
+            exit 1
+          fi
         fi
       changed_when: false
 
