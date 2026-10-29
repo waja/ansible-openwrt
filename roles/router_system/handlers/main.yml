@@ -1,0 +1,8 @@
+# roles/router_system/handlers/main.yml
+---
+- name: Apply router system configuration
+  ansible.builtin.raw: |
+    /etc/init.d/system reload &&
+    /etc/init.d/log restart &&
+    /etc/init.d/sysntpd restart
+  changed_when: true
