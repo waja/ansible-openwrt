@@ -159,6 +159,11 @@ for release versions, image tags, container names, paths, and CI matrix values.
     `ansible.builtin.command` for generic tasks
   - `community.openwrt.uci` for UCI operations
 - Give tasks descriptive names (`name:`), in English
+- Give each project-owned role in the production playbooks a role-level tag
+  matching its role name (for example, `router_base`). Keep
+  `community.openwrt.init` tagged `always` so it still initializes OpenWrt
+  when a single role is selected with `--tags`. Do not add task-name tags
+  or change handler/lock behavior just to support role-level selection.
 - In `converge.yml`: pass test values directly to `include_role` via
   `vars:` so they are visible and scoped
 - Do not use `command`/`shell` when a module exists.
