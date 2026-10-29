@@ -72,3 +72,68 @@
     key: system.@system[0].log_ip
     value: "{{ router_system_log_ip }}"
   when: router_system_log_ip is defined
+
+- name: Validate additional Dropbear ports
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_system_dropbear_extra_ports | map('int') | list | length ==
+        (
+          router_system_dropbear_extra_ports | map('int') | unique |
+          list | length
+        )
+      - >-
+        router_system_dropbear_extra_ports | map('int') |
+        select('lt', 1) | list | length == 0
+      - >-
+        router_system_dropbear_extra_ports | map('int') |
+        select('gt', 65535) | list | length == 0
+      - "22 not in (router_system_dropbear_extra_ports | map('int') | list)"
+    fail_msg: >-
+      Additional Dropbear ports must be unique TCP ports from 1 to 65535,
+      excluding the default SSH port 22.
+
+- name: Read Dropbear configuration
+  community.openwrt.uci:
+    command: show
+    config: dropbear
+  register: router_system_dropbear_config
+  changed_when: false
+
+- name: Find managed additional Dropbear ports
+  ansible.builtin.set_fact:
+    router_system_dropbear_managed_ports: >-
+      {{
+        router_system_dropbear_config.result
+        | regex_findall(
+            '(?m)^dropbear\.ansible_router_system_extra_([0-9]+)=dropbear$'
+          )
+        | map('int')
+        | list
+      }}
+  changed_when: false
+
+- name: Remove obsolete managed Dropbear listeners
+  community.openwrt.uci:
+    command: absent
+    key: "dropbear.ansible_router_system_extra_{{ item }}"
+    autocommit: true
+  loop: >-
+    {{
+      router_system_dropbear_managed_ports
+      | difference(router_system_dropbear_extra_ports | map('int') | list)
+    }}
+  notify: Restart Dropbear
+
+- name: Configure managed additional Dropbear listeners
+  community.openwrt.uci:
+    command: section
+    config: dropbear
+    type: dropbear
+    name: "ansible_router_system_extra_{{ item }}"
+    value:
+      Port: "{{ item }}"
+    replace: true
+    autocommit: true
+  loop: "{{ router_system_dropbear_extra_ports | map('int') | list }}"
+  notify: Restart Dropbear

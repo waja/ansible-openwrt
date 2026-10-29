@@ -42,6 +42,9 @@ Selecting a role does not automatically run other project roles that it may
 depend on. The OpenWrt initialization role still runs automatically. The
 `router_network` role can interrupt connectivity when runtime changes apply.
 
+For additional Dropbear SSH ports and optional WAN access, see
+[the router configuration guide](docs/configuration.md#configure-additional-dropbear-ssh-ports).
+
 ## Requirements
 
 - SSH access to each OpenWrt router, typically with a configured SSH key.
@@ -215,8 +218,10 @@ See the [router configuration guide](docs/configuration.md) for the complete ins
 
 - `playbooks/site.yml` — standard router configuration
 - `playbooks/audit_packages.yml` — installed-package audit
-- `roles/router_system/` — hostname, timezone, NTP, logging, and ASU settings
-- `roles/router_firewall/` — configurable firewall default policies
+- `roles/router_system/` — hostname, timezone, NTP, logging, ASU settings,
+  and optional additional Dropbear listeners
+- `roles/router_firewall/` — firewall default policies and optional WAN
+  access for additional Dropbear ports
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
 - `roles/router_network/` — IPv4 interface addressing and DHCP server control

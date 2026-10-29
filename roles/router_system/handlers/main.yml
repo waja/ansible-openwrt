@@ -1,0 +1,6 @@
+# roles/router_system/handlers/main.yml
+---
+- name: Restart Dropbear
+  community.openwrt.service:
+    name: dropbear
+    state: restarted

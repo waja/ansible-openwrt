@@ -1,0 +1,6 @@
+# roles/router_firewall/handlers/main.yml
+---
+- name: Reload firewall
+  community.openwrt.service:
+    name: firewall
+    state: reloaded
