@@ -177,6 +177,20 @@
           - "'dropbear_2222=2222' in router_system_uci.stdout"
           - "'dropbear_2223=2223' in router_system_uci.stdout"
 
+    - name: Verify Dropbear listeners are persisted
+      ansible.builtin.raw: |
+        test -z "$(uci changes dropbear)" || {
+          echo "Uncommitted changes remain in Dropbear UCI configuration"
+          exit 1
+        }
+        grep -F "config dropbear 'ansible_router_system_extra_2222'" \
+          /etc/config/dropbear || exit 1
+        grep -F "option Port '2222'" /etc/config/dropbear || exit 1
+        grep -F "config dropbear 'ansible_router_system_extra_2223'" \
+          /etc/config/dropbear || exit 1
+        grep -F "option Port '2223'" /etc/config/dropbear || exit 1
+      changed_when: false
+
     - name: Calculate package list for a changed managed service list
       ansible.builtin.include_role:
         name: router_packages
