@@ -206,3 +206,4 @@
       ansible.builtin.assert:
         that:
           - router_packages_install_list == ['busybox', 'snmpd']
+      changed_when: false
