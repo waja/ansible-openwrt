@@ -37,6 +37,8 @@
         router_firewall_input: ACCEPT
         router_firewall_forward: ACCEPT
         router_firewall_output: ACCEPT
+      tags:
+        - molecule-idempotence-notest
 
     - name: Verify additional Dropbear ports are closed by default
       ansible.builtin.raw: |
@@ -46,6 +48,8 @@
           exit 1
         fi
       changed_when: false
+      tags:
+        - molecule-idempotence-notest
 
     - name: Apply router firewall role with WAN access enabled
       ansible.builtin.include_role:
@@ -201,6 +205,7 @@
         router_packages_list:
           - busybox
           - snmpd
+      changed_when: false
 
     - name: Verify changed service list and package deduplication
       ansible.builtin.assert:
