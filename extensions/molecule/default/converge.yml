@@ -13,8 +13,8 @@
         name: router_system
       vars:
         router_system_hostname: molecule-test-router
-        router_system_timezone: UTC
-        router_system_timezone_name: Etc/UTC
+        router_system_timezone: CET-1CEST,M3.5.0,M10.5.0/3
+        router_system_timezone_name: Europe/Berlin
         router_system_ntp_enabled: false
         router_system_ntp_servers:
           - 0.example.invalid
@@ -162,8 +162,8 @@
       ansible.builtin.assert:
         that:
           - "'hostname=molecule-test-router' in router_system_uci.stdout"
-          - "'timezone=UTC' in router_system_uci.stdout"
-          - "'zonename=Etc/UTC' in router_system_uci.stdout"
+          - "'timezone=CET-1CEST,M3.5.0,M10.5.0/3' in router_system_uci.stdout"
+          - "'zonename=Europe/Berlin' in router_system_uci.stdout"
           - "'ntp_enabled=0' in router_system_uci.stdout"
           - "'0.example.invalid' in router_system_uci.stdout"
           - "'1.example.invalid' in router_system_uci.stdout"
