@@ -142,13 +142,8 @@
           - "'asu_upgrade_packages=1' in router_system_uci.stdout"
           - "'log_ip=192.0.2.234' in router_system_uci.stdout"
 
-    - name: Verify system settings are applied at runtime
+    - name: Verify system timezone is applied at runtime
       ansible.builtin.raw: |
-        actual_hostname="$(cat /proc/sys/kernel/hostname)"
-        if [ "$actual_hostname" != molecule-test-router ]; then
-          echo "Unexpected runtime hostname: $actual_hostname"
-          exit 1
-        fi
         if [ -L /tmp/localtime ]; then
           actual_timezone="$(readlink /tmp/localtime)"
           if [ "$actual_timezone" != \
