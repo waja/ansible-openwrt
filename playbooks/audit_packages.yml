@@ -5,5 +5,9 @@
   gather_facts: false
 
   roles:
-    - community.openwrt.init
-    - router_package_audit
+    - role: community.openwrt.init
+      tags:
+        - always
+    - role: router_package_audit
+      tags:
+        - router_package_audit

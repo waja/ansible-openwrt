@@ -25,6 +25,23 @@ inventory and customize variables there.
 
 Both playbooks target the `openwrt` inventory group.
 
+### Run selected roles
+
+The standard playbook supports role-level tags matching the role names:
+`router_network`, `router_system`, `router_firewall`, `router_packages`,
+and `router_base`. For example, to run only the base-service role on one
+router:
+
+```bash
+ansible-playbook -i inventory.ini playbooks/site.yml \
+  --limit router1 --tags router_base
+```
+
+Use `--list-tasks --tags router_base` to inspect the selected tasks first.
+Selecting a role does not automatically run other project roles that it may
+depend on. The OpenWrt initialization role still runs automatically. The
+`router_network` role can interrupt connectivity when runtime changes apply.
+
 ## Requirements
 
 - SSH access to each OpenWrt router, typically with a configured SSH key.

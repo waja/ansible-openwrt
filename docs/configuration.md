@@ -11,6 +11,22 @@ then initializes OpenWrt, applies system and firewall settings, installs the
 configured packages, and configures base services while removing obsolete
 configuration files.
 
+### Run a selected role
+
+Each project-owned role in `playbooks/site.yml` has a tag matching its role
+name. For example, to run the base-service role against one router:
+
+```bash
+ansible-playbook -i inventory.ini playbooks/site.yml \
+  --limit router1 --tags router_base
+```
+
+Available role tags are `router_network`, `router_system`,
+`router_firewall`, `router_packages`, and `router_base`. OpenWrt
+initialization runs automatically. Selecting one role does not automatically
+run other project roles that may be prerequisites. Review the selected tasks
+before execution; `router_network` can interrupt connectivity.
+
 ### Configure firewall defaults
 
 The `router_firewall` role manages only the default firewall policies for
