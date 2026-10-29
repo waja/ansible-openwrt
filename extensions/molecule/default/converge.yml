@@ -205,7 +205,6 @@
         router_packages_list:
           - busybox
           - snmpd
-      changed_when: false
 
     - name: Verify changed service list and package deduplication
       ansible.builtin.assert:
