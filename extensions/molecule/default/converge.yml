@@ -19,8 +19,8 @@
         router_system_ntp_servers:
           - 0.example.invalid
           - 1.example.invalid
-        router_system_log_proto: udp
-        router_system_conloglevel: 8
+        router_system_log_proto: tcp
+        router_system_conloglevel: 4
         router_system_cronloglevel: 7
         router_system_asu_auto_search: 0
         router_system_asu_login_check_for_upgrades: 1
@@ -134,13 +134,25 @@
           - "'ntp_enabled=0' in router_system_uci.stdout"
           - "'0.example.invalid' in router_system_uci.stdout"
           - "'1.example.invalid' in router_system_uci.stdout"
-          - "'log_proto=udp' in router_system_uci.stdout"
-          - "'conloglevel=8' in router_system_uci.stdout"
+          - "'log_proto=tcp' in router_system_uci.stdout"
+          - "'conloglevel=4' in router_system_uci.stdout"
           - "'cronloglevel=7' in router_system_uci.stdout"
           - "'asu_auto_search=0' in router_system_uci.stdout"
           - "'asu_login_check_for_upgrades=1' in router_system_uci.stdout"
           - "'asu_upgrade_packages=1' in router_system_uci.stdout"
           - "'log_ip=192.0.2.234' in router_system_uci.stdout"
+
+    - name: Verify system settings are applied at runtime
+      ansible.builtin.raw: |
+        test "$(cat /proc/sys/kernel/hostname)" = molecule-test-router ||
+          exit 1
+        if [ -L /tmp/localtime ]; then
+          test "$(readlink /tmp/localtime)" = \
+            /usr/share/zoneinfo/Europe/Berlin || exit 1
+        else
+          test "$(cat /tmp/TZ)" = 'CET-1CEST,M3.5.0,M10.5.0/3' || exit 1
+        fi
+      changed_when: false
 
     - name: Verify system settings are persisted
       ansible.builtin.raw: |
@@ -161,8 +173,8 @@
         grep -F "option enabled '0'" /etc/config/system || exit 1
         grep -F "list server '0.example.invalid'" /etc/config/system || exit 1
         grep -F "list server '1.example.invalid'" /etc/config/system || exit 1
-        grep -F "option log_proto 'udp'" /etc/config/system || exit 1
-        grep -F "option conloglevel '8'" /etc/config/system || exit 1
+        grep -F "option log_proto 'tcp'" /etc/config/system || exit 1
+        grep -F "option conloglevel '4'" /etc/config/system || exit 1
         grep -F "option cronloglevel '7'" /etc/config/system || exit 1
         grep -F "option auto_search '0'" \
           /etc/config/attendedsysupgrade || exit 1
