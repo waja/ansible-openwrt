@@ -156,7 +156,8 @@
           /etc/config/system || exit 1
         grep -F "option timezone 'CET-1CEST,M3.5.0,M10.5.0/3'" \\
           /etc/config/system || exit 1
-        grep -F "option zonename 'Europe/Berlin'" /etc/config/system || exit 1
+        grep -F "option zonename 'Europe/Berlin'" \\
+          /etc/config/system || exit 1
         grep -F "option enabled '0'" /etc/config/system || exit 1
         grep -F "list server '0.example.invalid'" /etc/config/system || exit 1
         grep -F "list server '1.example.invalid'" /etc/config/system || exit 1
