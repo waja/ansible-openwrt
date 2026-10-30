@@ -524,12 +524,25 @@
 
 - name: Apply firewall configuration in one UCI transaction
   block:
+    - name: Check whether staged firewall configuration would change
+      community.openwrt.uci:
+        autocommit: true
+        operations: "{{ router_firewall_operations }}"
+      check_mode: true
+      register: router_firewall_check_result
+      changed_when: false
+      when: router_firewall_operations | length > 0
+
     - name: Apply staged firewall configuration and commit once
       community.openwrt.uci:
         autocommit: true
         operations: "{{ router_firewall_operations }}"
       register: router_firewall_apply_result
-      when: router_firewall_operations | length > 0
+      when:
+        - router_firewall_operations | length > 0
+        - >-
+          router_firewall_check_result.operations | default([])
+          | selectattr('changed', 'equalto', true) | list | length > 0
       notify: Reload firewall
   rescue:
     - name: Discard uncommitted firewall UCI changes after an error
