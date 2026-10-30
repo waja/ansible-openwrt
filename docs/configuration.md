@@ -113,8 +113,14 @@ zone is adopted by assigning the requested section ID; no match creates a
 new named zone. An existing named section always takes precedence over
 anonymous matches. Multiple matches fail during validation, before any UCI
 writes. The lookup uses UCI `find_all`, so multiple anonymous matches
-are detected rather than silently selecting the first result. Safe removal
-and the remaining zone options are tracked separately.
+are detected rather than silently selecting the first result. Zones can be
+removed with `state: absent`. The role resolves the target using the same
+named-section precedence and unique anonymous-zone matching
+as updates. Before staging any writes, it checks rule, redirect, and
+forwarding `src` and `dest` references. Removal is rejected while any of
+those objects still references the zone; dependent objects are never
+cascade-deleted. An absent zone that no longer exists is a no-op. The
+remaining zone options and `null` removal semantics are tracked separately.
 
 The role validates the complete declared zone input before applying UCI
 changes. Default policies, declared zones, and the optional Dropbear WAN
