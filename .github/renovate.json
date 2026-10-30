@@ -6,7 +6,7 @@
   "reviewers": ["waja"],
   "pip-compile": {
     "managerFilePatterns": [
-      "/^requirements\\/ci\\/(lint|ansible-test|molecule)\\.in$/"
+      "/^requirements\\/ci\\/(lint|ansible-test|molecule)\\.txt$/"
     ]
   },
   "pip_requirements": {
