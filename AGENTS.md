@@ -35,7 +35,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   git-ignored
 - `requirements.yml` – authoritative, version-pinned source for
   Ansible role and collection dependencies used locally and in CI.
-- `.github/workflows/molecule.yml` – main CI pipeline
+- `.github/workflows/molecule.yml` – main Ansible/Molecule CI pipeline
+- `.github/workflows/script-tests.yml` – state-discovery script smoke tests
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
 
 The repository is **not** a full Ansible collection. There is no
@@ -60,6 +61,25 @@ needs no documentation update, no documentation-only edit is required.
 Keep the relevant operational details in `AGENTS.md` synchronized too,
 especially when changing development instructions, repository conventions,
 or CI workflows.
+
+### CI scope and path filters
+
+- Run tests only when at least one changed file can affect the checks they
+  perform. Prefer narrowly scoped jobs and job-level path filters when
+  workflow-level filters could leave a required check pending.
+- Keep script-specific tests in a dedicated workflow and trigger them for
+  changes to the relevant script directory (plus changes to that workflow).
+- Changes limited to `scripts/**`, Markdown, `LICENSE*`, the script-test
+  workflow, lint workflow/configuration (`.shellcheckrc`, `.codespellrc`,
+  `.markdownlint-cli2.jsonc`), and Renovate configuration must not run the
+  main Molecule test matrix when they cannot affect Ansible behavior.
+- Keep scheduled smoke tests and manual `workflow_dispatch` available when
+  path filters are used.
+- GitHub path filters evaluate the complete change set: a documentation or
+  script change must not suppress tests when the same change also includes a
+  relevant file. Job-level skips complete as skipped checks; workflow-level
+  path filters can leave a required check pending, so verify branch protection
+  and prefer job-level filters when in doubt.
 
 Use `docs/reference-projects.md` as a curated set of external
 Ansible/OpenWrt examples when researching relevant design questions,
@@ -137,6 +157,7 @@ for release versions, image tags, container names, paths, and CI matrix values.
 ## Code style
 
 ### Line length
+
 - Maximum 80 characters per physical line, by convention for all
   file types.
 - `yamllint` enforces this for YAML files, including block scalars
@@ -145,6 +166,7 @@ for release versions, image tags, container names, paths, and CI matrix values.
   line cannot be wrapped (e.g. a long URL).
 
 ### YAML
+
 - 2-space indentation, no tabs
 - Start every YAML file with a comment containing its repository-relative
   path, followed by `---`
@@ -154,16 +176,12 @@ for release versions, image tags, container names, paths, and CI matrix values.
   YAML scalars inside embedded JavaScript or shell.
 
 ### Ansible
+
 - Always use FQCN:
   - `ansible.builtin.include_role`, `ansible.builtin.raw`,
     `ansible.builtin.command` for generic tasks
   - `community.openwrt.uci` for UCI operations
 - Give tasks descriptive names (`name:`), in English
-- Give each project-owned role in the production playbooks a role-level tag
-  matching its role name (for example, `router_base`). Keep
-  `community.openwrt.init` tagged `always` so it still initializes OpenWrt
-  when a single role is selected with `--tags`. Do not add task-name tags
-  or change handler/lock behavior just to support role-level selection.
 - In `converge.yml`: pass test values directly to `include_role` via
   `vars:` so they are visible and scoped
 - Do not use `command`/`shell` when a module exists.
@@ -201,6 +219,7 @@ for release versions, image tags, container names, paths, and CI matrix values.
 - Keep validation proportional to the risk and complexity of the input.
 
 ### Role variables
+
 - Must be prefixed with the role name:
   `router_system_hostname`, `router_packages_list`; `router_hostname_value`
   remains supported as a legacy hostname input
@@ -362,11 +381,14 @@ The workflow file is the source of truth. Keep this section synchronized
 with it.
 
 - Python version: `3.14`
-- Triggers: `workflow_dispatch`, a weekly schedule (Sunday at 06:17 UTC),
-  `pull_request`, and pushes to `development` and `master`.
-  **Note:** `$default-branch` is only a template macro for starter
-  workflows, not a runtime expression in `branches` filters. Use the
-  actual branch name.
+- Triggers: `workflow_dispatch`, weekly schedules (Sunday at 06:17 and
+  07:17 UTC), pull requests, and pushes to `development` and `master`.
+  The workflow starts for all push and pull-request events so required checks
+  are not left pending by workflow-level path filters. A change-detection job
+  skips the Molecule matrix when changes are limited to `scripts/**`, Markdown
+  files, `LICENSE*`, the script-test/lint workflows, lint configuration, and
+  Renovate configuration. Scheduled and manual runs always run the Molecule
+  matrix.
 
 ### Jobs
 
@@ -384,15 +406,15 @@ with it.
   - Depend on `lint` and `check-structure`.
   - Run only when `has_collection == 'true'`.
   - Use `ansible-test` with `${{ env.ANSIBLE_PYTHON_VERSION }}`.
-- `script-tests`
-  - Runs shell syntax and command-line smoke tests for
-    `scripts/owrt-extra.sh` in the regular OpenWrt 25.12 image.
 - `molecule`
-  - Depends on `lint`, `sanity`, `units`.
+  - Depends on `changes`, `check-structure`, `lint`, `sanity`, and
+    `units`. It runs only after structure and lint prerequisites pass.
   - Installs pinned roles and collections from `requirements.yml` into
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
-  - Uses `if: ${{ !cancelled() && !failure() }}` so it still runs when
-    `sanity`/`units` are skipped.
+  - Runs for scheduled/manual events, when relevant paths change, or when
+    the `changes` detector fails. It skips the matrix only when detection
+    succeeds and changes are limited to scripts, Markdown, licenses, or
+    script/lint workflow configuration.
   - Sets `MOLECULE_GLOB` to discover scenarios under
     `extensions/molecule/`.
   - Matrix lists OpenWrt release versions and scenarios `default`,
@@ -416,9 +438,45 @@ with it.
     Pull requests, pushes, and manual runs use the regular image.
   - Destroys only the scenario assigned to that job in an unconditional
     cleanup step.
+- `molecule-status`
+  - Exposes the stable `Molecule` check. Configure branch protection to
+    require this aggregate check, not the individual matrix jobs.
+  - Succeeds for intentional matrix skips and fails when a prerequisite or
+    any executed matrix job fails.
 
 When changing the workflow, update this section to reflect actual job
 dependencies, conditions, matrix, and commands.
+
+### State discovery script tests (`.github/workflows/script-tests.yml`)
+
+- The workflow starts for all pull requests and pushes to
+  `development`/`master`. A local full-history Git diff gates the test job
+  to changes under `scripts/**` or changes to this workflow file. It also
+  supports manual dispatch.
+- Runs shell syntax and command-line smoke tests for
+  `scripts/owrt-extra.sh` in the regular OpenWrt 25.12 image.
+- The local diff avoids GitHub's changed-file API limit; if the base commit
+  is unavailable, tests run by default.
+- Does not depend on the Molecule matrix, so script-only changes avoid
+  Ansible/Molecule integration tests.
+
+### Script and documentation lint (`.github/workflows/lint-scripts-docs.yml`)
+
+- Starts for pull requests, pushes to `development`/`master`, and manual
+  dispatch. Local full-history Git diffing gates the relevant jobs; workflow
+  and lint-configuration changes run the applicable checks. If the base
+  commit is unavailable or diffing fails, all checks run.
+- Shell changes under `scripts/**` are checked with ShellCheck in POSIX
+  shell mode. Changes to `.shellcheckrc` also trigger ShellCheck. The existing
+  OpenWrt 25.12 smoke tests remain separate in
+  `.github/workflows/script-tests.yml`.
+- Markdown files are checked with `markdownlint-cli2` and `codespell`.
+  Markdown line length is not enforced because long URLs, tables, and code
+  examples are common in this repository. HTML in Markdown and documents
+  without a first-line H1 are permitted.
+- Spelling checks catch likely misspellings; they are not a grammar or
+  language-quality assessment. Keep documentation in English and review
+  wording as part of normal code review.
 
 ### Docker Ansible CI (`.github/workflows/docker-ansible.yml`)
 
