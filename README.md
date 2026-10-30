@@ -26,7 +26,8 @@ Both playbooks target the `openwrt` inventory group.
 
 For additional Dropbear SSH ports and optional WAN access, see
 [the router configuration guide](docs/configuration.md#configure-additional-dropbear-ssh-ports).
-For basic declarative firewall zones, see the
+For declarative firewall zones, including anonymous factory-zone adoption,
+see the
 [firewall configuration guide](docs/configuration.md#configure-firewall-defaults-and-zones).
 
 ## Requirements

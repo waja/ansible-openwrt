@@ -40,6 +40,135 @@
           - router_firewall_updated_input.result == 'DROP'
           - router_firewall_preserved_network.result == 'lan'
 
+    - name: Create an anonymous duplicate for named-section precedence
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: guest_test
+          - command: add_list
+            key: firewall.@zone[-1].network
+            value: lan
+
+    - name: >-
+        Reapply the existing named zone in the presence of an anonymous
+        duplicate
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          guest_test:
+            input: DROP
+
+    - name: Verify the named zone remains authoritative
+      community.openwrt.uci:
+        command: get
+        key: firewall.guest_test.input
+      register: router_firewall_named_precedence
+      changed_when: false
+
+    - name: Find the anonymous duplicate that must remain untouched
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: guest_test
+      register: router_firewall_named_precedence_matches
+      changed_when: false
+
+    - name: Read firewall UCI output after named-section precedence check
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_named_precedence_show
+      changed_when: false
+
+    - name: Assert named-section precedence
+      ansible.builtin.assert:
+        that:
+          - router_firewall_named_precedence.result == 'DROP'
+          - router_firewall_named_precedence_matches.result_list | length == 2
+          - >-
+            router_firewall_named_precedence_show.result
+            is search("firewall\\.@zone\\[[0-9]+\\]\\.name='guest_test'")
+
+    - name: Create two anonymous zones with an ambiguous name
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: ambig_test
+          - command: add_list
+            key: firewall.@zone[-1].network
+            value: lan
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: ambig_test
+          - command: add_list
+            key: firewall.@zone[-1].network
+            value: lan
+
+    - name: Capture ambiguous anonymous zone validation
+      block:
+        - name: Attempt to adopt an ambiguous anonymous firewall zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              ambig_test:
+                network:
+                  - lan
+      rescue:
+        - name: Record the ambiguous zone validation failure
+          ansible.builtin.set_fact:
+            router_firewall_ambiguous_zone_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify ambiguous anonymous zones fail during validation
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_ambiguous_zone_failure
+            == 'Reject ambiguous anonymous firewall zone matches'
+
+    - name: Verify ambiguous input did not create a named section
+      community.openwrt.uci:
+        command: get
+        key: firewall.ambig_test
+      register: router_firewall_ambiguous_named_zone
+      changed_when: false
+      failed_when: false
+
+    - name: Verify both ambiguous anonymous sections remain
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: ambig_test
+      register: router_firewall_ambiguous_matches
+      changed_when: false
+
+    - name: Assert ambiguous configuration remains unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_ambiguous_named_zone.result | default('') == ''
+          - router_firewall_ambiguous_matches.result_list | length == 2
+
     - name: Capture invalid firewall zone option validation
       block:
         - name: Attempt to configure a zone with an invalid boolean

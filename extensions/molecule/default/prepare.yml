@@ -12,3 +12,20 @@
       retries: 30
       delay: 2
       changed_when: false
+
+    - name: Create an anonymous factory-style firewall zone for adoption
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: guest_test
+          - command: add_list
+            key: firewall.@zone[-1].network
+            value: lan
+          - command: set
+            key: firewall.@zone[-1].input
+            value: REJECT

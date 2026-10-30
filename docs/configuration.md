@@ -107,11 +107,14 @@ non-empty YAML list of strings. Policy values are `ACCEPT`, `REJECT`,
 or `DROP`; `masq` and `mtu_fix` must be YAML booleans. Omitted zones
 and options are left untouched.
 
-Anonymous factory zones are not adopted in this initial step. If a zone
-with the requested name exists only as an anonymous section, the role fails
-with an actionable error rather than creating a duplicate. Anonymous-zone
-adoption, safe removal, and the remaining zone options are tracked as
-follow-up work.
+When no named section with the requested UCI section ID exists, the role
+searches for zones with the desired name. Exactly one matching anonymous
+zone is adopted by assigning the requested section ID; no match creates a
+new named zone. An existing named section always takes precedence over
+anonymous matches. Multiple matches fail during validation, before any UCI
+writes. The lookup uses UCI `find_all`, so multiple anonymous matches
+are detected rather than silently selecting the first result. Safe removal
+and the remaining zone options are tracked separately.
 
 The role validates the complete declared zone input before applying UCI
 changes. Default policies, declared zones, and the optional Dropbear WAN
