@@ -1,432 +1,90 @@
 # Router configuration
 
-## Configure the routers
+This guide explains how to apply the playbooks, select individual roles,
+organize inventory variables, and discover existing router configuration.
+Detailed role options and examples live in the corresponding role guides.
 
-Apply the standard configuration using the Docker command shown in the
-Docker section above. To target one router, add `--limit router1` to that
-`ansible-playbook` command.
+## Apply the standard configuration
 
-The `site.yml` playbook configures explicitly selected network settings first,
-then initializes OpenWrt, applies system and firewall settings, installs the
-configured packages, and configures base services while removing obsolete
-configuration files.
+The `playbooks/site.yml` playbook applies the configured network settings
+first, initializes OpenWrt, and then runs the system, firewall, package,
+base-service, and optional SNMP roles.
 
-### Run a selected role
-
-Each project-owned role in `playbooks/site.yml` has a tag matching its role
-name. For example, to run the base-service role against one router:
-
-```bash
-ansible-playbook -i inventory.ini playbooks/site.yml \
-  --limit router1 --tags router_base
-```
-
-Available role tags are `router_network`, `router_system`,
-`router_firewall`, `router_packages`, `router_base`, and `router_snmpd`.
-The SNMP role is skipped unless `router_snmpd_enabled: true` is set. OpenWrt
-initialization runs automatically. Selecting one role does not automatically
-run other project roles that may be prerequisites. Review the selected tasks
-before execution; `router_network` can interrupt connectivity.
-
-### Configure additional Dropbear SSH ports
-
-The `router_system` role leaves the existing Dropbear configuration and
-port 22 untouched by default. Set
-`router_system_dropbear_extra_ports` to configure role-owned Dropbear
-listeners on additional TCP ports. OpenWrt's UCI configuration has one
-`Port` option per Dropbear section, so each additional port uses a separate
-listener section. These listeners use the router's existing system accounts
-and SSH authorized keys; no separate credentials are created.
-
-For example, in `host_vars/router1.yml`:
-
-```yaml
----
-router_system_dropbear_extra_ports:
-  - 2222
-  - 2223
-```
-
-The role restarts Dropbear when its managed listener changes. Setting the
-list back to empty removes only the role-owned additional listener.
-
-WAN access is a separate, opt-in setting managed by `router_firewall`.
-Set `router_firewall_dropbear_extra_ports` to the same list of ports that
-is configured in `router_system_dropbear_extra_ports`. The additional ports
-remain closed on WAN by default because
-`router_firewall_dropbear_wan_zone` defaults to an empty string. Set it to
-the desired firewall zone (for example, `wan`) to allow TCP access to the
-configured additional ports from that zone. This affects only the additional
-ports; the existing firewall policy for port 22 is left unchanged.
-
-```yaml
----
-router_system_dropbear_extra_ports:
-  - 2222
-router_firewall_dropbear_extra_ports:
-  - 2222
-router_firewall_dropbear_wan_zone: wan
-```
-
-Expose SSH to the Internet only when necessary. Prefer key-based
-authentication and restrict source addresses where your network design
-permits. The firewall rule allows TCP traffic to the configured additional
-ports from the selected zone; it does not restrict source IP addresses.
-
-### Configure firewall defaults and zones
-
-The `router_firewall` role manages the default firewall policies for input,
-forwarding, and output. Its defaults are `REJECT`, `REJECT`, and `ACCEPT`,
-respectively. It can also manage basic, explicitly declared firewall zones
-and a dedicated WAN rule for additional Dropbear ports when enabled above.
-
-Declare zones as a mapping keyed by the desired UCI section ID:
-
-```yaml
----
-router_firewall_zones:
-  guest:
-    network:
-      - guest
-    input: REJECT
-    output: ACCEPT
-    forward: REJECT
-    masq: false
-    mtu_fix: true
-```
-
-The dictionary key is the stable UCI section ID and may contain only
-letters, digits, and underscores. The optional `name` option defaults to
-that key. Zone names must be at most 11 characters and start with a letter
-or underscore. An existing named section with the requested ID is updated
-in place; a missing section is created. If the ID already belongs to a
-non-zone section, the role fails before writing changes.
-
-This initial implementation supports `name`, `network`, `input`,
-`output`, `forward`, `masq`, and `mtu_fix`. `network` must be a
-non-empty YAML list of strings. Policy values are `ACCEPT`, `REJECT`,
-or `DROP`; `masq` and `mtu_fix` must be YAML booleans. Omitted zones
-and options are left untouched.
-
-When no named section with the requested UCI section ID exists, the role
-searches for zones with the desired name. Exactly one matching anonymous
-zone is adopted by assigning the requested section ID; no match creates a
-new named zone. An existing named section always takes precedence over
-anonymous matches. Multiple matches fail during validation, before any UCI
-writes. The lookup uses UCI `find_all`, so multiple anonymous matches
-are detected rather than silently selecting the first result. Zones can be
-removed with `state: absent`. The role resolves the target using the same
-named-section precedence and unique anonymous-zone matching
-as updates. Before staging any writes, it checks rule, redirect, and
-forwarding `src` and `dest` references. Removal is rejected while any of
-those objects still references the zone; dependent objects are never
-cascade-deleted. An absent zone that no longer exists is a no-op. The
-remaining zone options and `null` removal semantics are tracked separately.
-
-The role validates the complete declared zone input before applying UCI
-changes. Default policies, declared zones, and the optional Dropbear WAN
-rule are staged together and committed once. The firewall is reloaded once
-only when the configuration changes. Set
-`router_firewall_apply_runtime_changes: false` for configuration-only
-runs where the runtime reload must be deferred.
-
-**Caution:** Firewall changes over SSH can interrupt the management
-session. Ensure that you have an independent recovery path before changing
-zones or policies on a remote router. The role does not implement an
-automatic timed rollback.
-
-For an access point that should pass traffic without filtering at the
-firewall-defaults level, override the values in its `host_vars` file, for
-example `host_vars/accesspoint.yml`:
-
-```yaml
----
-router_firewall_input: ACCEPT
-router_firewall_forward: ACCEPT
-router_firewall_output: ACCEPT
-```
-
-**Caution:** `input: ACCEPT` allows traffic to services on the router, and
-`forward: ACCEPT` removes the default forwarding restriction. Use these
-settings only where appropriate for your network design. The role does not
-yet manage arbitrary firewall rules, redirects, forwardings, or SYN-flood
-protection.
-
-### Configure system settings
-
-The `router_system` role manages the hostname, timezone, NTP client, system
-logging options, and Attended Sysupgrade (ASU) client settings. Its defaults
-are defined in `roles/router_system/defaults/main.yml`.
-
-The logging defaults are `router_system_log_proto: udp`,
-`router_system_conloglevel: 8`, and `router_system_cronloglevel: 7`.
-The remote syslog destination has no default: set `router_system_log_ip`
-only for routers that should send logs to a central server. For example, in
-`host_vars/router1.yml`:
-
-```yaml
----
-router_system_log_ip: 192.0.2.234
-```
-
-Replace the documentation-only address with your actual syslog server
-address. If `router_system_log_ip` is undefined, the role leaves the
-existing UCI option unchanged.
-
-The role also configures these ASU client options:
-
-- `router_system_asu_auto_search: 0`
-- `router_system_asu_login_check_for_upgrades: 1`
-- `router_system_asu_upgrade_packages: 1`
-
-These settings only have an effect when the relevant ASU client components
-are installed. The role configures UCI options only; it does not install the
-package. Add `luci-app-attendedsysupgrade` to `router_packages_list` if it is
-not already present on the router. See the
-[OpenWrt ASU documentation](
-https://openwrt.org/docs/guide-user/installation/attended.sysupgrade).
-
-### Configure packages and managed services
-
-The `router_packages` role installs the packages listed in
-`router_packages_list` and derives additional packages from the services
-managed by `router_base`. The service list is configured with
-`router_base_services`; the mapping from service names to package names is
-`router_packages_service_package_map`, whose defaults are defined in
-`roles/router_packages/defaults/main.yml`.
-
-Each mapping entry is a list of packages. A service can therefore require
-multiple packages, and its service name does not have to match its package
-name. Every service in `router_base_services` must have an entry in the
-mapping; otherwise the package role fails with an assertion error. Duplicate
-package names are installed only once.
-
-Do not add packages to `router_packages_list` solely because they are
-required by a managed service. For example, `snmpd` and `xinetd` are
-installed automatically while they remain in the default `router_base_services`
-list and have their default mappings. Add packages to `router_packages_list`
-when you want them independently of the managed service list.
-
-The standard `playbooks/site.yml` playbook passes `router_base_services`
-to the package role. When using `router_packages` independently, set
-`router_packages_managed_services` yourself; it defaults to an empty list
-rather than assuming that every service in the mapping is managed.
-
-You can customize package lists and managed services in inventory variables
-without changing the playbook.
-
-#### Same package list for all routers
-
-Create `group_vars/openwrt.yml` next to your inventory file:
-
-```yaml
----
-router_packages_list:
-  - busybox
-  - openwrt-keyring
-  - rsync
-router_base_services:
-  - snmpd
-  - xinetd
-```
-
-All hosts in the `openwrt` group use these values unless overridden by
-host-specific variables. The example explicitly lists the default managed
-services to show where service management is configured; if you only want to
-change the package list, you do not need to set `router_base_services`.
-
-#### Different package lists per router
-
-For the inventory host `router1`, create `host_vars/router1.yml` next to
-the inventory file:
-
-```yaml
----
-router_packages_list:
-  - busybox
-  - openwrt-keyring
-```
-
-For `router2`, create `host_vars/router2.yml`:
-
-```yaml
----
-router_packages_list:
-  - busybox
-  - openwrt-keyring
-  - rsync
-  - uhttpd
-```
-
-Host-specific values override group variables. A host's
-`router_packages_list` replaces the group list completely; Ansible does not
-merge the two lists automatically. If you want common packages on every
-router, keep them in the group list and repeat the full desired list in each
-host-specific override.
-
-#### Map a custom managed service to packages
-
-If you add a service to `router_base_services`, add its package mapping too.
-For example, if the `example-daemon` service is provided by the
-`example-package` package, define both variables in inventory:
-
-```yaml
----
-router_base_services:
-  - snmpd
-  - example-daemon
-
-router_packages_service_package_map:
-  snmpd:
-    - snmpd
-  xinetd:
-    - xinetd
-  example-daemon:
-    - example-package
-```
-
-The mapping variable replaces the default mapping when set in inventory;
-include every mapping entry you still need, including the defaults for
-services you continue to manage. To make one service install multiple
-packages, list all of those package names under that service.
-
-You can combine group and host variables with the same unchanged playbook:
+Run the playbook against all routers in the `openwrt` inventory group:
 
 ```bash
 ansible-playbook -i inventory.ini playbooks/site.yml
-ansible-playbook -i inventory.ini playbooks/site.yml --limit router2
 ```
 
-### Configure the SNMP daemon
+To target one router, add `--limit router1`:
 
-The `router_snmpd` role is opt-in. Enable it explicitly and provide a
-non-empty community string in inventory, for example in
-`host_vars/router1.yml`:
-
-```yaml
----
-router_snmpd_enabled: true
-router_snmpd_community: "replace-with-a-long-random-community"
+```bash
+ansible-playbook -i inventory.ini playbooks/site.yml --limit router1
 ```
 
-The role replaces the package-provided `public` community in both IPv4 and
-IPv6 community-to-security mappings. It retains the existing read-only
-security name, group, view, and access mappings; it does not add a second
-community or change unrelated SNMP settings. The community must not be
-`public`, and there is no fallback value.
+Review the intended inventory changes before applying them. In particular,
+`router_network` can interrupt connectivity when it changes interface
+addressing.
 
-SNMPv2c community strings are transmitted without encryption. Use a unique,
-unguessable value and restrict access to UDP/161 at the network firewall to
-trusted monitoring hosts. This role does not manage firewall rules or
-SNMPv3 users.
+## Run a selected role
 
-Package installation and service enablement remain owned by
-`router_packages` and `router_base`; the SNMP role only updates UCI
-configuration and restarts `snmpd` when its community mapping changes.
-Run it with `--tags router_snmpd` after setting the two variables above.
+Each project-owned role in `playbooks/site.yml` has a tag matching its
+role name. For example:
 
-### Configure network settings
-
-The `router_network` role can configure IPv4 addressing on explicitly
-listed OpenWrt network interface sections. The default mode is `dhcp`, but
-the default empty `router_network_interfaces` mapping makes no interface
-changes. Only list interfaces that this role should manage.
-
-#### Obtain interface address, route, and DNS through DHCP
-
-For example, to configure the `wan` interface as a DHCP client:
-
-```yaml
----
-router_network_interface_mode: dhcp
-router_network_interfaces:
-  wan: {}
+```bash
+ansible-playbook -i inventory.ini playbooks/site.yml \
+  --limit router1 --tags router_firewall
 ```
 
-In DHCP mode, the role sets `proto=dhcp`, enables peer-provided DNS, and
-removes static address, netmask, gateway, and DNS options for each listed
-interface. The DHCP server must provide a default route and DNS information
-for those to become available.
+Available tags are `router_network`, `router_system`,
+`router_firewall`, `router_packages`, `router_base`, and
+`router_snmpd`. The SNMP role is skipped unless
+`router_snmpd_enabled: true` is set. OpenWrt initialization runs
+automatically. Selecting one role does not automatically run other project
+roles that may be prerequisites; review the selected tasks before execution.
 
-#### Configure a static interface
+## Role configuration guides
 
-For static mode, each listed interface needs an IPv4 address and netmask.
-Gateway and DNS are optional:
+| Role | Purpose | Guide |
+| --- | --- | --- |
+| `router_network` | Explicit IPv4 interface addressing and per-interface DHCP server status | [Network](roles/router_network.md) |
+| `router_system` | Hostname, timezone, NTP, logging, ASU client, and additional Dropbear listeners | [System](roles/router_system.md) |
+| `router_firewall` | Default policies, declarative zones, and optional Dropbear WAN access | [Firewall](roles/router_firewall.md) |
+| `router_packages` | Requested packages and packages required by managed services | [Packages](roles/router_packages.md) |
+| `router_base` | Core service enablement and obsolete configuration cleanup | [Base services](roles/router_base.md) |
+| `router_snmpd` | Optional SNMP community replacement | [SNMP daemon](roles/router_snmpd.md) |
+| `router_package_audit` | Compare installed packages with a saved baseline | [Package audit](roles/router_package_audit.md) |
 
-```yaml
----
-router_network_interface_mode: static
-router_network_interfaces:
-  lan:
-    ipaddr: 192.0.2.1
-    netmask: 255.255.255.0
-    gateway: 192.0.2.254
-    dns:
-      - 192.0.2.53
-      - 192.0.2.54
+## Organize inventory variables
+
+Use `group_vars/openwrt.yml` for settings shared by all routers and
+`host_vars/<inventory_hostname>.yml` for router-specific overrides.
+For example:
+
+```text
+inventory.ini
+group_vars/
+  openwrt.yml
+host_vars/
+  router1.yml
+  router2.yml
 ```
 
-Static mode disables peer-provided DNS and configures the supplied gateway
-and DNS servers. Omit `gateway` to remove a configured gateway, and omit
-`dns` to remove configured DNS servers. Interface changes trigger a network
-reload and may interrupt connectivity; apply them carefully on real routers.
+Ansible host variables override group variables. Extra variables passed
+with `-e` have higher precedence than both. A host-specific list replaces
+the group list; Ansible does not merge lists automatically.
 
-For controlled configuration-only runs, set
-`router_network_apply_runtime_changes: false`. The role still commits UCI
-settings, but it skips the network reload and dnsmasq restart handlers. This
-is intended for tests or carefully planned maintenance, not normal router
-configuration; the runtime settings remain unapplied until the relevant
-services are reloaded.
+Each role guide documents the variables owned by that role and shows
+complete inventory examples. Role defaults are also available in
+`roles/<role_name>/defaults/main.yml`.
 
-The current implementation uses one addressing mode for all interfaces
-listed in `router_network_interfaces`. Mixed DHCP/static interface modes
-are intentionally not supported yet. IPv6 configuration is outside this
-feature's scope.
-
-#### Configure the IPv4 DHCP server
-
-DHCP server status is configured as an optional `dhcp` subkey of each
-interface in `router_network_interfaces`. This is independent of whether
-the router's own interface acts as a DHCP client.
-
-For example, to enable IPv4 DHCP on LAN and disable it on the guest network,
-add this to `group_vars/openwrt.yml`:
-
-```yaml
----
-router_network_interface_mode: static
-router_network_interfaces:
-  lan:
-    ipaddr: 192.0.2.1
-    netmask: 255.255.255.0
-    dhcp:
-      enabled: true
-  guest:
-    ipaddr: 192.0.20.1
-    netmask: 255.255.255.0
-    dhcp:
-      enabled: false
-```
-
-The role sets `dhcp.<interface>.ignore=0` when `enabled: true` and
-`ignore=1` when `enabled: false`. Omit the `dhcp` subkey to leave that
-interface's DHCP section and all its settings untouched. Interfaces omitted
-from `router_network_interfaces` are also left untouched.
-
-This controls IPv4 DHCP only; it does not configure DHCPv6 or IPv6 Router
-Advertisements. Configure those separately if needed.
-
-DHCP changes restart dnsmasq only when the UCI configuration changes. Set
-`router_network_force_dnsmasq_restart: true` to force a dnsmasq restart even when
-there is no configuration change, for example to retry a previously failed
-restart. The default is `false`.
-
-#### Discover existing OpenWrt configuration
+## Discover existing OpenWrt configuration
 
 For a router that already has manual changes, use the read-only discovery
-script `scripts/owrt-extra.sh` to compare the live system with a reconstructed
-factory reference and collect likely Ansible candidates. It must be copied to
-the router and run there as root on OpenWrt; it is not an Ansible playbook.
+script `scripts/owrt-extra.sh` to compare the live system with a
+reconstructed factory reference and collect likely Ansible candidates.
+Copy it to the router and run it there as root on OpenWrt; it is not an
+Ansible playbook.
 
 ```sh
 scp scripts/owrt-extra.sh root@router1:/tmp/owrt-extra.sh
@@ -434,75 +92,38 @@ ssh root@router1 'sh /tmp/owrt-extra.sh'
 ```
 
 The report is written to `/tmp/owrt-diff/` in RAM. Treat it as sensitive:
-UCI output can include Wi-Fi passwords and other secrets. The script does not
-print password hashes, and host-key export is opt-in (`-H`); with `-H`,
-private keys are copied in plaintext under `/tmp/owrt-diff/secrets/`.
-Review and securely retrieve only what you need, then remove the report and
-script from the router.
+UCI output can include Wi-Fi passwords and other secrets. The script does
+not print password hashes, and host-key export is opt-in (`-H`); with
+`-H`, private keys are copied in plaintext under
+`/tmp/owrt-diff/secrets/`. Review and securely retrieve only what you
+need, then remove the report and script from the router.
 
-Options: `-k` keeps the temporary factory reference mounted for inspection,
-`-f` rebuilds that reference, and `-H` exports host keys. Read the script's
-help (`sh /tmp/owrt-extra.sh -h`) before using these options.
+Options: `-k` keeps the temporary factory reference mounted for
+inspection, `-f` rebuilds that reference, and `-H` exports host keys.
+Read the script's help (`sh /tmp/owrt-extra.sh -h`) before using these
+options.
 
-The report includes a UCI diff, overlay-file candidates, package and service
-differences, and—when supported—`apk audit --system` output in
+The report includes a UCI diff, overlay-file candidates, package and
+service differences, and—when supported—`apk audit --system` output in
 `/tmp/owrt-diff/apk-audit-system.txt`. The APK audit can detect modified
-package-owned system files outside protected configuration paths, but it does
-not report arbitrary untracked files; the overlay scan handles a different
-set of candidates. This check requires an APK-based OpenWrt system (25.12+)
-and is skipped with a warning when the command or option is unavailable.
-CI checks shell syntax and command-line behavior using the OpenWrt 25.12 rootfs image. It does not run the full discovery workflow in that container: the rootfs image does not provide the same device-like overlay environment as a booted OpenWrt router, so a container startup check is not a reliable substitute. The mount/chroot reconstruction and detection of real overlay changes still need validation on a suitable OpenWrt VM or physical router.
+package-owned system files outside protected configuration paths, but it
+does not report arbitrary untracked files; the overlay scan handles a
+different set of candidates. This check requires an APK-based OpenWrt
+system (25.12+) and is skipped with a warning when the command or option
+is unavailable.
 
-This is an investigative report, not an automatic Ansible generator. Runtime
-state such as manually installed nftables rules, `ip` changes, temporary
-`sysctl` values, loaded modules, and running processes is not comprehensively
-captured. Files in the overlay may also be caches or service state rather than
-configuration. Review each candidate before managing it with Ansible. Data
-outside the overlay, such as calibration data and bootloader storage, is not
-suitable for normal Ansible configuration.
+CI checks shell syntax and command-line behavior using the OpenWrt 25.12
+rootfs image. It does not run the full discovery workflow in that
+container: the rootfs image does not provide the same device-like overlay
+environment as a booted OpenWrt router. The mount/chroot reconstruction
+and detection of real overlay changes still need validation on a suitable
+OpenWrt VM or physical router.
 
-## Audit installed packages
-
-The audit playbook requires a baseline package list on each target router.
-The default path is:
-
-```text
-/etc/backup/installed_packages.txt
-```
-
-The baseline must already exist on the target host. The role does not create
-or deploy this baseline. Ensure that it is generated or copied to each router
-before running the audit.
-
-Run the audit against all routers:
-
-```bash
-ansible-playbook -i inventory.ini playbooks/audit_packages.yml
-```
-
-Or run it against one router:
-
-```bash
-ansible-playbook -i inventory.ini playbooks/audit_packages.yml --limit router1
-```
-
-To use a different baseline path, override the role default:
-
-```bash
-ansible-playbook -i inventory.ini playbooks/audit_packages.yml \
-  -e router_package_audit_baseline=/path/to/installed_packages.txt
-```
-
-The path is interpreted on the target router, not on the Ansible control
-node. The audit installs `diffutils` if needed, compares sorted package
-names, and displays additions or removals. It does not change the installed
-package set to match the baseline.
-
-## Customize other role variables
-
-Role defaults are documented in the corresponding
-`roles/<role_name>/defaults/main.yml` files. Override them through
-`group_vars/openwrt.yml`, `host_vars/<inventory_hostname>.yml`, or
-Ansible extra variables (`-e`) when appropriate. Host variables take
-precedence over group variables; extra variables have higher precedence
-than both.
+This is an investigative report, not an automatic Ansible generator.
+Runtime state such as manually installed nftables rules, `ip` changes,
+temporary `sysctl` values, loaded modules, and running processes is not
+comprehensively captured. Files in the overlay may also be caches or
+service state rather than configuration. Review each candidate before
+managing it with Ansible. Data outside the overlay, such as calibration
+data and bootloader storage, is not suitable for normal Ansible
+configuration.
