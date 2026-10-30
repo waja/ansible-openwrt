@@ -41,8 +41,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   Python dependency locks; do not edit them manually.
 - `scripts/update-ci-lockfiles.sh` – reproducible lockfile generation
   with the pinned `pip-tools` version.
-- `.github/workflows/update-ci-lockfiles.yml` – generates and commits
-  updated locks when dependency inputs change.
+- `.github/workflows/update-ci-lockfiles.yml` – regenerates and validates
+  CI dependency locks when inputs or generated lockfiles change.
 - `.github/workflows/molecule.yml` – main CI pipeline
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
 
@@ -378,8 +378,9 @@ with it.
   `--require-hashes`.
 - Generate or refresh all locks with
   `bash scripts/update-ci-lockfiles.sh` using Python 3.14 and
-  `pip-tools==7.6.2`. The updater workflow performs the same operation
-  after dependency input changes and commits changed lockfiles.
+  `pip-tools==7.6.2`. The validation workflow regenerates the locks and
+  fails if the committed `.txt` files differ; update and commit generated
+  lockfiles together with their `.in` inputs.
 - Keep the groups separate: changes to lint or test tooling must not
   silently change the Molecule environment.
 - Run `python -m pip check` after installation and log installed
