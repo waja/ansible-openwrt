@@ -1,0 +1,88 @@
+# extensions/molecule/default/verify.yml
+---
+- name: Verify declarative firewall zone updates and validation
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Update one managed firewall zone option
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_input: ACCEPT
+        router_firewall_forward: ACCEPT
+        router_firewall_output: ACCEPT
+        router_firewall_apply_runtime_changes: false
+        router_firewall_dropbear_extra_ports:
+          - 2222
+          - 2223
+        router_firewall_dropbear_wan_zone: wan
+        router_firewall_zones:
+          guest_test:
+            input: DROP
+
+    - name: Read updated firewall zone policy
+      community.openwrt.uci:
+        command: get
+        key: firewall.guest_test.input
+      register: router_firewall_updated_input
+      changed_when: false
+
+    - name: Read preserved firewall zone network
+      community.openwrt.uci:
+        command: get
+        key: firewall.guest_test.network
+      register: router_firewall_preserved_network
+      changed_when: false
+
+    - name: Verify zone updates preserve omitted options
+      ansible.builtin.assert:
+        that:
+          - router_firewall_updated_input.result == 'DROP'
+          - router_firewall_preserved_network.result == 'lan'
+
+    - name: Capture invalid firewall zone option validation
+      block:
+        - name: Attempt to configure a zone with an invalid boolean
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              invalid_zone:
+                masq: "false"
+      rescue:
+        - name: Record the invalid zone validation failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_zone_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify invalid zone options fail during validation
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_zone_failure
+            == 'Validate firewall zone definitions'
+
+    - name: Check that invalid zone input did not create a section
+      community.openwrt.uci:
+        command: get
+        key: firewall.invalid_zone
+      register: router_firewall_invalid_zone
+      changed_when: false
+      failed_when: false
+
+    - name: Assert invalid zone input left the firewall unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_invalid_zone.result | default('') == ''
+
+    - name: Verify no staged firewall UCI changes remain
+      community.openwrt.command:
+        cmd: uci changes firewall
+      register: router_firewall_pending_changes
+      changed_when: false
+
+    - name: Assert firewall UCI changes were committed
+      ansible.builtin.assert:
+        that:
+          - router_firewall_pending_changes.stdout | length == 0

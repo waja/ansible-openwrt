@@ -16,15 +16,15 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `docs/configuration.md` – detailed router configuration and inventory guide
 - `scripts/owrt-extra.sh` – read-only OpenWrt state discovery for Ansible migration
 - `extensions/molecule/default/` – Molecule scenario for hostname,
-  packages, and base services
+  firewall zones, packages, and base services
 - `extensions/molecule/network-static/` – isolated configuration-only
   tests for static IPv4 settings
 - `extensions/molecule/network-dhcp/` – isolated configuration-only
   tests for DHCP client settings and IPv4 DHCP server status
 - `roles/router_system/` – manages hostname, timezone, NTP, logging, ASU
   settings, and optional additional Dropbear listeners
-- `roles/router_firewall/` – configures firewall default policies and
-  opt-in WAN access for additional Dropbear ports
+- `roles/router_firewall/` – manages firewall default policies, basic
+  declarative zones, and opt-in WAN access for additional Dropbear ports
 - `roles/router_packages/` – dynamically installs the default package list
 - `roles/router_base/` – enables core services and removes obsolete config
 - `roles/router_network/` – manages explicitly configured IPv4 interface

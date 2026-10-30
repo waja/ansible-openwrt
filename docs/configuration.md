@@ -72,13 +72,58 @@ authentication and restrict source addresses where your network design
 permits. The firewall rule allows TCP traffic to the configured additional
 ports from the selected zone; it does not restrict source IP addresses.
 
-### Configure firewall defaults
+### Configure firewall defaults and zones
 
 The `router_firewall` role manages the default firewall policies for input,
 forwarding, and output. Its defaults are `REJECT`, `REJECT`, and `ACCEPT`,
-respectively. These defaults preserve the usual OpenWrt firewall policy. The
-role can also manage a dedicated WAN rule for additional Dropbear ports when
-explicitly enabled in the configuration above.
+respectively. It can also manage basic, explicitly declared firewall zones
+and a dedicated WAN rule for additional Dropbear ports when enabled above.
+
+Declare zones as a mapping keyed by the desired UCI section ID:
+
+```yaml
+---
+router_firewall_zones:
+  guest:
+    network:
+      - guest
+    input: REJECT
+    output: ACCEPT
+    forward: REJECT
+    masq: false
+    mtu_fix: true
+```
+
+The dictionary key is the stable UCI section ID and may contain only
+letters, digits, and underscores. The optional `name` option defaults to
+that key. Zone names must be at most 11 characters and start with a letter
+or underscore. An existing named section with the requested ID is updated
+in place; a missing section is created. If the ID already belongs to a
+non-zone section, the role fails before writing changes.
+
+This initial implementation supports `name`, `network`, `input`,
+`output`, `forward`, `masq`, and `mtu_fix`. `network` must be a
+non-empty YAML list of strings. Policy values are `ACCEPT`, `REJECT`,
+or `DROP`; `masq` and `mtu_fix` must be YAML booleans. Omitted zones
+and options are left untouched.
+
+Anonymous factory zones are not adopted in this initial step. If a zone
+with the requested name exists only as an anonymous section, the role fails
+with an actionable error rather than creating a duplicate. Anonymous-zone
+adoption, safe removal, and the remaining zone options are tracked as
+follow-up work.
+
+The role validates the complete declared zone input before applying UCI
+changes. Default policies, declared zones, and the optional Dropbear WAN
+rule are staged together and committed once. The firewall is reloaded once
+only when the configuration changes. Set
+`router_firewall_apply_runtime_changes: false` for configuration-only
+runs where the runtime reload must be deferred.
+
+**Caution:** Firewall changes over SSH can interrupt the management
+session. Ensure that you have an independent recovery path before changing
+zones or policies on a remote router. The role does not implement an
+automatic timed rollback.
 
 For an access point that should pass traffic without filtering at the
 firewall-defaults level, override the values in its `host_vars` file, for
@@ -93,7 +138,8 @@ router_firewall_output: ACCEPT
 
 **Caution:** `input: ACCEPT` allows traffic to services on the router, and
 `forward: ACCEPT` removes the default forwarding restriction. Use these
-settings only where appropriate for your network design. The role does not manage zones, arbitrary firewall rules, or SYN-flood
+settings only where appropriate for your network design. The role does not
+yet manage arbitrary firewall rules, redirects, forwardings, or SYN-flood
 protection.
 
 ### Configure system settings

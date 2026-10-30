@@ -4,3 +4,4 @@
   community.openwrt.service:
     name: firewall
     state: reloaded
+  when: router_firewall_apply_runtime_changes | bool
