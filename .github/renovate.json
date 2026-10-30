@@ -6,7 +6,7 @@
   "reviewers": ["waja"],
   "pip-compile": {
     "managerFilePatterns": [
-      "/\\.github/workflows/requirements-(lint|ansible-test|molecule)\\.txt$/"
+      "/\\requirements\\/ci\\/(lint|ansible-test|molecule)\\.txt$/"
     ]
   },
   "pip_requirements": {
