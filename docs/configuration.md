@@ -287,7 +287,7 @@ This controls IPv4 DHCP only; it does not configure DHCPv6 or IPv6 Router
 Advertisements. Configure those separately if needed.
 
 DHCP changes restart dnsmasq only when the UCI configuration changes. Set
-`router_network_force_restart: true` to force a dnsmasq restart even when
+`router_network_force_dnsmasq_restart: true` to force a dnsmasq restart even when
 there is no configuration change, for example to retry a previously failed
 restart. The default is `false`.
 
