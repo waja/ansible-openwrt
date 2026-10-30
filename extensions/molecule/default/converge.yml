@@ -215,6 +215,7 @@
     - name: Verify LibreNMS files, SNMP extend entries, and persistence
       ansible.builtin.raw: |
         test -x /etc/librenms/distro || exit 1
+        test -x /etc/librenms/hardware || exit 1
         test -x /etc/librenms/wlClients.sh || exit 1
         test -x /etc/librenms/wlFrequency.sh || exit 1
         test -x /etc/librenms/wlNoiseFloor.sh || exit 1
@@ -228,8 +229,10 @@
         uci -q get 'snmpd.@system[0].sysName' || exit 1
         printf 'distro_prog='
         uci -q get snmpd.ansible_router_librenms_distro.prog || exit 1
-        printf 'hardware_args='
-        uci -q get snmpd.ansible_router_librenms_hardware.args || exit 1
+        printf 'hardware_prog='
+        uci -q get snmpd.ansible_router_librenms_hardware.prog || exit 1
+        printf 'hardware_output='
+        /etc/librenms/hardware || exit 1
         printf 'rate_prog='
         uci -q get \
           snmpd.ansible_router_librenms_radio0_ap0_rate_tx_min.prog \
@@ -265,8 +268,11 @@
             'distro_prog=/etc/librenms/distro'
             in router_librenms_verification.stdout
           - >-
-            'hardware_args=/sys/firmware/devicetree/base/model'
+            'hardware_prog=/etc/librenms/hardware'
             in router_librenms_verification.stdout
+          - >-
+            router_librenms_verification.stdout
+            is search('hardware_output=.+')
           - >-
             'rate_prog=/etc/librenms/wlRate.sh'
             in router_librenms_verification.stdout
