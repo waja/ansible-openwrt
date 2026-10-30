@@ -25,7 +25,12 @@ inventory and customize variables there.
 Both playbooks target the `openwrt` inventory group.
 
 For additional Dropbear SSH ports and optional WAN access, see
-[the router configuration guide](docs/configuration.md#configure-additional-dropbear-ssh-ports).
+[the router configuration guide][dropbear-guide].
+For declarative firewall zones, see the
+[firewall configuration guide][firewall-guide].
+
+[dropbear-guide]: docs/configuration.md#configure-additional-dropbear-ssh-ports
+[firewall-guide]: docs/configuration.md#configure-firewall-defaults-and-zones
 
 ## Requirements
 
@@ -202,8 +207,8 @@ See the [router configuration guide](docs/configuration.md) for the complete ins
 - `playbooks/audit_packages.yml` — installed-package audit
 - `roles/router_system/` — hostname, timezone, NTP, logging, ASU settings,
   and optional additional Dropbear listeners
-- `roles/router_firewall/` — firewall default policies and optional WAN
-  access for additional Dropbear ports
+- `roles/router_firewall/` — firewall default policies, declarative zones,
+  and optional WAN access for additional Dropbear ports
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
 - `roles/router_network/` — IPv4 interface addressing and per-interface DHCP server settings

@@ -1,0 +1,19 @@
+# roles/router_firewall/tasks/add_null_option_operations.yml
+---
+- name: Add explicit firewall zone option removals
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'absent',
+          'key': 'firewall.' ~ router_firewall_zone.key ~ '.' ~ item.key
+        }]
+      }}
+  loop: "{{ router_firewall_zone.value | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - router_firewall_zone.value.state | default('present') == 'present'
+    - item.key not in ['state', 'name']
+    - item.value is none
+  changed_when: false

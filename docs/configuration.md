@@ -72,13 +72,78 @@ authentication and restrict source addresses where your network design
 permits. The firewall rule allows TCP traffic to the configured additional
 ports from the selected zone; it does not restrict source IP addresses.
 
-### Configure firewall defaults
+### Configure firewall defaults and zones
 
-The `router_firewall` role manages the default firewall policies for input,
-forwarding, and output. Its defaults are `REJECT`, `REJECT`, and `ACCEPT`,
-respectively. These defaults preserve the usual OpenWrt firewall policy. The
-role can also manage a dedicated WAN rule for additional Dropbear ports when
-explicitly enabled in the configuration above.
+The `router_firewall` role manages the default firewall policies for
+input, forwarding, and output, plus explicitly declared firewall zones.
+Its policy defaults are `REJECT`, `REJECT`, and `ACCEPT`, respectively.
+Unlisted zones and their options remain untouched.
+
+Declare zones as a mapping keyed by the desired UCI section ID. The key may
+contain only letters, digits, and underscores. OpenWrt firewall zone names
+are limited to 11 characters and must not start with a digit:
+
+```yaml
+---
+router_firewall_zones:
+  wan:
+    network:
+      - wan
+      - wan6
+    input: REJECT
+    output: ACCEPT
+    forward: REJECT
+    masq: true
+    masq6: true
+    mtu_fix: true
+
+  lan:
+    network:
+      - lan
+    input: ACCEPT
+    output: ACCEPT
+    forward: REJECT
+
+  guest:
+    state: absent
+```
+
+The dictionary key is the stable managed UCI section ID. The optional
+`name` option defaults to that key. An existing section with the requested
+ID takes precedence and is updated in place. If that ID does not exist, a
+unique existing zone with the matching
+`name` is adopted and renamed to the requested ID. Multiple matching zones
+cause an error rather than an arbitrary choice. A new named section is created
+only when no matching section exists.
+
+Supported zone options include `enabled`, `network`, `device`, `subnet`,
+`input`, `output`, `forward`, `masq`, `masq6`, `masq_src`, `masq_dest`,
+`masq_allow_invalid`, `mtu_fix`, `family`, `log`, `log_limit`,
+`auto_helper`, `helper`, and `counter`.
+List-valued options such as `network`, `device`, `subnet`, `masq_src`,
+`masq_dest`, and `helper` use YAML lists. Boolean options are `enabled`,
+`masq`, `masq6`, `masq_allow_invalid`, `mtu_fix`, `log`, `auto_helper`, and
+`counter`; `log_limit` is a string. Policy options accept `ACCEPT`, `REJECT`,
+or `DROP`, and `family` accepts `ipv4`, `ipv6`, or `any`. Set
+`enabled: false` to disable a zone while retaining its UCI section.
+
+Omitted options are left unchanged. Set an option to `null` to remove it,
+including list-valued options. Empty lists are rejected because UCI has no
+distinct empty-list value. Set `state: absent` to remove a zone.
+A zone cannot be removed while a firewall rule, redirect, or forwarding
+references it.
+
+The role validates the declared zones and existing references before writing
+UCI changes. It stages the policy, zone, and optional Dropbear WAN-rule
+changes together, commits the firewall package once, and reloads the
+firewall once only when something changed. Set
+`router_firewall_apply_runtime_changes: false` for configuration-only
+tests or maintenance where the runtime reload is deliberately deferred.
+
+**Caution:** Firewall changes over SSH can interrupt the management
+session. Ensure that you have an independent recovery path before changing
+zones or policies on a remote router. The role does not implement an
+automatic timed rollback.
 
 For an access point that should pass traffic without filtering at the
 firewall-defaults level, override the values in its `host_vars` file, for
@@ -93,8 +158,10 @@ router_firewall_output: ACCEPT
 
 **Caution:** `input: ACCEPT` allows traffic to services on the router, and
 `forward: ACCEPT` removes the default forwarding restriction. Use these
-settings only where appropriate for your network design. The role does not manage zones, arbitrary firewall rules, or SYN-flood
-protection.
+settings only where appropriate for your network design. The role also
+manages the optional additional Dropbear WAN rule described above. It does
+not yet manage arbitrary firewall rules, redirects, forwardings, or
+SYN-flood protection.
 
 ### Configure system settings
 

@@ -1,0 +1,466 @@
+# extensions/molecule/default/verify.yml
+---
+- name: Verify declarative firewall zone behavior
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Remove an explicitly null firewall zone option
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          guest_test:
+            masq_src: null
+
+    - name: Check that the null option was removed
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: masq_src
+      register: router_firewall_masq_src
+      changed_when: false
+
+    - name: Verify the null option was removed
+      ansible.builtin.assert:
+        that:
+          - router_firewall_masq_src.result_list | length == 0
+
+    - name: Create an anonymous duplicate of the named guest zone
+      community.openwrt.uci:
+        command: add
+        config: firewall
+        type: zone
+        autocommit: true
+      register: router_firewall_duplicate_zone
+
+    - name: Name the duplicate guest zone
+      community.openwrt.uci:
+        command: set
+        key: >-
+          firewall.{{ router_firewall_duplicate_zone.result }}.name
+        value: guest_test
+        autocommit: true
+
+    - name: Verify the named section takes precedence over an anonymous match
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          guest_test:
+            input: REJECT
+
+    - name: Remove the duplicate anonymous guest zone
+      community.openwrt.uci:
+        command: absent
+        key: "firewall.{{ router_firewall_duplicate_zone.result }}"
+        autocommit: true
+
+    - name: Create the first ambiguous anonymous zone
+      community.openwrt.uci:
+        command: add
+        config: firewall
+        type: zone
+        autocommit: true
+      register: router_firewall_ambiguous_zone_one
+
+    - name: Name the first ambiguous zone
+      community.openwrt.uci:
+        command: set
+        key: >-
+          firewall.{{ router_firewall_ambiguous_zone_one.result }}.name
+        value: ambiguous
+        autocommit: true
+
+    - name: Create the second ambiguous anonymous zone
+      community.openwrt.uci:
+        command: add
+        config: firewall
+        type: zone
+        autocommit: true
+      register: router_firewall_ambiguous_zone_two
+
+    - name: Name the second ambiguous zone
+      community.openwrt.uci:
+        command: set
+        key: >-
+          firewall.{{ router_firewall_ambiguous_zone_two.result }}.name
+        value: ambiguous
+        autocommit: true
+
+    - name: Capture the expected ambiguous-zone validation failure
+      block:
+        - name: Attempt to manage an ambiguous anonymous zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              ambiguous:
+                input: REJECT
+      rescue:
+        - name: Record the failed validation task
+          ansible.builtin.set_fact:
+            router_firewall_ambiguous_failure: "{{ ansible_failed_task.name }}"
+
+    - name: Verify ambiguous anonymous zones are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_ambiguous_failure
+            == 'Reject ambiguous anonymous firewall zones'
+
+    - name: Create a rule referencing the guest zone
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: rule
+        name: molecule_guest_reference
+        value:
+          name: Molecule guest reference
+          src: guest_test
+          proto: tcp
+          target: ACCEPT
+        autocommit: true
+
+    - name: Capture the expected referenced-zone validation failure
+      block:
+        - name: Attempt to remove a referenced firewall zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              guest_test:
+                state: absent
+      rescue:
+        - name: Record the failed reference validation task
+          ansible.builtin.set_fact:
+            router_firewall_reference_failure: "{{ ansible_failed_task.name }}"
+
+    - name: Verify referenced firewall zones cannot be removed
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_reference_failure
+            == 'Reject removal of referenced firewall zones'
+
+    - name: Remove the temporary guest reference rule
+      community.openwrt.uci:
+        command: absent
+        key: firewall.molecule_guest_reference
+        autocommit: true
+
+    - name: Remove additional Dropbear WAN access by default
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_dropbear_extra_ports: []
+        router_firewall_dropbear_wan_zone: ""
+
+    - name: Verify additional Dropbear WAN access is disabled by default
+      community.openwrt.uci:
+        command: get
+        key: firewall.ansible_router_firewall_dropbear_extra_wan
+      register: router_firewall_dropbear_rule
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the optional Dropbear WAN rule is absent
+      ansible.builtin.assert:
+        that:
+          - router_firewall_dropbear_rule.result | default('') == ''
+
+    - name: Enable additional Dropbear WAN access explicitly
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_dropbear_extra_ports:
+          - 2222
+          - 2223
+        router_firewall_dropbear_wan_zone: wan
+
+    - name: Verify the optional Dropbear WAN rule
+      community.openwrt.uci:
+        command: get
+        key: firewall.ansible_router_firewall_dropbear_extra_wan.dest_port
+      register: router_firewall_dropbear_ports
+      changed_when: false
+
+    - name: Assert the explicitly enabled Dropbear WAN ports
+      ansible.builtin.assert:
+        that:
+          - router_firewall_dropbear_ports.result == '2222 2223'
+
+
+    - name: Capture invalid default zone name validation
+      block:
+        - name: Attempt to manage a zone with an invalid default name
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              "1invalid": {}
+      rescue:
+        - name: Record the invalid default name failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_name_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify default zone names are validated before writes
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_name_failure
+            == 'Validate firewall zone definitions'
+
+    - name: Check that invalid default zone name was not created
+      community.openwrt.uci:
+        command: get
+        key: firewall.1invalid
+      register: router_firewall_invalid_name_section
+      changed_when: false
+      failed_when: false
+
+    - name: Assert invalid default zone name left no UCI section
+      ansible.builtin.assert:
+        that:
+          - router_firewall_invalid_name_section.result | default('') == ''
+
+    - name: Capture invalid firewall zone option type validation
+      block:
+        - name: Attempt to configure a zone with an invalid boolean
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              badopt:
+                masq: "true"
+      rescue:
+        - name: Record the invalid option failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_option_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify invalid zone option types are rejected before writes
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_option_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Check that invalid zone option was not created
+      community.openwrt.uci:
+        command: get
+        key: firewall.badopt
+      register: router_firewall_invalid_option_section
+      changed_when: false
+      failed_when: false
+
+    - name: Assert invalid option left no UCI section
+      ansible.builtin.assert:
+        that:
+          - router_firewall_invalid_option_section.result | default('') == ''
+
+    - name: Capture empty firewall zone list validation
+      block:
+        - name: Attempt to configure an empty list-valued option
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              emptylist:
+                network: []
+      rescue:
+        - name: Record the empty list failure
+          ansible.builtin.set_fact:
+            router_firewall_empty_list_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify empty list-valued options are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_empty_list_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Check that empty list zone was not created
+      community.openwrt.uci:
+        command: get
+        key: firewall.emptylist
+      register: router_firewall_empty_list_section
+      changed_when: false
+      failed_when: false
+
+    - name: Assert empty list left no UCI section
+      ansible.builtin.assert:
+        that:
+          - router_firewall_empty_list_section.result | default('') == ''
+
+    - name: Create a named firewall rule with a zone-like name
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: rule
+        name: molecule_rule_name_collision
+        value:
+          name: rulecollide
+          proto: tcp
+          target: ACCEPT
+        autocommit: true
+
+    - name: Manage a zone whose name matches a firewall rule name
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          rulecollide: {}
+
+    - name: Verify non-zone section names do not block zone creation
+      community.openwrt.uci:
+        command: get
+        key: firewall.rulecollide.name
+      register: router_firewall_rule_collision_zone
+      changed_when: false
+
+    - name: Assert zone creation ignores same-named firewall rules
+      ansible.builtin.assert:
+        that:
+          - router_firewall_rule_collision_zone.result == 'rulecollide'
+
+    - name: Remove the zone-like test firewall rule
+      community.openwrt.uci:
+        command: absent
+        key: firewall.molecule_rule_name_collision
+        autocommit: true
+
+    - name: Remove the zone created for the name-collision test
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          rulecollide:
+            state: absent
+
+    - name: Create a named zone whose name differs from its section ID
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: zone
+        name: molecule_zone_identity
+        value:
+          name: guest_alias
+          device:
+            - lo
+        autocommit: true
+
+    - name: Create a redirect referencing the actual zone name
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: redirect
+        name: molecule_guest_alias_redirect
+        value:
+          name: Molecule guest alias redirect
+          src: guest_alias
+          dest: lan
+          proto: tcp
+          target: DNAT
+          dest_ip: 192.0.2.10
+          dest_port: "8080"
+        autocommit: true
+
+    - name: Capture referenced-zone removal through a redirect
+      block:
+        - name: Attempt to remove a zone referenced by a redirect
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              molecule_zone_identity:
+                state: absent
+      rescue:
+        - name: Record the redirect reference failure
+          ansible.builtin.set_fact:
+            router_firewall_redirect_reference_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify redirect references prevent zone removal
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_redirect_reference_failure
+            == 'Reject removal of referenced firewall zones'
+
+    - name: Remove the temporary guest alias redirect
+      community.openwrt.uci:
+        command: absent
+        key: firewall.molecule_guest_alias_redirect
+        autocommit: true
+
+    - name: Create a forwarding referencing the actual zone name
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: forwarding
+        name: molecule_guest_alias_forwarding
+        value:
+          src: guest_alias
+          dest: lan
+        autocommit: true
+
+    - name: Capture referenced-zone removal through a forwarding
+      block:
+        - name: Attempt to remove a zone referenced by a forwarding
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              molecule_zone_identity:
+                state: absent
+      rescue:
+        - name: Record the forwarding reference failure
+          ansible.builtin.set_fact:
+            router_firewall_forwarding_reference_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify forwarding references prevent zone removal
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_forwarding_reference_failure
+            == 'Reject removal of referenced firewall zones'
+
+    - name: Remove the temporary guest alias forwarding
+      community.openwrt.uci:
+        command: absent
+        key: firewall.molecule_guest_alias_forwarding
+        autocommit: true
+
+    - name: Remove the guest alias zone after references are cleared
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          molecule_zone_identity:
+            state: absent
+
+    - name: Verify no staged firewall UCI changes remain
+      ansible.builtin.raw: |
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
+      changed_when: false

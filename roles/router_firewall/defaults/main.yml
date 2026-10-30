@@ -4,5 +4,12 @@ router_firewall_input: REJECT
 router_firewall_forward: REJECT
 router_firewall_output: ACCEPT
 
+# Declarative firewall zones keyed by their desired UCI section IDs.
+router_firewall_zones: {}
+
+# Additional Dropbear ports remain closed on WAN unless a zone is configured.
 router_firewall_dropbear_extra_ports: []
 router_firewall_dropbear_wan_zone: ""
+
+# Set to false for configuration-only runs that must not reload fw4.
+router_firewall_apply_runtime_changes: true

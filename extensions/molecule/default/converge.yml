@@ -30,6 +30,26 @@
         router_system_asu_upgrade_packages: 1
         router_system_log_ip: 192.0.2.234
 
+    - name: Create an anonymous firewall zone fixture
+      community.openwrt.uci:
+        command: add
+        config: firewall
+        type: zone
+        autocommit: true
+      register: router_firewall_anonymous_zone
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Name the anonymous firewall zone fixture
+      community.openwrt.uci:
+        command: set
+        key: "firewall.{{ router_firewall_anonymous_zone.result }}.name"
+        value: guest_test
+        autocommit: true
+      when: router_firewall_anonymous_zone is not skipped
+      tags:
+        - molecule-idempotence-notest
+
     - name: Apply router firewall role with defaults
       ansible.builtin.include_role:
         name: router_firewall
@@ -37,27 +57,17 @@
         router_firewall_input: ACCEPT
         router_firewall_forward: ACCEPT
         router_firewall_output: ACCEPT
-      tags:
-        - molecule-idempotence-notest
-
-    - name: Verify additional Dropbear ports are closed by default
-      ansible.builtin.raw: |
-        if uci -q get \
-          firewall.ansible_router_firewall_dropbear_extra_wan >/dev/null; then
-          echo "Unexpected additional Dropbear WAN firewall rule"
-          exit 1
-        fi
-      changed_when: false
-      tags:
-        - molecule-idempotence-notest
-
-    - name: Apply router firewall role with WAN access enabled
-      ansible.builtin.include_role:
-        name: router_firewall
-      vars:
-        router_firewall_input: ACCEPT
-        router_firewall_forward: ACCEPT
-        router_firewall_output: ACCEPT
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          guest_test:
+            device:
+              - lo
+            input: REJECT
+            output: ACCEPT
+            forward: REJECT
+            masq: false
+            masq_src:
+              - 192.0.2.0/24
         router_firewall_dropbear_extra_ports:
           - 2222
           - 2223
@@ -82,6 +92,158 @@
           - "'forward=ACCEPT' in router_firewall_uci.stdout"
           - "'output=ACCEPT' in router_firewall_uci.stdout"
           - "'extra_rule=2222 2223' in router_firewall_uci.stdout"
+
+    - name: Read managed guest firewall zone
+      community.openwrt.uci:
+        command: get
+        key: firewall.guest_test.name
+      register: router_firewall_guest_name
+      changed_when: false
+
+    - name: Verify the managed guest firewall zone
+      ansible.builtin.assert:
+        that:
+          - router_firewall_guest_name.result == 'guest_test'
+
+    - name: Render the generated firewall ruleset
+      community.openwrt.command:
+        cmd: fw4 print
+      register: router_firewall_ruleset
+      changed_when: false
+
+    - name: Verify the generated ruleset contains the managed zone
+      ansible.builtin.assert:
+        that:
+          - "'input_guest_test' in router_firewall_ruleset.stdout"
+
+    - name: Update the guest firewall zone and remove its list option
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_dropbear_extra_ports:
+          - 2222
+          - 2223
+        router_firewall_dropbear_wan_zone: wan
+        router_firewall_zones:
+          guest_test:
+            input: DROP
+            masq_src: null
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Verify the updated guest firewall zone
+      community.openwrt.uci:
+        command: get
+        key: firewall.guest_test.input
+      register: router_firewall_guest_input
+      changed_when: false
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Verify the null list option was removed
+      community.openwrt.uci:
+        command: get
+        key: firewall.guest_test.masq_src
+      register: router_firewall_guest_masq_src
+      changed_when: false
+      failed_when: false
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Assert the guest zone update and null removal
+      ansible.builtin.assert:
+        that:
+          - router_firewall_guest_input.result == 'DROP'
+          - router_firewall_guest_masq_src.result | default('') == ''
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Disable the guest firewall zone without deleting it
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_dropbear_extra_ports:
+          - 2222
+          - 2223
+        router_firewall_dropbear_wan_zone: wan
+        router_firewall_zones:
+          guest_test:
+            enabled: false
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Verify disabling retained the guest firewall zone
+      community.openwrt.uci:
+        command: get
+        key: firewall.guest_test.enabled
+      register: router_firewall_guest_enabled
+      changed_when: false
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Assert the guest zone remains disabled
+      ansible.builtin.assert:
+        that:
+          - router_firewall_guest_enabled.result == '0'
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Remove the temporary guest firewall zone
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_dropbear_extra_ports:
+          - 2222
+          - 2223
+        router_firewall_dropbear_wan_zone: wan
+        router_firewall_zones:
+          guest_test:
+            state: absent
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Verify the temporary guest firewall zone was removed
+      community.openwrt.uci:
+        command: get
+        key: firewall.guest_test
+      register: router_firewall_guest_removed
+      changed_when: false
+      failed_when: false
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Assert the temporary guest firewall zone is absent
+      ansible.builtin.assert:
+        that:
+          - router_firewall_guest_removed.result | default('') == ''
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Restore the guest firewall zone for Molecule idempotence
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_dropbear_extra_ports:
+          - 2222
+          - 2223
+        router_firewall_dropbear_wan_zone: wan
+        router_firewall_zones:
+          guest_test:
+            enabled: true
+            device:
+              - lo
+            input: REJECT
+            output: ACCEPT
+            forward: REJECT
+            masq: false
+            masq_src:
+              - 192.0.2.0/24
+      tags:
+        - molecule-idempotence-notest
 
     - name: Apply router packages role
       ansible.builtin.include_role:
