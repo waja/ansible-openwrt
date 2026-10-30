@@ -178,7 +178,7 @@
 - name: Request a dnsmasq restart when explicitly forced
   ansible.builtin.debug:
     msg: A dnsmasq restart was explicitly requested.
-  changed_when: router_network_force_restart | bool
+  changed_when: router_network_force_dnsmasq_restart | bool
   notify: Restart dnsmasq
 
 - name: Initialize DHCP configuration operations
