@@ -8,17 +8,71 @@ env:
 "on":
   workflow_dispatch:
   schedule:
-    - cron: '17 6 * * 0' # Regular OpenWrt image
-    - cron: '17 7 * * 0' # OpenWrt snapshot image
-  # execute on pull request event
+    - cron: '17 6 * * 0'  # Regular OpenWrt image
+    - cron: '17 7 * * 0'  # OpenWrt snapshot image
   pull_request:
   push:
     branches:
-      - $default-branch
       - development
       - master
 
 jobs:
+  changes:
+    name: Detect relevant changes
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      molecule: ${{ steps.filter.outputs.molecule }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect relevant changed paths
+        id: filter
+        env:
+          BASE_SHA: >-
+            ${{ github.event.pull_request.base.sha
+                || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Run Molecule if the base commit or diff is unavailable.
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] ||
+            ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            echo "molecule=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            diff_args=("$BASE_SHA...$HEAD_SHA")
+          else
+            diff_args=("$BASE_SHA" "$HEAD_SHA")
+          fi
+
+          if ! git diff --no-renames --name-only "${diff_args[@]}" \
+            > "$RUNNER_TEMP/changed-files.txt"; then
+            echo "molecule=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          cat "$RUNNER_TEMP/changed-files.txt"
+
+          # Only Markdown-only changes skip Molecule. Test everything else.
+          molecule=false
+          while IFS= read -r path; do
+            case "$path" in
+              *.md) ;;
+              *) molecule=true; break ;;
+            esac
+          done < "$RUNNER_TEMP/changed-files.txt"
+
+          echo "molecule=$molecule" >> "$GITHUB_OUTPUT"
+
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -115,39 +169,36 @@ jobs:
           ansible-test units --docker default \
             --python ${{ env.ANSIBLE_PYTHON_VERSION }}
 
-  script-tests:
-    name: State discovery script smoke test (OpenWrt 25.12)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v7
-
-      - name: Check shell syntax and command-line behavior
-        run: |
-          docker run --rm \
-            -v "$PWD/scripts/owrt-extra.sh:/tmp/owrt-extra.sh:ro" \
-            --entrypoint /bin/sh openwrt/rootfs:x86_64-openwrt-25.12 \
-            -c '
-              set -eu
-              sh -n /tmp/owrt-extra.sh
-
-              sh /tmp/owrt-extra.sh -h > /tmp/help.txt
-              grep -q "owrt-extra.sh" /tmp/help.txt
-
-              if sh /tmp/owrt-extra.sh --invalid > /tmp/invalid.txt 2>&1; then
-                echo "Expected an unknown option to fail." >&2
-                exit 1
-              fi
-              grep -q "Unknown option: --invalid" /tmp/invalid.txt
-            '
-
   molecule:
-    name: Molecule
+    name: Molecule tests
     needs:
+      - changes
+      - check-structure
       - lint
       - sanity
       - units
-    if: ${{ !cancelled() && !failure() }}
+    if: >-
+      ${{
+        !cancelled()
+        && needs.check-structure.result == 'success'
+        && needs.lint.result == 'success'
+        && contains(fromJSON('["success","skipped"]'), needs.sanity.result)
+        && contains(fromJSON('["success","skipped"]'), needs.units.result)
+        && (
+          needs.changes.result == 'failure'
+          || (
+            needs.changes.result == 'success'
+            && needs.changes.outputs.molecule == 'true'
+          )
+          || (
+            needs.changes.result == 'skipped'
+            && (
+              github.event_name == 'schedule'
+              || github.event_name == 'workflow_dispatch'
+            )
+          )
+        )
+      }}
     runs-on: ubuntu-latest
     env:
       MOLECULE_GLOB: >-
@@ -268,3 +319,30 @@ jobs:
       - name: Destroy ${{ matrix.scenario }} scenario
         if: always()
         run: molecule destroy -s "${{ matrix.scenario }}"
+
+  molecule-status:
+    name: Molecule
+    needs:
+      - changes
+      - check-structure
+      - lint
+      - sanity
+      - units
+      - molecule
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report aggregate Molecule status
+        env:
+          STRUCTURE_RESULT: ${{ needs.check-structure.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          SANITY_RESULT: ${{ needs.sanity.result }}
+          UNITS_RESULT: ${{ needs.units.result }}
+          MOLECULE_RESULT: ${{ needs.molecule.result }}
+        run: |
+          set -eu
+          test "$STRUCTURE_RESULT" = success
+          test "$LINT_RESULT" = success
+          case "$SANITY_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          case "$UNITS_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          case "$MOLECULE_RESULT" in success|skipped) ;; *) exit 1 ;; esac

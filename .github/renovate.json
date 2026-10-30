@@ -1,19 +1,52 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":dependencyDashboard"],
-  "baseBranchPatterns": ["development"],
-  "assignees": ["waja"],
-  "reviewers": ["waja"],
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    ":dependencyDashboard"
+  ],
+  "baseBranchPatterns": [
+    "development"
+  ],
+  "assignees": [
+    "waja"
+  ],
+  "reviewers": [
+    "waja"
+  ],
   "packageRules": [
     {
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["python"],
-      "matchUpdateTypes": ["major"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
       "enabled": false
     },
     {
-      "matchDatasources": ["docker"],
+      "matchDatasources": [
+        "docker"
+      ],
       "groupName": "container base images"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update the ShellCheck version installed by its GitHub Action",
+      "managerFilePatterns": [
+        "/\\.github/workflows/lint-scripts-docs\\.yml$/"
+      ],
+      "matchStrings": [
+        "- name: Lint POSIX shell scripts[\\s\\S]*?version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "koalaman/shellcheck",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
     }
   ]
 }

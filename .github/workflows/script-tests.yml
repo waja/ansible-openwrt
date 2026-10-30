@@ -1,0 +1,137 @@
+# .github/workflows/script-tests.yml
+---
+name: State discovery script tests
+
+"on":
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - development
+      - master
+
+jobs:
+  changes:
+    name: Detect script changes
+    runs-on: ubuntu-latest
+    outputs:
+      script: ${{ steps.filter.outputs.script }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: filter
+        env:
+          BASE_SHA: >-
+            ${{ github.event.pull_request.base.sha
+                || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # If the base commit is unavailable, run tests rather than risk
+          # a false skip.
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "script=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Force validation if the base object is missing or diffing fails.
+          if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            echo "script=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            if ! git diff --no-renames --name-only \
+              "$BASE_SHA...$HEAD_SHA" \
+              > "$RUNNER_TEMP/changed-files.txt"; then
+              echo "script=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            if ! git diff --no-renames --name-only \
+              "$BASE_SHA" "$HEAD_SHA" \
+              > "$RUNNER_TEMP/changed-files.txt"; then
+              echo "script=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          cat "$RUNNER_TEMP/changed-files.txt"
+
+          relevant=false
+          while IFS= read -r path; do
+            case "$path" in
+              scripts/*|.github/workflows/script-tests.yml)
+                relevant=true
+                break
+                ;;
+            esac
+          done < "$RUNNER_TEMP/changed-files.txt"
+
+          echo "script=$relevant" >> "$GITHUB_OUTPUT"
+
+  script-tests:
+    name: >-
+      State discovery script smoke test
+      (OpenWrt ${{ matrix.openwrt_version }})
+    needs: changes
+    if: >-
+      !cancelled() && (
+        github.event_name == 'workflow_dispatch'
+        || needs.changes.result == 'failure'
+        || (
+          needs.changes.result == 'success'
+          && needs.changes.outputs.script == 'true'
+        )
+      )
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        openwrt_version:
+          - '25.12'
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Check shell syntax and command-line behavior
+        run: |
+          docker run --rm \
+            -v "$PWD/scripts/owrt-extra.sh:/tmp/owrt-extra.sh:ro" \
+            --entrypoint /bin/sh \
+            "openwrt/rootfs:x86_64-openwrt-${{ matrix.openwrt_version }}" \
+            -c '
+              set -eu
+              sh -n /tmp/owrt-extra.sh
+
+              sh /tmp/owrt-extra.sh -h > /tmp/help.txt
+              grep -Eq -- "^[[:space:]#]*-k([[:space:]]|$)" /tmp/help.txt
+              grep -Eq -- "^[[:space:]#]*-f([[:space:]]|$)" /tmp/help.txt
+              grep -Eq -- "^[[:space:]#]*-H([[:space:]]|$)" /tmp/help.txt
+              grep -Eq -- "^[[:space:]#]*-h([[:space:]]|$)" /tmp/help.txt
+
+              if sh /tmp/owrt-extra.sh --invalid \
+                > /tmp/invalid.stdout 2> /tmp/invalid.stderr; then
+                echo "Expected an unknown option to fail." >&2
+                exit 1
+              else
+                status=$?
+                if [ "$status" -ne 1 ]; then
+                  echo "Expected status 1, got $status." >&2
+                  exit 1
+                fi
+              fi
+              test ! -s /tmp/invalid.stdout
+              if [ "$(cat /tmp/invalid.stderr)" != \
+                "Unknown option: --invalid (allowed: -k -f -H -h)" ] || \
+                [ "$(wc -l < /tmp/invalid.stderr)" -ne 1 ]; then
+                echo "Unexpected stderr for an unknown option:" >&2
+                cat /tmp/invalid.stderr >&2
+                exit 1
+              fi
+            '
