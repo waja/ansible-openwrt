@@ -21,25 +21,57 @@
           - 1.example.invalid
         router_system_log_proto: tcp
         router_system_conloglevel: 4
+        router_system_dropbear_extra_ports:
+          - 2222
+          - 2223
         router_system_cronloglevel: 7
         router_system_asu_auto_search: 0
         router_system_asu_login_check_for_upgrades: 1
         router_system_asu_upgrade_packages: 1
         router_system_log_ip: 192.0.2.234
 
-    - name: Apply router firewall role
+    - name: Apply router firewall role with defaults
       ansible.builtin.include_role:
         name: router_firewall
       vars:
         router_firewall_input: ACCEPT
         router_firewall_forward: ACCEPT
         router_firewall_output: ACCEPT
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Verify additional Dropbear ports are closed by default
+      ansible.builtin.raw: |
+        if uci -q get \
+          firewall.ansible_router_firewall_dropbear_extra_wan >/dev/null; then
+          echo "Unexpected additional Dropbear WAN firewall rule"
+          exit 1
+        fi
+      changed_when: false
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Apply router firewall role with WAN access enabled
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_input: ACCEPT
+        router_firewall_forward: ACCEPT
+        router_firewall_output: ACCEPT
+        router_firewall_dropbear_extra_ports:
+          - 2222
+          - 2223
+        router_firewall_dropbear_wan_zone: wan
 
     - name: Verify firewall defaults
       ansible.builtin.raw: |
         printf 'input='; uci -q get firewall.@defaults[0].input || exit 1
         printf 'forward='; uci -q get firewall.@defaults[0].forward || exit 1
         printf 'output='; uci -q get firewall.@defaults[0].output || exit 1
+        printf 'extra_rule='
+        uci -q get \
+          firewall.ansible_router_firewall_dropbear_extra_wan.dest_port \
+          || exit 1
       register: router_firewall_uci
       changed_when: false
 
@@ -49,6 +81,7 @@
           - "'input=ACCEPT' in router_firewall_uci.stdout"
           - "'forward=ACCEPT' in router_firewall_uci.stdout"
           - "'output=ACCEPT' in router_firewall_uci.stdout"
+          - "'extra_rule=2222 2223' in router_firewall_uci.stdout"
 
     - name: Apply router packages role
       ansible.builtin.include_role:
@@ -122,6 +155,10 @@
         printf 'asu_upgrade_packages='
         uci -q get attendedsysupgrade.client.upgrade_packages || exit 1
         printf 'log_ip='; uci -q get system.@system[0].log_ip || exit 1
+        section=ansible_router_system_extra_2222
+        printf 'dropbear_2222='; uci -q get dropbear.$section.Port || exit 1
+        section=ansible_router_system_extra_2223
+        printf 'dropbear_2223='; uci -q get dropbear.$section.Port || exit 1
       register: router_system_uci
       changed_when: false
 
@@ -141,6 +178,8 @@
           - "'asu_login_check_for_upgrades=1' in router_system_uci.stdout"
           - "'asu_upgrade_packages=1' in router_system_uci.stdout"
           - "'log_ip=192.0.2.234' in router_system_uci.stdout"
+          - "'dropbear_2222=2222' in router_system_uci.stdout"
+          - "'dropbear_2223=2223' in router_system_uci.stdout"
 
     - name: Verify system timezone is applied at runtime
       ansible.builtin.raw: |
@@ -190,6 +229,20 @@
         grep -F "option upgrade_packages '1'" \
           /etc/config/attendedsysupgrade || exit 1
         grep -F "option log_ip '192.0.2.234'" /etc/config/system || exit 1
+      changed_when: false
+
+    - name: Verify Dropbear listeners are persisted
+      ansible.builtin.raw: |
+        test -z "$(uci changes dropbear)" || {
+          echo "Uncommitted changes remain in Dropbear UCI configuration"
+          exit 1
+        }
+        grep -F "config dropbear 'ansible_router_system_extra_2222'" \
+          /etc/config/dropbear || exit 1
+        grep -F "option Port '2222'" /etc/config/dropbear || exit 1
+        grep -F "config dropbear 'ansible_router_system_extra_2223'" \
+          /etc/config/dropbear || exit 1
+        grep -F "option Port '2223'" /etc/config/dropbear || exit 1
       changed_when: false
 
     - name: Calculate package list for a changed managed service list

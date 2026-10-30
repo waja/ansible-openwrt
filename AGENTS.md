@@ -21,9 +21,10 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   tests for static IPv4 settings
 - `extensions/molecule/network-dhcp/` – isolated configuration-only
   tests for DHCP client settings and IPv4 DHCP server status
-- `roles/router_system/` – manages hostname, timezone, NTP, logging, and
-  ASU settings
-- `roles/router_firewall/` – configures firewall default policies
+- `roles/router_system/` – manages hostname, timezone, NTP, logging, ASU
+  settings, and optional additional Dropbear listeners
+- `roles/router_firewall/` – configures firewall default policies and
+  opt-in WAN access for additional Dropbear ports
 - `roles/router_packages/` – dynamically installs the default package list
 - `roles/router_base/` – enables core services and removes obsolete config
 - `roles/router_network/` – manages explicitly configured IPv4 interface
@@ -576,8 +577,12 @@ dependencies, conditions, matrix, and commands.
 
 - `roles/router_system` manages OpenWrt system settings with
   `community.openwrt.uci` and overridable role defaults, including ASU client
-  options. The ASU package must be installed separately; the remote syslog
-  address (`router_system_log_ip`) intentionally has no default.
+  options and optional additional Dropbear listeners. Additional ports
+  default to empty and use the router's existing system accounts and SSH
+  authorized keys. `router_firewall` opens those ports on WAN only when
+  `router_firewall_dropbear_wan_zone` is set; it defaults to empty. The ASU
+  package must be installed separately; the remote syslog address
+  (`router_system_log_ip`) intentionally has no default.
 - `roles/router_network` demonstrates explicit UCI configuration through
   `router_network_interfaces`, including optional nested DHCP settings
 - `converge.yml` shows how test values are passed via `vars:` to
