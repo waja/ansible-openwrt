@@ -7,6 +7,7 @@ name: Update CI dependency locks
   push:
     paths:
       - ".github/workflows/requirements-*.in"
+      - ".github/workflows/update-ci-lockfiles.yml"
       - "scripts/update-ci-lockfiles.sh"
 
 permissions:
