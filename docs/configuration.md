@@ -74,10 +74,11 @@ ports from the selected zone; it does not restrict source IP addresses.
 
 ### Configure firewall defaults
 
-The `router_firewall` role manages only the default firewall policies for
-input, forwarding, and output. Its defaults are `REJECT`, `REJECT`, and
-`ACCEPT`, respectively. These defaults preserve the usual OpenWrt firewall
-policy.
+The `router_firewall` role manages the default firewall policies for input,
+forwarding, and output. Its defaults are `REJECT`, `REJECT`, and `ACCEPT`,
+respectively. These defaults preserve the usual OpenWrt firewall policy. The
+role can also manage a dedicated WAN rule for additional Dropbear ports when
+explicitly enabled in the configuration above.
 
 For an access point that should pass traffic without filtering at the
 firewall-defaults level, override the values in its `host_vars` file, for
@@ -92,8 +93,8 @@ router_firewall_output: ACCEPT
 
 **Caution:** `input: ACCEPT` allows traffic to services on the router, and
 `forward: ACCEPT` removes the default forwarding restriction. Use these
-settings only where appropriate for your network design. The role does not
-manage zones, individual rules, or SYN-flood protection.
+settings only where appropriate for your network design. The role does not manage zones, arbitrary firewall rules, or SYN-flood
+protection.
 
 ### Configure system settings
 

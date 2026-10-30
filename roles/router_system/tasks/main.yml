@@ -92,14 +92,7 @@
           {{
             router_system_dropbear_config.result
             | regex_findall(
-                '(?m)^dropbear\.ansible_router_system_extra_([0-9]+)=dropbear
-      ansible.builtin.meta: flush_handlers
-
-  always:
-    - name: Release the shared service restart lock
-      ansible.builtin.include_tasks:
-        file: ../../../includes/router_service_restart_lock/release.yml
-
+                '(?m)^dropbear\.ansible_router_system_extra_([0-9]+)=dropbear$'
               )
             | map('int')
             | list
