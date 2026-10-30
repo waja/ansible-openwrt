@@ -69,6 +69,18 @@ documentation and verify compatibility, safety, and behavior before adopting
 an approach. Record lasting decisions in the relevant project documentation
 or issue rather than relying on an external link alone.
 
+## Issue and PR workflow
+
+- Group related issues under a clearly scoped parent issue when the work
+  consists of multiple coordinated implementation steps.
+- Describe the purpose of each child issue and document the intended
+  implementation order when dependencies exist.
+- Keep independent work explicitly out of the dependency chain.
+- Implement one child issue at a time unless there is a clear technical reason
+  to combine changes. Keep each PR focused on its corresponding work item.
+- Use GitHub's native sub-issue relationships when available; otherwise keep
+  the parent issue's linked work-item list accurate.
+
 ## Development workflow
 
 Keep the PR branch history focused on reviewed, coherent changes. Do not
