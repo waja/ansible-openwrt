@@ -1,3 +1,5 @@
+# roles/router_firewall/defaults/main.yml
+---
 router_firewall_input: REJECT
 router_firewall_forward: REJECT
 router_firewall_output: ACCEPT
