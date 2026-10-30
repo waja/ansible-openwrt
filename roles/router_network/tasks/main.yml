@@ -155,13 +155,25 @@
   when: router_network_interfaces | length > 0
   notify: Reload network
 
-- name: Validate DHCP interface settings mapping
+- name: Validate DHCP interface settings
   ansible.builtin.assert:
     that:
-      - router_network_dhcp_interfaces is mapping
+      - item.value is mapping
+      - >-
+        item.value.dhcp is not defined or
+        item.value.dhcp is mapping
+      - >-
+        item.value.dhcp is not defined or
+        item.value.dhcp.enabled is defined
+      - >-
+        item.value.dhcp is not defined or
+        item.value.dhcp.enabled is boolean
     fail_msg: >-
-      router_network_dhcp_interfaces must be a mapping of DHCP section names
-      to 'enabled' or 'disabled'.
+      Interface '{{ item.key }}' must be a mapping. Its optional dhcp
+      setting must be a mapping with a boolean enabled value.
+  loop: "{{ router_network_interfaces | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
 
 - name: Request a dnsmasq restart when explicitly forced
   ansible.builtin.debug:
@@ -169,41 +181,30 @@
   changed_when: router_network_force_restart | bool
   notify: Restart dnsmasq
 
-- name: Configure IPv4 DHCP settings
-  when: router_network_dhcp_interfaces | length > 0
-  block:
-    - name: Validate DHCP interface settings
-      ansible.builtin.assert:
-        that:
-          - item.value in ['enabled', 'disabled']
-        fail_msg: >-
-          Invalid DHCP configuration for '{{ item.key }}': set its
-          status to 'enabled' or 'disabled'.
-      loop: "{{ router_network_dhcp_interfaces | dict2items }}"
-      loop_control:
-        label: "{{ item.key }}"
+- name: Initialize DHCP configuration operations
+  ansible.builtin.set_fact:
+    router_network_dhcp_operations: []
+  changed_when: false
+  when: router_network_interfaces | length > 0
 
-    - name: Initialize DHCP configuration operations
-      ansible.builtin.set_fact:
-        router_network_dhcp_operations: []
-      changed_when: false
+- name: Build DHCP configuration operations
+  ansible.builtin.set_fact:
+    router_network_dhcp_operations: >-
+      {{ router_network_dhcp_operations
+         + [{
+             'command': 'set',
+             'key': 'dhcp.' ~ item.key ~ '.ignore',
+             'value': '0' if item.value.dhcp.enabled else '1'
+           }] }}
+  changed_when: false
+  loop: "{{ router_network_interfaces | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.value.dhcp is defined
 
-    - name: Build DHCP configuration operations
-      ansible.builtin.set_fact:
-        router_network_dhcp_operations: >-
-          {{ router_network_dhcp_operations
-             + [{
-                 'command': 'set',
-                 'key': 'dhcp.' ~ item.key ~ '.ignore',
-                 'value': '0' if item.value == 'enabled' else '1'
-               }] }}
-      changed_when: false
-      loop: "{{ router_network_dhcp_interfaces | dict2items }}"
-      loop_control:
-        label: "{{ item.key }}"
-
-    - name: Apply configured IPv4 DHCP settings in one UCI transaction
-      community.openwrt.uci:
-        autocommit: true
-        operations: "{{ router_network_dhcp_operations }}"
-      notify: Restart dnsmasq
+- name: Apply configured IPv4 DHCP settings in one UCI transaction
+  community.openwrt.uci:
+    autocommit: true
+    operations: "{{ router_network_dhcp_operations }}"
+  when: router_network_dhcp_operations | length > 0
+  notify: Restart dnsmasq
