@@ -12,6 +12,7 @@ name: Update CI dependency locks
 
 permissions:
   contents: write
+  workflows: write
 
 jobs:
   update-locks:
