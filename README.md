@@ -219,7 +219,7 @@ See the [router configuration guide](docs/configuration.md) for the complete ins
 - `roles/router_firewall/` — configurable firewall default policies
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
-- `roles/router_network/` — IPv4 interface addressing and DHCP server control
+- `roles/router_network/` — IPv4 interface addressing and per-interface DHCP server settings
 - `roles/router_package_audit/` — package baseline comparison
 - `requirements.yml` — pinned Ansible role and collection dependencies
 - `extensions/molecule/default/` — Molecule test scenario
