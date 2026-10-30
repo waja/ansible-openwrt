@@ -439,3 +439,4 @@ fi
 
 echo
 echo "Raw data: $OUT/ (factory.show, current.show, uci.diff, packages.yml, ...)"
+# Temporary CI path-filter probe; remove after validation.
