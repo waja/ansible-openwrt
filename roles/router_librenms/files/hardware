@@ -1,0 +1,48 @@
+#!/bin/sh
+# Report the hardware model for LibreNMS, including virtual machines.
+
+for model_file in \
+    /sys/firmware/devicetree/base/model \
+    /proc/device-tree/model; do
+    if [ -r "$model_file" ]; then
+        model="$(tr -d '\000' < "$model_file")"
+        if [ -n "$model" ]; then
+            printf '%s\n' "$model"
+            exit 0
+        fi
+    fi
+done
+
+dmi_vendor=""
+dmi_product=""
+
+if [ -r /sys/class/dmi/id/sys_vendor ]; then
+    dmi_vendor="$(cat /sys/class/dmi/id/sys_vendor)"
+fi
+
+if [ -r /sys/class/dmi/id/product_name ]; then
+    dmi_product="$(cat /sys/class/dmi/id/product_name)"
+fi
+
+case "$dmi_vendor" in
+    *QEMU*|*KVM*)
+        if [ -n "$dmi_product" ]; then
+            printf '%s %s\n' "$dmi_vendor" "$dmi_product"
+        else
+            printf '%s Virtual Machine\n' "$dmi_vendor"
+        fi
+        exit 0
+        ;;
+esac
+
+if [ -n "$dmi_product" ]; then
+    printf '%s\n' "$dmi_product"
+    exit 0
+fi
+
+if [ -n "$dmi_vendor" ]; then
+    printf '%s\n' "$dmi_vendor"
+    exit 0
+fi
+
+printf 'OpenWrt %s\n' "$(uname -m)"
