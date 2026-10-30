@@ -238,8 +238,9 @@ Always select dynamically via the fact set by
   `router_packages_managed_services` through `router_packages_service_package_map`;
   every managed service must have a mapping to one or more packages.
 - `router_network` owns explicitly listed IPv4 interface addressing
-  (`dhcp` or `static`) and per-section DHCP server status
-  (`enabled`/`disabled`). Empty interface and DHCP mappings are no-ops.
+  (`dhcp` or `static`) and optional per-interface DHCP server status via
+  `router_network_interfaces.<interface>.dhcp.enabled`. Omitted `dhcp`
+  settings and unlisted interfaces are left untouched.
   Mixed interface modes, DHCPv6, and IPv6 Router Advertisements are out
   of scope.
 - `router_package_audit` is optional because it requires the saved
