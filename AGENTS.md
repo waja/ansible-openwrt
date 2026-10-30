@@ -35,6 +35,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   git-ignored
 - `requirements.yml` – authoritative, version-pinned source for
   Ansible role and collection dependencies used locally and in CI.
+- `.github/workflows/requirements-ci.txt` – exact `ansible-core` pin
+  shared by the GitHub Actions workflow jobs.
 - `.github/workflows/molecule.yml` – main CI pipeline
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
 
@@ -362,6 +364,15 @@ The workflow file is the source of truth. Keep this section synchronized
 with it.
 
 - Python version: `3.14`
+- The exact `ansible-core` version is pinned in
+  `.github/workflows/requirements-ci.txt`; all jobs that install
+  Ansible use this file.
+- The lint job installs the pin together with `yamllint` and
+  `ansible-lint` in one pip resolver invocation.
+- The sanity, units, and Molecule jobs install the same pin alongside
+  their respective test dependencies.
+- Dependency consistency is checked with `python -m pip check`, and
+  installed Ansible versions are logged.
 - Triggers: `workflow_dispatch`, a weekly schedule (Sunday at 06:17 UTC),
   `pull_request`, and pushes to `development` and `master`.
   **Note:** `$default-branch` is only a template macro for starter
@@ -372,6 +383,10 @@ with it.
 
 - `lint`
   - Runs `yamllint .`.
+  - Installs the pinned `ansible-core` version from
+    `.github/workflows/requirements-ci.txt` together with
+    `yamllint` and `ansible-lint`; checks dependencies with
+    `python -m pip check`.
   - Installs pinned roles and collections from `requirements.yml` into
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
   - Runs `ansible-lint`, excluding the installed `community.openwrt`
@@ -383,12 +398,18 @@ with it.
 - `sanity` and `units`
   - Depend on `lint` and `check-structure`.
   - Run only when `has_collection == 'true'`.
+  - Install `ansible-core` from
+    `.github/workflows/requirements-ci.txt`, check dependencies, and
+    log the installed Ansible version.
   - Use `ansible-test` with `${{ env.ANSIBLE_PYTHON_VERSION }}`.
 - `script-tests`
   - Runs shell syntax and command-line smoke tests for
     `scripts/owrt-extra.sh` in the regular OpenWrt 25.12 image.
 - `molecule`
   - Depends on `lint`, `sanity`, `units`.
+  - Installs the same pinned `ansible-core` version from
+    `.github/workflows/requirements-ci.txt` alongside Molecule and its
+    Docker plugin; checks dependencies with `python -m pip check`.
   - Installs pinned roles and collections from `requirements.yml` into
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
   - Uses `if: ${{ !cancelled() && !failure() }}` so it still runs when
