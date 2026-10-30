@@ -47,8 +47,28 @@ router_firewall_output: ACCEPT
 
 **Caution:** `input: ACCEPT` allows traffic to services on the router, and
 `forward: ACCEPT` removes the default forwarding restriction. Use these
-settings only where appropriate for your network design. The role does not
-manage zones, individual rules, or SYN-flood protection.
+settings only where appropriate for your network design.
+
+The role can also manage source NAT (masquerading) for explicitly selected
+zones. Set `router_firewall_masquerading` to a mapping of zone names to
+booleans. `true` enables masquerading and `false` disables it. The default
+is an empty mapping, so no zone settings are changed. Zones omitted from the
+mapping remain untouched; unknown zone names cause the role to fail rather
+than creating new zones. Only the `masq` option is managed.
+
+For example, in `host_vars/router1.yml`:
+
+```yaml
+---
+router_firewall_masquerading:
+  wan: true
+  lan: false
+  guest: false
+```
+
+Masquerading changes are committed in one UCI transaction and trigger a
+firewall reload. The role does not manage `masq6`, zone membership,
+individual firewall rules, or SYN-flood protection.
 
 ### Configure system settings
 
