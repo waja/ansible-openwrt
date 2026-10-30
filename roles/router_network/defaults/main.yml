@@ -14,8 +14,8 @@ router_network_interfaces: {}
 #   enabled: true
 # Omit dhcp to leave that interface's DHCP section untouched.
 
-# Set to true to retry a dnsmasq restart after a previous handler failure.
-router_network_force_restart: false
+# Set to true to force a dnsmasq restart, even when no DHCP settings changed.
+router_network_force_dnsmasq_restart: false
 
 # Set to false to commit UCI settings without reloading network services.
 # Intended for configuration-only tests and controlled maintenance.
