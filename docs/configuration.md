@@ -272,7 +272,7 @@ router_network_interfaces:
     dhcp:
       enabled: true
   guest:
-    ipaddr: 192.0.2.1
+    ipaddr: 192.0.20.1
     netmask: 255.255.255.0
     dhcp:
       enabled: false
