@@ -1,0 +1,51 @@
+# .github/workflows/update-ci-lockfiles.yml
+---
+name: Update CI dependency locks
+
+"on":
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/requirements-*.in"
+      - "scripts/update-ci-lockfiles.sh"
+
+permissions:
+  contents: write
+
+jobs:
+  update-locks:
+    name: Compile and commit dependency locks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Python 3.
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install the pinned lockfile generator.
+        run: |
+          python -m pip install --disable-pip-version-check \
+            "pip-tools==7.6.2"
+
+      - name: Generate all CI dependency locks.
+        run: |
+          bash scripts/update-ci-lockfiles.sh
+
+      - name: Commit updated lockfiles.
+        run: |
+          if git diff --quiet -- .github/workflows/requirements-*.txt; then
+            echo "CI dependency locks are already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/requirements-*.txt
+          git commit -m "chore(ci): refresh Python dependency locks"
+          git push
