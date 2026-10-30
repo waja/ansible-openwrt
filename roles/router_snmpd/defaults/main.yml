@@ -1,0 +1,5 @@
+# roles/router_snmpd/defaults/main.yml
+---
+# SNMP configuration is opt-in; set the community explicitly when enabled.
+router_snmpd_enabled: false
+router_snmpd_community: ""

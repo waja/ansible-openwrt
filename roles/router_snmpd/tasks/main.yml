@@ -1,0 +1,25 @@
+# roles/router_snmpd/tasks/main.yml
+---
+- name: Validate SNMP community configuration
+  ansible.builtin.assert:
+    that:
+      - router_snmpd_community is string
+      - router_snmpd_community | trim | length > 0
+      - router_snmpd_community | trim == router_snmpd_community
+      - router_snmpd_community != 'public'
+    fail_msg: >-
+      Set router_snmpd_community to a non-empty value other than 'public'
+      when router_snmpd_enabled is true.
+
+- name: Replace the default SNMP communities
+  community.openwrt.uci:
+    operations:
+      - command: set
+        key: snmpd.public.community
+        value: "{{ router_snmpd_community }}"
+      - command: set
+        key: snmpd.public6.community
+        value: "{{ router_snmpd_community }}"
+    autocommit: true
+  no_log: true
+  notify: Restart SNMP daemon

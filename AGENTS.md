@@ -30,6 +30,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `roles/router_base/` – enables core services and removes obsolete config
 - `roles/router_network/` – manages explicitly configured IPv4 interface
   addressing and DHCP server settings
+- `roles/router_snmpd/` – optionally replaces the default SNMP community
+  while retaining the package's read-only access mappings
 - `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
   `defaults/main.yml`
