@@ -103,6 +103,8 @@ packages, list all package names under that service.
 The package and base roles coordinate service restarts through a shared
 temporary marker and restart lock. When package installation changes the
 installed package set, `router_packages` marks service restarts as
-pending. `router_base` then enables and starts the configured services
-and restarts each affected service once. This avoids restarting services
-before package installation has completed.
+pending. `router_base` then enables and starts every service in
+`router_base_services` and restarts each of those configured services once.
+The role does not determine which individual services are affected by a
+specific package change. This avoids restarting services before package
+installation has completed.

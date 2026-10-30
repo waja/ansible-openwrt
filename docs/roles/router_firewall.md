@@ -24,7 +24,8 @@ timed rollback.
 ## Default policies
 
 The role manages the input, forward, and output policies in the first
-firewall defaults section.
+firewall defaults section. `router_firewall_zones` defaults to an empty
+mapping (`{}`), so no additional zones are managed unless you declare them.
 
 | Variable | Default | Accepted values |
 | --- | --- | --- |
