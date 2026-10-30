@@ -15,6 +15,6 @@ for group in lint ansible-test molecule; do
     --allow-unsafe \
     --resolver=backtracking \
     --no-emit-index-url \
-    --output-file=".github/workflows/requirements-${group}.txt" \
+    --output-file="requirements/ci/${group}.txt" \
     ".github/workflows/requirements-${group}.in"
 done
