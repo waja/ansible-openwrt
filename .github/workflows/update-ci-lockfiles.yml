@@ -1,36 +1,32 @@
 # .github/workflows/update-ci-lockfiles.yml
 ---
-name: Update CI dependency locks
+name: Validate CI dependency locks
 
 "on":
   workflow_dispatch:
   pull_request:
     paths:
       - "requirements/ci/*.in"
+      - "requirements/ci/*.txt"
       - ".github/workflows/update-ci-lockfiles.yml"
       - "scripts/update-ci-lockfiles.sh"
   push:
     paths:
       - "requirements/ci/*.in"
+      - "requirements/ci/*.txt"
       - ".github/workflows/update-ci-lockfiles.yml"
       - "scripts/update-ci-lockfiles.sh"
 
 permissions:
-  contents: write
-
-concurrency:
-  group: update-ci-lockfiles-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  update-locks:
-    name: Compile and commit dependency locks
+  validate-locks:
+    name: Validate generated dependency locks
     runs-on: ubuntu-latest
     steps:
       - name: Check out the codebase.
         uses: actions/checkout@v7
-        with:
-          ref: ${{ github.ref }}
 
       - name: Set up Python 3.
         uses: actions/setup-python@v7
@@ -42,22 +38,15 @@ jobs:
           python -m pip install --disable-pip-version-check \
             "pip-tools==7.6.2"
 
-      - name: Generate all CI dependency locks.
+      - name: Regenerate all CI dependency locks.
         run: |
           bash scripts/update-ci-lockfiles.sh
 
-      - name: Commit updated lockfiles.
+      - name: Verify lockfiles are up to date.
         run: |
-          git add requirements/ci/*.txt
-
-          if git diff --cached --quiet; then
-            echo "CI dependency locks are already up to date."
-            exit 0
+          if ! git diff --exit-code -- requirements/ci/*.txt; then
+            echo "::error::CI dependency lockfiles are stale."
+            echo "Update the .in inputs and regenerate the .txt files with:"
+            echo "  bash scripts/update-ci-lockfiles.sh"
+            exit 1
           fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore(ci): refresh Python dependency locks"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push
