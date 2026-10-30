@@ -3,3 +3,4 @@
 router_firewall_input: REJECT
 router_firewall_forward: REJECT
 router_firewall_output: ACCEPT
+router_firewall_masquerading: {}

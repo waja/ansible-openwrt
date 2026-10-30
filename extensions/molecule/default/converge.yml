@@ -27,6 +27,21 @@
         router_system_asu_upgrade_packages: 1
         router_system_log_ip: 192.0.2.234
 
+    - name: Create an unmanaged guest firewall zone
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: zone
+        name: guest
+        find:
+          name: guest
+        value:
+          network: guest
+          input: ACCEPT
+          output: ACCEPT
+          forward: REJECT
+          masq: "1"
+
     - name: Apply router firewall role
       ansible.builtin.include_role:
         name: router_firewall
@@ -34,12 +49,18 @@
         router_firewall_input: ACCEPT
         router_firewall_forward: ACCEPT
         router_firewall_output: ACCEPT
+        router_firewall_masquerading:
+          lan: true
+          wan: false
 
-    - name: Verify firewall defaults
+    - name: Verify firewall defaults and zone masquerading
       ansible.builtin.raw: |
         printf 'input='; uci -q get firewall.@defaults[0].input || exit 1
         printf 'forward='; uci -q get firewall.@defaults[0].forward || exit 1
         printf 'output='; uci -q get firewall.@defaults[0].output || exit 1
+        printf 'lan_masq='; uci -q get firewall.@zone[0].masq || exit 1
+        printf 'wan_masq='; uci -q get firewall.@zone[1].masq || exit 1
+        printf 'guest_masq='; uci -q get firewall.guest.masq || exit 1
       register: router_firewall_uci
       changed_when: false
 
@@ -49,6 +70,9 @@
           - "'input=ACCEPT' in router_firewall_uci.stdout"
           - "'forward=ACCEPT' in router_firewall_uci.stdout"
           - "'output=ACCEPT' in router_firewall_uci.stdout"
+          - "'lan_masq=1' in router_firewall_uci.stdout"
+          - "'wan_masq=0' in router_firewall_uci.stdout"
+          - "'guest_masq=1' in router_firewall_uci.stdout"
 
     - name: Apply router packages role
       ansible.builtin.include_role:

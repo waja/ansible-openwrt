@@ -1,5 +1,87 @@
 # roles/router_firewall/tasks/main.yml
 ---
+- name: Validate firewall masquerading configuration
+  ansible.builtin.assert:
+    that:
+      - router_firewall_masquerading is mapping
+      - >-
+        router_firewall_masquerading
+        | dict2items
+        | map(attribute='value')
+        | select('boolean')
+        | list
+        | length == router_firewall_masquerading | length
+    fail_msg: >-
+      router_firewall_masquerading must be a mapping of firewall zone names
+      to boolean values.
+
+- name: Find configured firewall zones
+  community.openwrt.uci:
+    command: find_all
+    config: firewall
+    type: zone
+  register: router_firewall_zone_sections
+  when: router_firewall_masquerading | length > 0
+
+- name: Read configured firewall zone names
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ item }}.name"
+  loop: "{{ router_firewall_zone_sections.result_list | default([]) }}"
+  register: router_firewall_zone_names
+  when: router_firewall_masquerading | length > 0
+
+- name: Validate requested firewall zones exist
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_masquerading.keys()
+        | difference(
+            router_firewall_zone_names.results
+            | map(attribute='result')
+            | list
+          )
+        | length == 0
+    fail_msg: >-
+      Unknown firewall zone(s) in router_firewall_masquerading:
+      {{ router_firewall_masquerading.keys()
+         | difference(
+             router_firewall_zone_names.results
+             | map(attribute='result')
+             | list
+           )
+         | join(', ') }}.
+  when: router_firewall_masquerading | length > 0
+
+- name: Initialize firewall masquerading operations
+  ansible.builtin.set_fact:
+    router_firewall_masquerading_operations: []
+  changed_when: false
+  when: router_firewall_masquerading | length > 0
+
+- name: Build firewall masquerading operations
+  ansible.builtin.set_fact:
+    router_firewall_masquerading_operations: >-
+      {{ router_firewall_masquerading_operations
+         + [{
+             'command': 'set',
+             'key': 'firewall.' ~ item.item ~ '.masq',
+             'value': '1' if router_firewall_masquerading[item.result]
+                      else '0'
+           }] }}
+  changed_when: false
+  loop: "{{ router_firewall_zone_names.results | default([]) }}"
+  loop_control:
+    label: "{{ item.result }}"
+  when: item.result in router_firewall_masquerading
+
+- name: Apply firewall masquerading settings in one UCI transaction
+  community.openwrt.uci:
+    autocommit: true
+    operations: "{{ router_firewall_masquerading_operations }}"
+  when: router_firewall_masquerading | length > 0
+  notify: Reload firewall
+
 - name: Configure firewall input policy
   community.openwrt.uci:
     command: set

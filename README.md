@@ -216,7 +216,7 @@ See the [router configuration guide](docs/configuration.md) for the complete ins
 - `playbooks/site.yml` — standard router configuration
 - `playbooks/audit_packages.yml` — installed-package audit
 - `roles/router_system/` — hostname, timezone, NTP, logging, and ASU settings
-- `roles/router_firewall/` — configurable firewall default policies
+- `roles/router_firewall/` — firewall default policies and per-zone masquerading
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
 - `roles/router_network/` — IPv4 interface addressing and DHCP server control
