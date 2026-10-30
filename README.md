@@ -233,7 +233,8 @@ Install the lint tools used by the project, then run the checks. On a control
 node with Python and pip available, install them with:
 
 ```bash
-python -m pip install yamllint ansible-lint
+python -m pip install --require-hashes \
+  -r .github/workflows/requirements-lint.txt
 ```
 
 Then run the checks used by the project:
@@ -245,5 +246,11 @@ ansible-playbook -i inventory.ini --syntax-check playbooks/site.yml
 ansible-playbook -i inventory.ini --syntax-check playbooks/audit_packages.yml
 ```
 
-The syntax checks use the inventory so Ansible can resolve the `openwrt`
-host pattern. These checks do not replace running the Molecule scenario.
+The lint dependencies are pinned in the generated
+`.github/workflows/requirements-lint.txt` lockfile. Direct dependency
+changes belong in the corresponding `.in` file; regenerate all lockfiles
+with `bash scripts/update-ci-lockfiles.sh` using Python 3.14 and
+`pip-tools==7.6.2`. CI installs the generated lockfiles with
+`--require-hashes`. The syntax checks use the inventory so Ansible can
+resolve the `openwrt` host pattern. These checks do not replace running
+the Molecule scenario.
