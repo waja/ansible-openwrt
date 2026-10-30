@@ -69,6 +69,9 @@
             forward: REJECT
             masq: false
             mtu_fix: true
+          new_guest:
+            network:
+              - lan
         router_firewall_dropbear_extra_ports:
           - 2222
           - 2223
@@ -87,6 +90,8 @@
         uci -q get firewall.guest_test.name || exit 1
         printf 'zone_network='
         uci -q get firewall.guest_test.network || exit 1
+        printf 'new_zone_name='
+        uci -q get firewall.new_guest.name || exit 1
         test -z "$(uci changes firewall)" || {
           echo "Uncommitted changes remain in firewall UCI configuration"
           exit 1
@@ -103,6 +108,7 @@
           - "'extra_rule=2222 2223' in router_firewall_uci.stdout"
           - "'zone_name=guest_test' in router_firewall_uci.stdout"
           - "'zone_network=lan' in router_firewall_uci.stdout"
+          - "'new_zone_name=new_guest' in router_firewall_uci.stdout"
 
     - name: Apply router packages role
       ansible.builtin.include_role:
