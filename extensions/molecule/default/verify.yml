@@ -205,6 +205,192 @@
         that:
           - router_firewall_invalid_zone.result | default('') == ''
 
+    - name: Create a zone for successful removal
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          remove_test:
+            network:
+              - lan
+
+    - name: Remove an unreferenced named firewall zone
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          remove_test:
+            state: absent
+
+    - name: Verify the named firewall zone was removed
+      community.openwrt.uci:
+        command: get
+        key: firewall.remove_test
+      register: router_firewall_removed_zone
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the named firewall zone is absent
+      ansible.builtin.assert:
+        that:
+          - router_firewall_removed_zone.result | default('') == ''
+
+    - name: Verify removal is idempotent
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          remove_test:
+            state: absent
+
+    - name: Create an anonymous zone for successful removal
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: remove_anon
+          - command: add_list
+            key: firewall.@zone[-1].network
+            value: lan
+
+    - name: Remove an adopted anonymous firewall zone
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          remove_anon:
+            state: absent
+
+    - name: Verify the anonymous firewall zone was removed
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: remove_anon
+      register: router_firewall_removed_anonymous_zone
+      changed_when: false
+
+    - name: Assert the anonymous firewall zone is absent
+      ansible.builtin.assert:
+        that:
+          - router_firewall_removed_anonymous_zone.result_list | length == 0
+
+    - name: Create a zone and dependent firewall objects
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: ref_test
+          - command: add_list
+            key: firewall.@zone[-1].network
+            value: lan
+          - command: section
+            config: firewall
+            type: rule
+            name: ref_rule_test
+            value:
+              name: ref_rule_test
+              src: ref_test
+              target: ACCEPT
+          - command: section
+            config: firewall
+            type: redirect
+            name: ref_redirect_test
+            value:
+              name: ref_redirect_test
+              src: ref_test
+              dest: lan
+          - command: section
+            config: firewall
+            type: forwarding
+            name: ref_forward_test
+            value:
+              src: ref_test
+              dest: lan
+
+    - name: Capture reference-safe zone removal validation
+      block:
+        - name: Attempt to remove a referenced firewall zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              ref_test:
+                state: absent
+      rescue:
+        - name: Record the referenced zone validation failure
+          ansible.builtin.set_fact:
+            router_firewall_referenced_zone_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify referenced zone removal was rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_referenced_zone_failure
+            == 'Reject removal of referenced firewall zones'
+
+    - name: Verify the referenced zone and dependent objects remain
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_referenced_zone_show
+      changed_when: false
+
+    - name: Find the anonymous zone that must remain
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: ref_test
+      register: router_firewall_referenced_anonymous_zone
+      changed_when: false
+
+    - name: Assert the referenced anonymous zone remains
+      ansible.builtin.assert:
+        that:
+          - router_firewall_referenced_anonymous_zone.result_list | length == 1
+
+    - name: Assert reference validation made no partial changes
+      ansible.builtin.assert:
+        that:
+          - "'firewall.@zone[' in router_firewall_referenced_zone_show.result"
+          - >-
+            'firewall.ref_rule_test=rule'
+            in router_firewall_referenced_zone_show.result
+          - >-
+            'firewall.ref_redirect_test=redirect'
+            in router_firewall_referenced_zone_show.result
+          - >-
+            'firewall.ref_forward_test=forwarding'
+            in router_firewall_referenced_zone_show.result
+
+    - name: Check for staged changes after reference validation
+      community.openwrt.command:
+        cmd: uci changes firewall
+      register: router_firewall_pending_changes
+      changed_when: false
+
+    - name: Assert reference validation left no staged changes
+      ansible.builtin.assert:
+        that:
+          - router_firewall_pending_changes.stdout | length == 0
+
     - name: Verify no staged firewall UCI changes remain
       community.openwrt.command:
         cmd: uci changes firewall

@@ -20,11 +20,15 @@
       - item.key is string
       - item.key is match('^[A-Za-z0-9_]+$')
       - item.value is mapping
+      - item.value.state | default('present') in ['present', 'absent']
+      - >-
+        item.value.state | default('present') != 'absent' or
+        item.value.keys() | difference(['state', 'name']) | length == 0
       - >-
         item.value.keys()
         | difference([
-            'name', 'network', 'input', 'output', 'forward', 'masq',
-            'mtu_fix'
+            'name', 'state', 'network', 'input', 'output', 'forward',
+            'masq', 'mtu_fix'
           ])
         | length == 0
       - >-
@@ -34,6 +38,7 @@
         (item.value.name | default(item.key))
         is match('^[A-Za-z_][A-Za-z0-9_]*$')
       - >-
+        item.value.state | default('present') == 'absent' or
         item.value.network is not defined or
         (item.value.network is sequence and
          item.value.network is not string and
@@ -41,20 +46,26 @@
          item.value.network | select('string') | list | length
          == item.value.network | length)
       - >-
+        item.value.state | default('present') == 'absent' or
         item.value.input is not defined or
         item.value.input in ['ACCEPT', 'REJECT', 'DROP']
       - >-
+        item.value.state | default('present') == 'absent' or
         item.value.output is not defined or
         item.value.output in ['ACCEPT', 'REJECT', 'DROP']
       - >-
+        item.value.state | default('present') == 'absent' or
         item.value.forward is not defined or
         item.value.forward in ['ACCEPT', 'REJECT', 'DROP']
-      - item.value.masq is not defined or item.value.masq is boolean
-      - item.value.mtu_fix is not defined or item.value.mtu_fix is boolean
+      - item.value.state | default('present') == 'absent' or
+        item.value.masq is not defined or item.value.masq is boolean
+      - item.value.state | default('present') == 'absent' or
+        item.value.mtu_fix is not defined or item.value.mtu_fix is boolean
     fail_msg: >-
       Invalid firewall zone '{{ item.key }}'. Use a valid UCI section ID,
       a zone name of at most 11 characters that starts with a letter or
-      underscore, and only the documented basic options with their
+      underscore, state present or absent, and only documented options
+      (state: absent accepts only name and state) with their
       corresponding YAML types. Network must be a non-empty list of strings.
   loop: "{{ router_firewall_zones | dict2items }}"
   loop_control:
@@ -180,6 +191,77 @@
   loop_control:
     label: "{{ item.0.key }}"
 
+- name: Initialize firewall zone reference queries
+  ansible.builtin.set_fact:
+    router_firewall_zone_reference_queries: []
+  changed_when: false
+
+- name: Build reference queries for zones being removed
+  ansible.builtin.set_fact:
+    router_firewall_zone_reference_queries: >-
+      {{
+        router_firewall_zone_reference_queries + [{
+          'zone_name': item.1.0.value.name | default(item.1.0.key),
+          'type': item.0.0,
+          'option': item.0.1
+        }]
+      }}
+  loop: >-
+    {{
+      [
+        ['rule', 'src'], ['rule', 'dest'],
+        ['redirect', 'src'], ['redirect', 'dest'],
+        ['forwarding', 'src'], ['forwarding', 'dest']
+      ]
+      | product(
+          router_firewall_zones
+          | dict2items
+          | zip(router_firewall_named_zones.results)
+          | zip(router_firewall_matching_zones.results)
+          | map('flatten')
+          | list
+        )
+      | list
+    }}
+  loop_control:
+    label: >-
+      {{ item.1.0.key }}:{{ item.0.0 }}.{{ item.0.1 }}
+  when:
+    - item.1.0.value.state | default('present') == 'absent'
+    - item.1.1.result == 'zone' or
+      (item.1.2.result_list | default([]) | length == 1)
+  changed_when: false
+
+- name: Find firewall objects referencing zones being removed
+  community.openwrt.uci:
+    command: find_all
+    config: firewall
+    type: "{{ item.type }}"
+    option: "{{ item.option }}"
+    find: "{{ item.zone_name }}"
+  loop: "{{ router_firewall_zone_reference_queries }}"
+  loop_control:
+    label: "{{ item.zone_name }} <- {{ item.type }}.{{ item.option }}"
+  register: router_firewall_zone_references
+  changed_when: false
+
+- name: Reject removal of referenced firewall zones
+  ansible.builtin.assert:
+    that:
+      - item.1.result_list | default([]) | length == 0
+    fail_msg: >-
+      Cannot remove firewall zone '{{ item.0.zone_name }}': it is still
+      referenced by {{ item.0.type }} section(s) through option
+      '{{ item.0.option }}'. Remove or update those references first.
+  loop: >-
+    {{
+      router_firewall_zone_reference_queries
+      | zip(router_firewall_zone_references.results | default([]))
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.zone_name }}:{{ item.0.type }}.{{ item.0.option }}"
+
 - name: Check the existing optional Dropbear WAN firewall rule
   community.openwrt.uci:
     command: get
@@ -216,27 +298,57 @@
   ansible.builtin.set_fact:
     router_firewall_operations: >-
       {{
-        router_firewall_operations + [{
-          'command': 'section',
-          'config': 'firewall',
-          'type': 'zone',
-          'name': item.0.key,
-          'value': (
-            item.0.value
-            | combine({'name': item.0.value.name | default(item.0.key)})
-          )
-        } | combine(
-          (
-            {
+        router_firewall_operations + (
+          [{
+            'command': 'absent',
+            'key': 'firewall.' ~ item.0.key
+          }]
+          if item.0.value.state | default('present') == 'absent' and
+             item.1.result == 'zone'
+          else (
+            [{
+              'command': 'absent',
+              'config': 'firewall',
+              'type': 'zone',
               'find': {
                 'name': item.0.value.name | default(item.0.key)
               }
-            }
-            if item.1.result == '' and
+            }]
+            if item.0.value.state | default('present') == 'absent' and
+               item.1.result == '' and
                (item.2.result_list | default([]) | length == 1)
-            else {}
+            else (
+              [{
+                'command': 'section',
+                'config': 'firewall',
+                'type': 'zone',
+                'name': item.0.key,
+                'value': (
+                  item.0.value
+                  | dict2items
+                  | rejectattr('key', 'equalto', 'state')
+                  | items2dict
+                  | combine({
+                      'name': item.0.value.name | default(item.0.key)
+                    })
+                )
+              } | combine(
+                (
+                  {
+                    'find': {
+                      'name': item.0.value.name | default(item.0.key)
+                    }
+                  }
+                  if item.1.result == '' and
+                     (item.2.result_list | default([]) | length == 1)
+                  else {}
+                )
+              )]
+              if item.0.value.state | default('present') != 'absent'
+              else []
+            )
           )
-        )]
+        )
       }}
   loop: >-
     {{
