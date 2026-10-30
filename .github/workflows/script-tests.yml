@@ -18,7 +18,7 @@ jobs:
       script: ${{ steps.filter.outputs.script }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -97,7 +97,7 @@ jobs:
           - '25.12'
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Check shell syntax and command-line behavior
         run: |

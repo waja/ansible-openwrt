@@ -22,7 +22,7 @@ jobs:
       markdown: ${{ steps.filter.outputs.markdown }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
         if: >-
@@ -110,7 +110,7 @@ jobs:
           || needs.changes.outputs.scripts == 'true'
           || needs.changes.outputs.markdown == 'true'
           || github.event_name == 'workflow_dispatch'
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.14'
 
@@ -133,7 +133,7 @@ jobs:
           needs.changes.result != 'success'
           || needs.changes.outputs.markdown == 'true'
           || github.event_name == 'workflow_dispatch'
-        uses: DavidAnson/markdownlint-cli2-action@v24
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24
         with:
           globs: '**/*.md'
 
