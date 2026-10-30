@@ -29,3 +29,7 @@
     - role: router_base
       tags:
         - router_base
+    - role: router_snmpd
+      tags:
+        - router_snmpd
+      when: router_snmpd_enabled | bool

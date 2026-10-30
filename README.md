@@ -17,7 +17,7 @@ inventory and customize variables there.
 
 - `playbooks/site.yml` runs the standard configuration:
   `community.openwrt.init`, `router_packages`, `router_base`, and
-  `router_network`.
+  `router_network`, and the opt-in `router_snmpd` role.
 - `playbooks/audit_packages.yml` compares the installed packages on each
   router against a saved package-list baseline. It reports differences but
   does not install or remove packages to reconcile them.
@@ -29,6 +29,8 @@ For additional Dropbear SSH ports and optional WAN access, see
 For declarative firewall zones, including anonymous factory-zone adoption,
 see the
 [firewall configuration guide](docs/configuration.md#configure-firewall-defaults-and-zones).
+For optional SNMP daemon configuration, see the
+[SNMP configuration guide](docs/configuration.md#configure-the-snmp-daemon).
 
 ## Requirements
 
@@ -210,6 +212,7 @@ See the [router configuration guide](docs/configuration.md) for the complete ins
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
 - `roles/router_network/` — IPv4 interface addressing and per-interface DHCP server settings
+- `roles/router_snmpd/` — optional SNMP community configuration
 - `roles/router_package_audit/` — package baseline comparison
 - `requirements.yml` — pinned Ansible role and collection dependencies
 - `extensions/molecule/default/` — Molecule test scenario

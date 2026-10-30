@@ -1,0 +1,6 @@
+# roles/router_snmpd/handlers/main.yml
+---
+- name: Restart SNMP daemon
+  community.openwrt.service:
+    name: snmpd
+    state: restarted

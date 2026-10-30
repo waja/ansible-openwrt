@@ -22,7 +22,8 @@ ansible-playbook -i inventory.ini playbooks/site.yml \
 ```
 
 Available role tags are `router_network`, `router_system`,
-`router_firewall`, `router_packages`, and `router_base`. OpenWrt
+`router_firewall`, `router_packages`, `router_base`, and `router_snmpd`.
+The SNMP role is skipped unless `router_snmpd_enabled: true` is set. OpenWrt
 initialization runs automatically. Selecting one role does not automatically
 run other project roles that may be prerequisites. Review the selected tasks
 before execution; `router_network` can interrupt connectivity.
@@ -289,6 +290,34 @@ You can combine group and host variables with the same unchanged playbook:
 ansible-playbook -i inventory.ini playbooks/site.yml
 ansible-playbook -i inventory.ini playbooks/site.yml --limit router2
 ```
+
+### Configure the SNMP daemon
+
+The `router_snmpd` role is opt-in. Enable it explicitly and provide a
+non-empty community string in inventory, for example in
+`host_vars/router1.yml`:
+
+```yaml
+---
+router_snmpd_enabled: true
+router_snmpd_community: "replace-with-a-long-random-community"
+```
+
+The role replaces the package-provided `public` community in both IPv4 and
+IPv6 community-to-security mappings. It retains the existing read-only
+security name, group, view, and access mappings; it does not add a second
+community or change unrelated SNMP settings. The community must not be
+`public`, and there is no fallback value.
+
+SNMPv2c community strings are transmitted without encryption. Use a unique,
+unguessable value and restrict access to UDP/161 at the network firewall to
+trusted monitoring hosts. This role does not manage firewall rules or
+SNMPv3 users.
+
+Package installation and service enablement remain owned by
+`router_packages` and `router_base`; the SNMP role only updates UCI
+configuration and restarts `snmpd` when its community mapping changes.
+Run it with `--tags router_snmpd` after setting the two variables above.
 
 ### Configure network settings
 

@@ -136,6 +136,59 @@
       tags:
         - molecule-idempotence-notest
 
+    - name: Seed an unrelated SNMP setting
+      community.openwrt.uci:
+        command: set
+        key: snmpd.@system[0].sysName
+        value: molecule-lab-preserved
+        autocommit: true
+
+    - name: Apply the SNMP daemon role
+      ansible.builtin.include_role:
+        name: router_snmpd
+      vars:
+        router_snmpd_enabled: true
+        router_snmpd_community: molecule-monitoring-secret
+
+    - name: Read effective SNMP settings
+      ansible.builtin.raw: |
+        printf 'ipv4='; uci -q get snmpd.public.community || exit 1
+        printf 'ipv6='; uci -q get snmpd.public6.community || exit 1
+        printf 'secname='; uci -q get snmpd.public.secname || exit 1
+        printf 'sysname='; uci -q get 'snmpd.@system[0].sysName' || exit 1
+        printf 'group='; uci -q get snmpd.public_v2c.group || exit 1
+        printf 'access_read='; uci -q get snmpd.public_access.read || exit 1
+        printf 'access_write='; uci -q get snmpd.public_access.write || exit 1
+      register: router_snmpd_settings
+      changed_when: false
+
+    - name: Assert effective SNMP settings
+      ansible.builtin.assert:
+        that:
+          - "'ipv4=molecule-monitoring-secret' in router_snmpd_settings.stdout"
+          - "'ipv6=molecule-monitoring-secret' in router_snmpd_settings.stdout"
+          - "'secname=ro' in router_snmpd_settings.stdout"
+          - "'sysname=molecule-lab-preserved' in router_snmpd_settings.stdout"
+          - "'group=public' in router_snmpd_settings.stdout"
+          - "'access_read=all' in router_snmpd_settings.stdout"
+          - "'access_write=none' in router_snmpd_settings.stdout"
+
+    - name: Verify SNMP community is persisted without public fallback
+      ansible.builtin.raw: |
+        test -z "$(uci changes snmpd)" || {
+          echo "Uncommitted changes remain in SNMP UCI configuration"
+          exit 1
+        }
+        grep -F "option community 'molecule-monitoring-secret'" \
+          /etc/config/snmpd || exit 1
+        if grep -F "option community 'public'" /etc/config/snmpd; then
+          echo "Default public community remains configured"
+          exit 1
+        fi
+        grep -F "option sysName 'molecule-lab-preserved'" \
+          /etc/config/snmpd || exit 1
+      changed_when: false
+
     - name: Apply router base role
       ansible.builtin.include_role:
         name: router_base
