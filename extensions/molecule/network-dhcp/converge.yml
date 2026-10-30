@@ -30,15 +30,22 @@
           The container must retain its Docker-managed eth0 address and
           default route before configuration-only tests begin.
 
+    - name: Preserve an existing DHCP option
+      community.openwrt.uci:
+        command: set
+        key: dhcp.lan.start
+        value: '77'
+        autocommit: true
+
     - name: Apply DHCP client settings and disable LAN DHCP server
       ansible.builtin.include_role:
         name: router_network
       vars:
         router_network_interface_mode: dhcp
         router_network_interfaces:
-          lan: {}
-        router_network_dhcp_interfaces:
-          lan: disabled
+          lan:
+            dhcp:
+              enabled: false
 
     - name: Read DHCP LAN network settings
       community.openwrt.uci:
@@ -51,6 +58,8 @@
           expected: '1'
         - key: dhcp.lan.ignore
           expected: '1'
+        - key: dhcp.lan.start
+          expected: '77'
       register: router_network_dhcp_settings
       changed_when: false
 
@@ -60,6 +69,33 @@
           - item.result == item.item.expected
         fail_msg: "Unexpected value for {{ item.item.key }}."
       loop: "{{ router_network_dhcp_settings.results }}"
+
+    - name: Leave DHCP settings untouched when the nested setting is omitted
+      ansible.builtin.include_role:
+        name: router_network
+      vars:
+        router_network_interface_mode: dhcp
+        router_network_interfaces:
+          lan: {}
+
+    - name: Verify omitted DHCP settings were preserved
+      community.openwrt.uci:
+        command: get
+        key: "{{ item.key }}"
+      loop:
+        - key: dhcp.lan.ignore
+          expected: '1'
+        - key: dhcp.lan.start
+          expected: '77'
+      register: router_network_omitted_dhcp_settings
+      changed_when: false
+
+    - name: Assert omitted DHCP settings remain unchanged
+      ansible.builtin.assert:
+        that:
+          - item.result == item.item.expected
+        fail_msg: "Unexpected value for {{ item.item.key }}."
+      loop: "{{ router_network_omitted_dhcp_settings.results }}"
 
     - name: Check that static LAN settings were removed
       ansible.builtin.raw: "uci -q get {{ item }}"
