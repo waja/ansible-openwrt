@@ -32,7 +32,12 @@ jobs:
           python-version: ${{ env.ANSIBLE_PYTHON_VERSION }}
 
       - name: Install test dependencies.
-        run: pip3 install yamllint ansible-lint
+        run: |
+          python -m pip install --require-hashes \
+            --requirement requirements/ci/lint.txt
+          python -m pip check
+          ansible --version
+          ansible-lint --version
 
       - name: Lint yaml.
         run: |
@@ -84,7 +89,11 @@ jobs:
           python-version: ${{ env.ANSIBLE_PYTHON_VERSION }}
 
       - name: Install test dependencies.
-        run: pip install ansible-core
+        run: |
+          python -m pip install --require-hashes \
+            --requirement requirements/ci/ansible-test.txt
+          python -m pip check
+          ansible --version
 
       - name: Ansible Sanity check
         run: |
@@ -108,7 +117,11 @@ jobs:
           python-version: ${{ env.ANSIBLE_PYTHON_VERSION }}
 
       - name: Install test dependencies.
-        run: pip install ansible-core
+        run: |
+          python -m pip install --require-hashes \
+            --requirement requirements/ci/ansible-test.txt
+          python -m pip check
+          ansible --version
 
       - name: Ansible Units check
         run: |
@@ -180,8 +193,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install ansible-core molecule molecule-plugins[docker] netaddr
+          python -m pip install --require-hashes \
+            --requirement requirements/ci/molecule.txt
+          python -m pip check
 
       - name: Install Ansible dependencies
         run: |
@@ -192,8 +206,9 @@ jobs:
 
       - name: Versions
         run: |
+          ansible --version
           molecule --version
-          pip list | grep -iE 'molecule|ansible|docker'
+          python -m pip list | grep -iE 'molecule|ansible|docker'
 
       - name: Configure Ansible role search path
         run: |

@@ -1,0 +1,2 @@
+# Ansible sanity and unit-test toolchain.
+ansible-core==2.21.5

@@ -4,6 +4,18 @@
   "baseBranchPatterns": ["development"],
   "assignees": ["waja"],
   "reviewers": ["waja"],
+  "pip-compile": {
+    "managerFilePatterns": [
+      "/^requirements\\/ci\\/(lint|ansible-test|molecule)\\.txt$/"
+    ]
+  },
+  "pip_requirements": {
+    "enabled": false
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 4am on monday"]
+  },
   "packageRules": [
     {
       "matchDatasources": ["docker"],
