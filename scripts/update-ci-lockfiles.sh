@@ -4,6 +4,8 @@ set -euo pipefail
 
 readonly pip_tools_version="7.6.2"
 
+mkdir -p requirements/ci
+
 if ! pip-compile --version | grep -Fq "version ${pip_tools_version}"; then
   echo "pip-tools ${pip_tools_version} is required." >&2
   exit 1
@@ -16,5 +18,5 @@ for group in lint ansible-test molecule; do
     --resolver=backtracking \
     --no-emit-index-url \
     --output-file="requirements/ci/${group}.txt" \
-    ".github/workflows/requirements-${group}.in"
+    "requirements/ci/${group}.in"
 done
