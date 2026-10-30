@@ -30,6 +30,13 @@
           The container must retain its Docker-managed eth0 address and
           default route before configuration-only tests begin.
 
+    - name: Preserve an existing DHCP option
+      community.openwrt.uci:
+        command: set
+        key: dhcp.lan.start
+        value: '100'
+        autocommit: true
+
     - name: Apply static network settings and enable LAN DHCP
       ansible.builtin.include_role:
         name: router_network
@@ -42,8 +49,8 @@
             gateway: 192.0.2.254
             dns:
               - 192.0.2.53
-        router_network_dhcp_interfaces:
-          lan: enabled
+            dhcp:
+              enabled: true
 
     - name: Read static LAN network settings
       community.openwrt.uci:
@@ -64,6 +71,8 @@
           expected: '0'
         - key: dhcp.lan.ignore
           expected: '0'
+        - key: dhcp.lan.start
+          expected: '100'
       register: router_network_static_settings
       changed_when: false
 

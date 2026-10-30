@@ -9,13 +9,13 @@ router_network_interface_mode: dhcp
 # Optional static settings are gateway and dns (a list of DNS servers).
 router_network_interfaces: {}
 
-# Explicit IPv4 DHCP status per DHCP configuration section.
-# Supported values are "enabled" and "disabled".
-# Unlisted sections are left untouched.
-router_network_dhcp_interfaces: {}
+# Optional DHCP server settings are nested under each interface:
+# dhcp:
+#   enabled: true
+# Omit dhcp to leave that interface's DHCP section untouched.
 
-# Set to true to retry a dnsmasq restart after a previous handler failure.
-router_network_force_restart: false
+# Set to true to force a dnsmasq restart, even when no DHCP settings changed.
+router_network_force_dnsmasq_restart: false
 
 # Set to false to commit UCI settings without reloading network services.
 # Intended for configuration-only tests and controlled maintenance.

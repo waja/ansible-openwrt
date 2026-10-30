@@ -264,8 +264,9 @@ Always select dynamically via the fact set by
   `router_packages_managed_services` through `router_packages_service_package_map`;
   every managed service must have a mapping to one or more packages.
 - `router_network` owns explicitly listed IPv4 interface addressing
-  (`dhcp` or `static`) and per-section DHCP server status
-  (`enabled`/`disabled`). Empty interface and DHCP mappings are no-ops.
+  (`dhcp` or `static`) and optional per-interface DHCP server status via
+  `router_network_interfaces.<interface>.dhcp.enabled`. Omitted `dhcp`
+  settings and unlisted interfaces are left untouched.
   Mixed interface modes, DHCPv6, and IPv6 Router Advertisements are out
   of scope.
 - `router_package_audit` is optional because it requires the saved
@@ -561,7 +562,7 @@ dependencies, conditions, matrix, and commands.
   options. The ASU package must be installed separately; the remote syslog
   address (`router_system_log_ip`) intentionally has no default.
 - `roles/router_network` demonstrates explicit UCI configuration through
-  `router_network_interfaces` and `router_network_dhcp_interfaces`
+  `router_network_interfaces`, including optional nested DHCP settings
 - `converge.yml` shows how test values are passed via `vars:` to
   `include_role`
 - Before pushing, run the fast local checks above (after installing

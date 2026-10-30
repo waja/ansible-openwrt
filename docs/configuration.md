@@ -255,30 +255,41 @@ feature's scope.
 
 #### Configure the IPv4 DHCP server
 
-The separate `router_network_dhcp_interfaces` mapping controls whether the
-DHCP server runs on each OpenWrt DHCP section. This is independent of whether
-the router's own interface acts as a DHCP client. Set each managed DHCP
-section to `enabled` or `disabled`; sections omitted from the mapping are
-left unchanged.
+DHCP server status is configured as an optional `dhcp` subkey of each
+interface in `router_network_interfaces`. This is independent of whether
+the router's own interface acts as a DHCP client.
 
-For example, to disable IPv4 DHCP on LAN and enable it on the guest network,
+For example, to enable IPv4 DHCP on LAN and disable it on the guest network,
 add this to `group_vars/openwrt.yml`:
 
 ```yaml
 ---
-router_network_dhcp_interfaces:
-  lan: disabled
-  guest: enabled
+router_network_interface_mode: static
+router_network_interfaces:
+  lan:
+    ipaddr: 192.0.2.1
+    netmask: 255.255.255.0
+    dhcp:
+      enabled: true
+  guest:
+    ipaddr: 192.0.20.1
+    netmask: 255.255.255.0
+    dhcp:
+      enabled: false
 ```
 
-The role sets `dhcp.<section>.ignore=0` for `enabled` and `1` for
-`disabled`. This controls IPv4 DHCP only; it does not configure DHCPv6 or
-IPv6 Router Advertisements. Configure those separately if needed.
+The role sets `dhcp.<interface>.ignore=0` when `enabled: true` and
+`ignore=1` when `enabled: false`. Omit the `dhcp` subkey to leave that
+interface's DHCP section and all its settings untouched. Interfaces omitted
+from `router_network_interfaces` are also left untouched.
 
-The role restarts dnsmasq when the DHCP server configuration changes. If a
-previous dnsmasq restart failed, set `router_network_force_restart: true`
-for a run to request another restart even when the DHCP settings are already
-correct. The default is `false`.
+This controls IPv4 DHCP only; it does not configure DHCPv6 or IPv6 Router
+Advertisements. Configure those separately if needed.
+
+DHCP changes restart dnsmasq only when the UCI configuration changes. Set
+`router_network_force_dnsmasq_restart: true` to force a dnsmasq restart even when
+there is no configuration change, for example to retry a previously failed
+restart. The default is `false`.
 
 #### Discover existing OpenWrt configuration
 
