@@ -11,7 +11,7 @@ fi
 
 for group in lint ansible-test molecule; do
   pip-compile \
-    --generate-hashes \\
+    --generate-hashes \
     --allow-unsafe \
     --resolver=backtracking \
     --no-emit-index-url \
