@@ -27,8 +27,10 @@
       - >-
         item.value.keys()
         | difference([
-            'name', 'state', 'network', 'input', 'output', 'forward',
-            'masq', 'mtu_fix'
+            'name', 'state', 'enabled', 'network', 'device', 'subnet',
+            'input', 'output', 'forward', 'masq', 'masq6', 'masq_src',
+            'masq_dest', 'masq_allow_invalid', 'mtu_fix', 'family', 'log',
+            'log_limit', 'auto_helper', 'helper', 'counter'
           ])
         | length == 0
       - >-
@@ -39,7 +41,7 @@
         is match('^[A-Za-z_][A-Za-z0-9_]*$')
       - >-
         item.value.state | default('present') == 'absent' or
-        item.value.network is not defined or
+        item.value.network is not defined or item.value.network is none or
         (item.value.network is sequence and
          item.value.network is not string and
          item.value.network | length > 0 and
@@ -47,26 +49,121 @@
          == item.value.network | length)
       - >-
         item.value.state | default('present') == 'absent' or
-        item.value.input is not defined or
+        item.value.input is not defined or item.value.input is none or
         item.value.input in ['ACCEPT', 'REJECT', 'DROP']
       - >-
         item.value.state | default('present') == 'absent' or
-        item.value.output is not defined or
+        item.value.output is not defined or item.value.output is none or
         item.value.output in ['ACCEPT', 'REJECT', 'DROP']
       - >-
         item.value.state | default('present') == 'absent' or
-        item.value.forward is not defined or
+        item.value.forward is not defined or item.value.forward is none or
         item.value.forward in ['ACCEPT', 'REJECT', 'DROP']
       - item.value.state | default('present') == 'absent' or
-        item.value.masq is not defined or item.value.masq is boolean
+        item.value.masq is not defined or item.value.masq is none or
+        item.value.masq is boolean
       - item.value.state | default('present') == 'absent' or
-        item.value.mtu_fix is not defined or item.value.mtu_fix is boolean
+        item.value.mtu_fix is not defined or item.value.mtu_fix is none or
+        item.value.mtu_fix is boolean
     fail_msg: >-
       Invalid firewall zone '{{ item.key }}'. Use a valid UCI section ID,
       a zone name of at most 11 characters that starts with a letter or
       underscore, state present or absent, and only documented options
       (state: absent accepts only name and state) with their
       corresponding YAML types. Network must be a non-empty list of strings.
+  loop: "{{ router_firewall_zones | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Validate firewall zone option types and values
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.value.network is not defined or item.value.network is none or
+        (item.value.network is sequence and item.value.network is not string
+         and item.value.network | length > 0
+         and item.value.network | select('string') | list | length
+             == item.value.network | length)
+      - >-
+        item.value.device is not defined or item.value.device is none or
+        (item.value.device is sequence and item.value.device is not string
+         and item.value.device | length > 0
+         and item.value.device | select('string') | list | length
+             == item.value.device | length)
+      - >-
+        item.value.subnet is not defined or item.value.subnet is none or
+        (item.value.subnet is sequence and item.value.subnet is not string
+         and item.value.subnet | length > 0
+         and item.value.subnet | select('string') | list | length
+             == item.value.subnet | length)
+      - >-
+        item.value.masq_src is not defined or item.value.masq_src is none or
+        (item.value.masq_src is sequence and item.value.masq_src is not string
+         and item.value.masq_src | length > 0
+         and item.value.masq_src | select('string') | list | length
+             == item.value.masq_src | length)
+      - >-
+        item.value.masq_dest is not defined or item.value.masq_dest is none or
+        (item.value.masq_dest is sequence and item.value.masq_dest is not string
+         and item.value.masq_dest | length > 0
+         and item.value.masq_dest | select('string') | list | length
+             == item.value.masq_dest | length)
+      - >-
+        item.value.helper is not defined or item.value.helper is none or
+        (item.value.helper is sequence and item.value.helper is not string
+         and item.value.helper | length > 0
+         and item.value.helper | select('string') | list | length
+             == item.value.helper | length)
+      - >-
+        item.value.input is not defined or item.value.input is none or
+        item.value.input in ['ACCEPT', 'REJECT', 'DROP']
+      - >-
+        item.value.output is not defined or item.value.output is none or
+        item.value.output in ['ACCEPT', 'REJECT', 'DROP']
+      - >-
+        item.value.forward is not defined or item.value.forward is none or
+        item.value.forward in ['ACCEPT', 'REJECT', 'DROP']
+      - >-
+        item.value.family is not defined or item.value.family is none or
+        item.value.family in ['ipv4', 'ipv6', 'any']
+      - >-
+        item.value.enabled is not defined or item.value.enabled is none or
+        item.value.enabled is boolean
+      - >-
+        item.value.masq is not defined or item.value.masq is none or
+        item.value.masq is boolean
+      - >-
+        item.value.masq6 is not defined or item.value.masq6 is none or
+        item.value.masq6 is boolean
+      - >-
+        item.value.masq_allow_invalid is not defined or
+        item.value.masq_allow_invalid is none or
+        item.value.masq_allow_invalid is boolean
+      - >-
+        item.value.mtu_fix is not defined or item.value.mtu_fix is none or
+        item.value.mtu_fix is boolean
+      - >-
+        item.value.auto_helper is not defined or
+        item.value.auto_helper is none or item.value.auto_helper is boolean
+      - >-
+        item.value.counter is not defined or item.value.counter is none or
+        item.value.counter is boolean
+      - >-
+        item.value.log is not defined or item.value.log is none or
+        (item.value.log is integer and item.value.log is not boolean and
+         item.value.log >= 0)
+      - >-
+        item.value.log_limit is not defined or
+        item.value.log_limit is none or
+        (item.value.log_limit is string and
+         item.value.log_limit is match(
+           '^!?[0-9]+(/(second|minute|hour|day))?$'
+         ))
+    fail_msg: >-
+      Firewall zone options must use their fw4-supported YAML types:
+      non-empty lists of strings, supported policy/family values, booleans,
+      an integer log value, and a valid log_limit rate.
+      Use null to remove an option.
   loop: "{{ router_firewall_zones | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
@@ -327,6 +424,7 @@
                   item.0.value
                   | dict2items
                   | rejectattr('key', 'equalto', 'state')
+                  | rejectattr('value', 'none')
                   | items2dict
                   | combine({
                       'name': item.0.value.name | default(item.0.key)
@@ -362,6 +460,14 @@
   loop_control:
     label: "{{ item.0.key }}"
   changed_when: false
+
+- name: Add operations to remove explicitly null firewall zone options
+  ansible.builtin.include_tasks: add_null_option_operations.yml
+  loop: "{{ router_firewall_zones | dict2items }}"
+  loop_control:
+    loop_var: router_firewall_zone
+    index_var: router_firewall_zone_index
+    label: "{{ router_firewall_zone.key }}"
 
 - name: Add optional additional Dropbear WAN firewall rule
   ansible.builtin.set_fact:

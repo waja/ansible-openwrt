@@ -40,6 +40,179 @@
           - router_firewall_updated_input.result == 'DROP'
           - router_firewall_preserved_network.result == 'lan'
 
+    - name: Remove explicitly null options from a named firewall zone
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          guest_test:
+            network: null
+            input: null
+            masq: null
+            mtu_fix: null
+            masq_src: null
+            masq_dest: null
+            masq_allow_invalid: null
+            log: null
+            log_limit: null
+            helper: null
+
+    - name: Read firewall configuration after explicit null removals
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_null_options_show
+      changed_when: false
+
+    - name: Verify null removes list, scalar, and boolean options
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_null_options_show.result
+            is not search("firewall\\.guest_test\\.masq_src=")
+          - >-
+            router_firewall_null_options_show.result
+            is not search("firewall\\.guest_test\\.masq_dest=")
+          - >-
+            router_firewall_null_options_show.result
+            is not search("firewall\\.guest_test\\.masq_allow_invalid=")
+          - >-
+            router_firewall_null_options_show.result
+            is not search("firewall\\.guest_test\\.log=")
+          - >-
+            router_firewall_null_options_show.result
+            is not search("firewall\\.guest_test\\.log_limit=")
+          - >-
+            router_firewall_null_options_show.result
+            is not search("firewall\\.guest_test\\.helper=")
+
+    - name: Test explicit false firewall zone options
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          guest_test:
+            enabled: false
+            masq: false
+            masq6: false
+            masq_allow_invalid: false
+            mtu_fix: false
+            auto_helper: true
+            counter: false
+
+    - name: Read explicit firewall zone boolean values
+      ansible.builtin.raw: |
+        for option in enabled masq masq6 masq_allow_invalid \
+          mtu_fix auto_helper counter; do
+          printf '%s=' "$option"
+          uci -q get "firewall.guest_test.$option" || exit 1
+        done
+      register: router_firewall_boolean_values
+      changed_when: false
+
+    - name: Verify explicit false values are persisted as zero
+      ansible.builtin.assert:
+        that:
+          - "'enabled=0' in router_firewall_boolean_values.stdout"
+          - "'masq=0' in router_firewall_boolean_values.stdout"
+          - "'masq6=0' in router_firewall_boolean_values.stdout"
+          - "'masq_allow_invalid=0' in router_firewall_boolean_values.stdout"
+          - "'mtu_fix=0' in router_firewall_boolean_values.stdout"
+          - "'auto_helper=1' in router_firewall_boolean_values.stdout"
+          - "'counter=0' in router_firewall_boolean_values.stdout"
+
+    - name: Verify explicit boolean values are committed
+      ansible.builtin.raw: |
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
+      changed_when: false
+
+    - name: Capture empty firewall zone list validation
+      block:
+        - name: Attempt to configure an empty network list
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              invalid_empty_list:
+                network: []
+      rescue:
+        - name: Record the empty list validation failure
+          ansible.builtin.set_fact:
+            router_firewall_empty_list_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify empty firewall zone lists are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_empty_list_failure
+            == 'Validate firewall zone definitions'
+
+    - name: Verify empty list validation made no UCI changes
+      community.openwrt.uci:
+        command: get
+        key: firewall.invalid_empty_list
+      register: router_firewall_invalid_empty_list
+      changed_when: false
+      failed_when: false
+
+    - name: Assert empty list input did not create a firewall zone
+      ansible.builtin.assert:
+        that:
+          - router_firewall_invalid_empty_list.result | default('') == ''
+
+    - name: Capture invalid firewall zone option type validation
+      block:
+        - name: Attempt to configure a boolean log value
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              invalid_log:
+                log: true
+      rescue:
+        - name: Record the invalid log type failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_log_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify log requires an integer bitmask
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_log_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Capture invalid firewall log limit validation
+      block:
+        - name: Attempt to configure an unsupported log limit unit
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              bad_limit:
+                log_limit: 10/permonth
+      rescue:
+        - name: Record the invalid log limit failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_log_limit_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify log limits use fw4-supported units
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_log_limit_failure
+            == 'Validate firewall zone option types and values'
+
     - name: Create an anonymous duplicate for named-section precedence
       community.openwrt.uci:
         autocommit: true
@@ -97,6 +270,60 @@
           - >-
             router_firewall_named_precedence_show.result
             is search("firewall\\.@zone\\[[0-9]+\\]\\.name='guest_test'")
+
+    - name: Create an anonymous zone with an option to remove
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: null_anon
+          - command: add_list
+            key: firewall.@zone[-1].network
+            value: lan
+          - command: add_list
+            key: firewall.@zone[-1].masq_src
+            value: 192.0.2.0/24
+
+    - name: Adopt anonymous zone and remove its explicitly null option
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          null_anon:
+            masq_src: null
+
+    - name: Find the adopted anonymous firewall zone
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: null_anon
+      register: router_firewall_anonymous_null_matches
+      changed_when: false
+
+    - name: Verify the option on the actual anonymous firewall section
+      community.openwrt.uci:
+        command: get
+        key: >-
+          firewall.{{
+            router_firewall_anonymous_null_matches.result_list[0]
+          }}.masq_src
+      register: router_firewall_anonymous_null_option
+      changed_when: false
+      failed_when: false
+      when: router_firewall_anonymous_null_matches.result_list | length == 1
+
+    - name: Assert the adopted anonymous zone option was removed
+      ansible.builtin.assert:
+        that:
+          - router_firewall_anonymous_null_matches.result_list | length == 1
+          - router_firewall_anonymous_null_option.result | default('') == ''
 
     - name: Create two anonymous zones with an ambiguous name
       community.openwrt.uci:
