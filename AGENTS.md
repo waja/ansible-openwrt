@@ -35,7 +35,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   git-ignored
 - `requirements.yml` – authoritative, version-pinned source for
   Ansible role and collection dependencies used locally and in CI.
-- `.github/workflows/requirements-*.in` – direct Python dependencies
+- `requirements/ci/*.in` – direct Python dependencies
   for the separate lint, Ansible-test, and Molecule toolchains.
 - `requirements/ci/*.txt` – generated, hash-pinned
   Python dependency locks; do not edit them manually.
