@@ -24,13 +24,15 @@ inventory and customize variables there.
 
 Both playbooks target the `openwrt` inventory group.
 
-For additional Dropbear SSH ports and optional WAN access, see
-[the router configuration guide](docs/configuration.md#configure-additional-dropbear-ssh-ports).
-For declarative firewall zones, including anonymous factory-zone adoption
-and reference-safe removal, see the
-[firewall configuration guide](docs/configuration.md#configure-firewall-defaults-and-zones).
-For optional SNMP daemon configuration, see the
-[SNMP configuration guide](docs/configuration.md#configure-the-snmp-daemon).
+For role-specific settings and examples, start with the
+[router configuration overview](docs/configuration.md) and follow its links
+to the individual [system](docs/roles/router_system.md),
+[firewall](docs/roles/router_firewall.md),
+[network](docs/roles/router_network.md),
+[packages](docs/roles/router_packages.md),
+[base services](docs/roles/router_base.md),
+[SNMP](docs/roles/router_snmpd.md), and
+[package audit](docs/roles/router_package_audit.md) guides.
 
 ## Requirements
 
@@ -199,7 +201,7 @@ not a suitable connectivity test for Python-free OpenWrt images.
 
 ## Configure the routers
 
-See the [router configuration guide](docs/configuration.md) for the complete instructions on applying the playbooks and configuring firewall defaults, system settings, packages and managed services, inventory variables, and network settings.
+See the [router configuration overview](docs/configuration.md) for playbook usage, inventory organization, and links to the detailed role guides.
 
 ## Repository layout
 
