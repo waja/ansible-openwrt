@@ -17,3 +17,84 @@
     command: set
     key: firewall.@defaults[0].output
     value: "{{ router_firewall_output }}"
+
+- name: Read firewall configuration
+  community.openwrt.uci:
+    command: show
+    config: firewall
+  register: router_firewall_uci
+  changed_when: false
+
+- name: Configure WAN firewall rule for additional Dropbear ports
+  community.openwrt.uci:
+    command: section
+    config: firewall
+    type: rule
+    name: ansible_router_firewall_dropbear_extra_wan
+    value:
+      name: Ansible managed Dropbear extra ports WAN
+      src: "{{ router_firewall_dropbear_wan_zone }}"
+      proto: tcp
+      dest_port: >-
+        {{
+          router_firewall_dropbear_extra_ports | default([])
+          | map('string') | join(' ')
+        }}
+      target: ACCEPT
+    replace: true
+    autocommit: true
+  when:
+    - router_firewall_dropbear_wan_zone | default('') | length > 0
+    - router_firewall_dropbear_extra_ports | default([]) | length > 0
+    - >-
+      (
+        "firewall.ansible_router_firewall_dropbear_extra_wan=rule"
+        not in router_firewall_uci.result
+      )
+      or
+      (
+        (
+          "firewall.ansible_router_firewall_dropbear_extra_wan.name="
+          "'Ansible managed Dropbear extra ports WAN'"
+        ) not in router_firewall_uci.result
+      )
+      or
+      (
+        "firewall.ansible_router_firewall_dropbear_extra_wan.src='"
+        ~ router_firewall_dropbear_wan_zone ~ "'"
+        not in router_firewall_uci.result
+      )
+      or
+      (
+        "firewall.ansible_router_firewall_dropbear_extra_wan.proto='tcp'"
+        not in router_firewall_uci.result
+      )
+      or
+      (
+        "firewall.ansible_router_firewall_dropbear_extra_wan.dest_port='"
+        ~ (
+          router_firewall_dropbear_extra_ports | default([])
+          | map('string') | join(' ')
+        ) ~ "'"
+        not in router_firewall_uci.result
+      )
+      or
+      (
+        "firewall.ansible_router_firewall_dropbear_extra_wan.target='ACCEPT'"
+        not in router_firewall_uci.result
+      )
+  notify: Reload firewall
+
+- name: Remove WAN firewall rule for additional Dropbear ports
+  community.openwrt.uci:
+    command: absent
+    key: firewall.ansible_router_firewall_dropbear_extra_wan
+    autocommit: true
+  when:
+    - >-
+      (router_firewall_dropbear_wan_zone | default('') | length == 0)
+      or (router_firewall_dropbear_extra_ports | default([]) | length == 0)
+    - >-
+      "firewall.ansible_router_firewall_dropbear_extra_wan=rule"
+      in router_firewall_uci.result
+  notify: Reload firewall

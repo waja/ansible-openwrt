@@ -27,12 +27,58 @@ initialization runs automatically. Selecting one role does not automatically
 run other project roles that may be prerequisites. Review the selected tasks
 before execution; `router_network` can interrupt connectivity.
 
+### Configure additional Dropbear SSH ports
+
+The `router_system` role leaves the existing Dropbear configuration and
+port 22 untouched by default. Set
+`router_system_dropbear_extra_ports` to configure role-owned Dropbear
+listeners on additional TCP ports. OpenWrt's UCI configuration has one
+`Port` option per Dropbear section, so each additional port uses a separate
+listener section. These listeners use the router's existing system accounts
+and SSH authorized keys; no separate credentials are created.
+
+For example, in `host_vars/router1.yml`:
+
+```yaml
+---
+router_system_dropbear_extra_ports:
+  - 2222
+  - 2223
+```
+
+The role restarts Dropbear when its managed listener changes. Setting the
+list back to empty removes only the role-owned additional listener.
+
+WAN access is a separate, opt-in setting managed by `router_firewall`.
+Set `router_firewall_dropbear_extra_ports` to the same list of ports that
+is configured in `router_system_dropbear_extra_ports`. The additional ports
+remain closed on WAN by default because
+`router_firewall_dropbear_wan_zone` defaults to an empty string. Set it to
+the desired firewall zone (for example, `wan`) to allow TCP access to the
+configured additional ports from that zone. This affects only the additional
+ports; the existing firewall policy for port 22 is left unchanged.
+
+```yaml
+---
+router_system_dropbear_extra_ports:
+  - 2222
+router_firewall_dropbear_extra_ports:
+  - 2222
+router_firewall_dropbear_wan_zone: wan
+```
+
+Expose SSH to the Internet only when necessary. Prefer key-based
+authentication and restrict source addresses where your network design
+permits. The firewall rule allows TCP traffic to the configured additional
+ports from the selected zone; it does not restrict source IP addresses.
+
 ### Configure firewall defaults
 
-The `router_firewall` role manages only the default firewall policies for
-input, forwarding, and output. Its defaults are `REJECT`, `REJECT`, and
-`ACCEPT`, respectively. These defaults preserve the usual OpenWrt firewall
-policy.
+The `router_firewall` role manages the default firewall policies for input,
+forwarding, and output. Its defaults are `REJECT`, `REJECT`, and `ACCEPT`,
+respectively. These defaults preserve the usual OpenWrt firewall policy. The
+role can also manage a dedicated WAN rule for additional Dropbear ports when
+explicitly enabled in the configuration above.
 
 For an access point that should pass traffic without filtering at the
 firewall-defaults level, override the values in its `host_vars` file, for
@@ -47,8 +93,8 @@ router_firewall_output: ACCEPT
 
 **Caution:** `input: ACCEPT` allows traffic to services on the router, and
 `forward: ACCEPT` removes the default forwarding restriction. Use these
-settings only where appropriate for your network design. The role does not
-manage zones, individual rules, or SYN-flood protection.
+settings only where appropriate for your network design. The role does not manage zones, arbitrary firewall rules, or SYN-flood
+protection.
 
 ### Configure system settings
 

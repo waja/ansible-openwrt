@@ -25,3 +25,4 @@
           )
         ) | unique | list
       }}
+  changed_when: false
