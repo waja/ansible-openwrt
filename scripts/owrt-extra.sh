@@ -87,6 +87,8 @@ build_ref() {
     mount -o bind /sys  "$REF/sys"
     mount -o bind /dev  "$REF/dev"
 
+    # The script must expand variables inside the chroot, not on the host.
+    # shellcheck disable=SC2016
     chroot "$REF" /bin/sh -c '
         /bin/config_generate
         for f in /etc/uci-defaults/*; do

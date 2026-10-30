@@ -1,4 +1,3 @@
-# README.md
 # Ansible OpenWrt Router Configuration
 
 This repository provides Ansible playbooks and roles to configure OpenWrt
@@ -24,23 +23,6 @@ inventory and customize variables there.
   does not install or remove packages to reconcile them.
 
 Both playbooks target the `openwrt` inventory group.
-
-### Run selected roles
-
-The standard playbook supports role-level tags matching the role names:
-`router_network`, `router_system`, `router_firewall`, `router_packages`,
-and `router_base`. For example, to run only the base-service role on one
-router:
-
-```bash
-ansible-playbook -i inventory.ini playbooks/site.yml \
-  --limit router1 --tags router_base
-```
-
-Use `--list-tasks --tags router_base` to inspect the selected tasks first.
-Selecting a role does not automatically run other project roles that it may
-depend on. The OpenWrt initialization role still runs automatically. The
-`router_network` role can interrupt connectivity when runtime changes apply.
 
 ## Requirements
 
@@ -226,6 +208,21 @@ See the [router configuration guide](docs/configuration.md) for the complete ins
 - `extensions/molecule/network-static/` — static network configuration tests
 - `extensions/molecule/network-dhcp/` — DHCP configuration tests
 - `.github/workflows/molecule.yml` — lint and Molecule CI workflow
+
+## Script and documentation checks
+
+The CI workflow checks shell scripts with ShellCheck, and
+Markdown files with `markdownlint-cli2` and `codespell`. To run these
+checks locally, install the same tools and run:
+
+```bash
+shellcheck --shell=sh scripts/*.sh
+markdownlint-cli2 "**/*.md"
+git ls-files -z -- scripts/ '*.md' ':(exclude)collections/**' | xargs -0 -r codespell --check-filenames
+```
+
+These checks detect shell issues, formatting problems, Markdown conventions,
+and likely spelling errors. They do not provide a full grammar check.
 
 ## Development checks
 
