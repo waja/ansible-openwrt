@@ -17,20 +17,20 @@
           - 2223
         router_firewall_dropbear_wan_zone: wan
         router_firewall_zones:
-          molecule_guest_test:
+          guest_test:
             input: DROP
 
     - name: Read updated firewall zone policy
       community.openwrt.uci:
         command: get
-        key: firewall.molecule_guest_test.input
+        key: firewall.guest_test.input
       register: router_firewall_updated_input
       changed_when: false
 
     - name: Read preserved firewall zone network
       community.openwrt.uci:
         command: get
-        key: firewall.molecule_guest_test.network
+        key: firewall.guest_test.network
       register: router_firewall_preserved_network
       changed_when: false
 
