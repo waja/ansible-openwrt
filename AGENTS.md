@@ -37,7 +37,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   Ansible role and collection dependencies used locally and in CI.
 - `.github/workflows/requirements-*.in` – direct Python dependencies
   for the separate lint, Ansible-test, and Molecule toolchains.
-- `.github/workflows/requirements-*.txt` – generated, hash-pinned
+- `requirements/ci/*.txt` – generated, hash-pinned
   Python dependency locks; do not edit them manually.
 - `scripts/update-ci-lockfiles.sh` – reproducible lockfile generation
   with the pinned `pip-tools` version.
@@ -395,7 +395,7 @@ with it.
 - `lint`
   - Runs `yamllint .`.
   - Installs the hash-locked lint toolchain from
-    `.github/workflows/requirements-lint.txt` with
+    `requirements/ci/lint.txt` with
     `--require-hashes`; checks dependencies with
     `python -m pip check`.
   - Installs pinned roles and collections from `requirements.yml` into
@@ -410,7 +410,7 @@ with it.
   - Depend on `lint` and `check-structure`.
   - Run only when `has_collection == 'true'`.
   - Install the hash-locked Ansible test toolchain from
-    `.github/workflows/requirements-ansible-test.txt` with
+    `requirements/ci/ansible-test.txt` with
     `--require-hashes`, check dependencies, and log the installed
     Ansible version.
   - Use `ansible-test` with `${{ env.ANSIBLE_PYTHON_VERSION }}`.
@@ -420,7 +420,7 @@ with it.
 - `molecule`
   - Depends on `lint`, `sanity`, `units`.
   - Installs the hash-locked Molecule toolchain from
-    `.github/workflows/requirements-molecule.txt` with
+    `requirements/ci/molecule.txt` with
     `--require-hashes`; checks dependencies with
     `python -m pip check`.
   - Installs pinned roles and collections from `requirements.yml` into
