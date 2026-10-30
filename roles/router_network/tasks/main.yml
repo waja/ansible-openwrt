@@ -185,7 +185,6 @@
   ansible.builtin.set_fact:
     router_network_dhcp_operations: []
   changed_when: false
-  when: router_network_interfaces | length > 0
 
 - name: Build DHCP configuration operations
   ansible.builtin.set_fact:
