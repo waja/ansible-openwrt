@@ -7,12 +7,12 @@ name: Update CI dependency locks
   push:
     paths:
       - ".github/workflows/requirements-*.in"
+      - "requirements/ci/*.in"
       - ".github/workflows/update-ci-lockfiles.yml"
       - "scripts/update-ci-lockfiles.sh"
 
 permissions:
   contents: write
-  workflows: write
 
 jobs:
   update-locks:
@@ -40,7 +40,7 @@ jobs:
 
       - name: Commit updated lockfiles.
         run: |
-          git add .github/workflows/requirements-*.txt
+          git add requirements/ci/*.txt
 
           if git diff --cached --quiet; then
             echo "CI dependency locks are already up to date."
