@@ -19,7 +19,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: update-ci-lockfiles-${{ github.ref }}
+  group: update-ci-lockfiles-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
