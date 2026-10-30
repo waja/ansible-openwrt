@@ -1,100 +1,545 @@
 # roles/router_firewall/tasks/main.yml
 ---
-- name: Configure firewall input policy
-  community.openwrt.uci:
-    command: set
-    key: firewall.@defaults[0].input
-    value: "{{ router_firewall_input }}"
+- name: Validate firewall default policies
+  ansible.builtin.assert:
+    that:
+      - router_firewall_input in ['ACCEPT', 'REJECT', 'DROP']
+      - router_firewall_forward in ['ACCEPT', 'REJECT', 'DROP']
+      - router_firewall_output in ['ACCEPT', 'REJECT', 'DROP']
+    fail_msg: Firewall default policies must be ACCEPT, REJECT, or DROP.
 
-- name: Configure firewall forwarding policy
-  community.openwrt.uci:
-    command: set
-    key: firewall.@defaults[0].forward
-    value: "{{ router_firewall_forward }}"
+- name: Validate firewall zone configuration
+  ansible.builtin.assert:
+    that:
+      - router_firewall_zones is mapping
+    fail_msg: router_firewall_zones must be a mapping of UCI section IDs.
 
-- name: Configure firewall output policy
-  community.openwrt.uci:
-    command: set
-    key: firewall.@defaults[0].output
-    value: "{{ router_firewall_output }}"
+- name: Validate firewall zone definitions
+  ansible.builtin.assert:
+    that:
+      - item.key is string
+      - item.key is match('^[A-Za-z0-9_]+$')
+      - item.value is mapping
+      - item.value.state | default('present') in ['present', 'absent']
+      - >-
+        (item.value.name | default(item.key)) is string and
+        (item.value.name | default(item.key)) | length > 0 and
+        (item.value.name | default(item.key)) | length <= 11 and
+        (item.value.name | default(item.key))
+        is match('^[A-Za-z_][A-Za-z0-9_]*$')
+      - >-
+        item.value.keys()
+        | difference([
+            'state', 'name', 'enabled', 'network', 'device', 'subnet',
+            'input', 'output', 'forward', 'masq', 'masq6', 'masq_src',
+            'masq_dest', 'masq_allow_invalid', 'mtu_fix', 'family', 'log',
+            'log_limit', 'auto_helper', 'helper', 'counter'
+          ])
+        | length == 0
+    fail_msg: >-
+      Invalid firewall zone '{{ item.key }}'. Section IDs may contain only
+      letters, digits, and underscores. Zone names must start with a letter
+      or underscore and contain at most 11 characters. State must be present
+      or absent, and only supported zone options are accepted.
+  loop: "{{ router_firewall_zones | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
 
-- name: Read firewall configuration
+- name: Validate firewall zone option types and values
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.value.network is not defined or item.value.network is none or
+        (item.value.network is sequence and item.value.network is not string
+         and item.value.network | length > 0
+         and item.value.network | select('string') | list | length
+             == item.value.network | length)
+      - >-
+        item.value.device is not defined or item.value.device is none or
+        (item.value.device is sequence and item.value.device is not string
+         and item.value.device | length > 0
+         and item.value.device | select('string') | list | length
+             == item.value.device | length)
+      - >-
+        item.value.subnet is not defined or item.value.subnet is none or
+        (item.value.subnet is sequence and item.value.subnet is not string
+         and item.value.subnet | length > 0
+         and item.value.subnet | select('string') | list | length
+             == item.value.subnet | length)
+      - >-
+        item.value.masq_src is not defined or item.value.masq_src is none or
+        (item.value.masq_src is sequence and item.value.masq_src is not string
+         and item.value.masq_src | length > 0
+         and item.value.masq_src | select('string') | list | length
+             == item.value.masq_src | length)
+      - >-
+        item.value.masq_dest is not defined or item.value.masq_dest is none or
+        (item.value.masq_dest is sequence and item.value.masq_dest is not string
+         and item.value.masq_dest | length > 0
+         and item.value.masq_dest | select('string') | list | length
+             == item.value.masq_dest | length)
+      - >-
+        item.value.helper is not defined or item.value.helper is none or
+        (item.value.helper is sequence and item.value.helper is not string
+         and item.value.helper | length > 0
+         and item.value.helper | select('string') | list | length
+             == item.value.helper | length)
+      - >-
+        item.value.input is not defined or item.value.input is none or
+        item.value.input in ['ACCEPT', 'REJECT', 'DROP']
+      - >-
+        item.value.output is not defined or item.value.output is none or
+        item.value.output in ['ACCEPT', 'REJECT', 'DROP']
+      - >-
+        item.value.forward is not defined or item.value.forward is none or
+        item.value.forward in ['ACCEPT', 'REJECT', 'DROP']
+      - >-
+        item.value.family is not defined or item.value.family is none or
+        item.value.family in ['ipv4', 'ipv6', 'any']
+      - >-
+        item.value.enabled is not defined or item.value.enabled is none or
+        item.value.enabled is boolean
+      - >-
+        item.value.masq is not defined or item.value.masq is none or
+        item.value.masq is boolean
+      - >-
+        item.value.masq6 is not defined or item.value.masq6 is none or
+        item.value.masq6 is boolean
+      - >-
+        item.value.masq_allow_invalid is not defined or
+        item.value.masq_allow_invalid is none or
+        item.value.masq_allow_invalid is boolean
+      - >-
+        item.value.mtu_fix is not defined or item.value.mtu_fix is none or
+        item.value.mtu_fix is boolean
+      - >-
+        item.value.auto_helper is not defined or
+        item.value.auto_helper is none or item.value.auto_helper is boolean
+      - >-
+        item.value.counter is not defined or item.value.counter is none or
+        item.value.counter is boolean
+      - >-
+        item.value.log is not defined or item.value.log is none or
+        item.value.log is boolean
+      - >-
+        item.value.log_limit is not defined or
+        item.value.log_limit is none or item.value.log_limit is string
+    fail_msg: >-
+      List options must be non-empty lists of strings. Policy and family
+      values must be supported, and boolean and integer options must use
+      their corresponding YAML types. Use null to remove an option.
+  loop: "{{ router_firewall_zones | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Initialize desired firewall zone names
+  ansible.builtin.set_fact:
+    router_firewall_desired_zone_names: []
+  changed_when: false
+
+- name: Collect desired firewall zone names
+  ansible.builtin.set_fact:
+    router_firewall_desired_zone_names: >-
+      {{
+        router_firewall_desired_zone_names
+        + [item.value.name | default(item.key)]
+      }}
+  loop: "{{ router_firewall_zones | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.value.state | default('present') == 'present'
+  changed_when: false
+
+- name: Validate desired firewall zone names are unique
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_desired_zone_names | unique | list | length
+        == router_firewall_desired_zone_names | length
+    fail_msg: Firewall zone names must be unique.
+
+- name: Validate additional Dropbear firewall settings
+  ansible.builtin.assert:
+    that:
+      - router_firewall_dropbear_extra_ports is sequence
+      - router_firewall_dropbear_extra_ports is not string
+      - >-
+        router_firewall_dropbear_extra_ports | select('integer') | list
+        | length == router_firewall_dropbear_extra_ports | length
+      - >-
+        router_firewall_dropbear_extra_ports | select('boolean') | list
+        | length == 0
+      - >-
+        router_firewall_dropbear_extra_ports | unique | list | length
+        == router_firewall_dropbear_extra_ports | length
+      - >-
+        router_firewall_dropbear_extra_ports | select('lt', 1) | list
+        | length == 0
+      - >-
+        router_firewall_dropbear_extra_ports | select('gt', 65535) | list
+        | length == 0
+      - "22 not in router_firewall_dropbear_extra_ports"
+      - router_firewall_dropbear_wan_zone is string
+      - >-
+        router_firewall_dropbear_wan_zone | length == 0 or
+        (router_firewall_dropbear_wan_zone | length <= 11 and
+         router_firewall_dropbear_wan_zone
+         is match('^[A-Za-z_][A-Za-z0-9_]*$'))
+    fail_msg: >-
+      Additional Dropbear ports must be unique TCP ports from 1 to 65535,
+      excluding port 22. The optional WAN zone must be empty or a valid
+      firewall zone name.
+  changed_when: false
+
+- name: Check for firewall zones with the desired section ID
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ item.key }}"
+  loop: "{{ router_firewall_zones | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: router_firewall_named_zones
+  changed_when: false
+  failed_when: false
+
+- name: Validate existing named firewall sections
+  ansible.builtin.assert:
+    that:
+      - item.result == '' or item.result == 'zone'
+    fail_msg: >-
+      UCI section '{{ item.item.key }}' exists but is not a firewall zone.
+      Choose another section ID or resolve the conflicting section.
+  loop: "{{ router_firewall_named_zones.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+
+- name: Read firewall configuration for anonymous section identities
   community.openwrt.uci:
     command: show
     config: firewall
-  register: router_firewall_uci
+  register: router_firewall_uci_show
   changed_when: false
 
-- name: Configure WAN firewall rule for additional Dropbear ports
-  community.openwrt.uci:
-    command: section
-    config: firewall
-    type: rule
-    name: ansible_router_firewall_dropbear_extra_wan
-    value:
-      name: Ansible managed Dropbear extra ports WAN
-      src: "{{ router_firewall_dropbear_wan_zone }}"
-      proto: tcp
-      dest_port: >-
-        {{
-          router_firewall_dropbear_extra_ports | default([])
-          | map('string') | join(' ')
-        }}
-      target: ACCEPT
-    replace: true
-    autocommit: true
-  when:
-    - router_firewall_dropbear_wan_zone | default('') | length > 0
-    - router_firewall_dropbear_extra_ports | default([]) | length > 0
-    - >-
-      (
-        "firewall.ansible_router_firewall_dropbear_extra_wan=rule"
-        not in router_firewall_uci.result
-      )
-      or
-      (
-        (
-          "firewall.ansible_router_firewall_dropbear_extra_wan.name="
-          "'Ansible managed Dropbear extra ports WAN'"
-        ) not in router_firewall_uci.result
-      )
-      or
-      (
-        "firewall.ansible_router_firewall_dropbear_extra_wan.src='"
-        ~ router_firewall_dropbear_wan_zone ~ "'"
-        not in router_firewall_uci.result
-      )
-      or
-      (
-        "firewall.ansible_router_firewall_dropbear_extra_wan.proto='tcp'"
-        not in router_firewall_uci.result
-      )
-      or
-      (
-        "firewall.ansible_router_firewall_dropbear_extra_wan.dest_port='"
-        ~ (
-          router_firewall_dropbear_extra_ports | default([])
-          | map('string') | join(' ')
-        ) ~ "'"
-        not in router_firewall_uci.result
-      )
-      or
-      (
-        "firewall.ansible_router_firewall_dropbear_extra_wan.target='ACCEPT'"
-        not in router_firewall_uci.result
-      )
-  notify: Reload firewall
+- name: Initialize firewall zone resolution
+  ansible.builtin.set_fact:
+    router_firewall_zone_resolution: []
+  changed_when: false
 
-- name: Remove WAN firewall rule for additional Dropbear ports
+- name: Resolve named and anonymous firewall zones
+  ansible.builtin.set_fact:
+    router_firewall_zone_resolution: >-
+      {{
+        router_firewall_zone_resolution + [{
+          'key': item.0.key,
+          'value': item.0.value,
+          'named_type': item.1.result,
+          'actual_name': (
+            router_firewall_uci_show.result
+            | regex_findall(
+                "(?m)^firewall\\." ~ item.0.key
+                ~ "\\.name=\\x27([^\\x27]*)\\x27$"
+              )
+            | first
+            | default(item.0.value.name | default(item.0.key))
+          ) if item.1.result == 'zone'
+            else item.0.value.name | default(item.0.key),
+          'anonymous_matches': (
+            router_firewall_uci_show.result
+            | regex_findall(
+                "(?m)^firewall\\.(@zone\\[[0-9]+\\])\\.name=\\x27"
+                ~ (item.0.value.name | default(item.0.key))
+                ~ "\\x27$"
+              )
+          ) if item.1.result == '' else [],
+          'named_name_matches': (
+            router_firewall_uci_show.result
+            | regex_findall(
+                "(?ms)^firewall\\.([A-Za-z0-9_]+)=zone\\n.*?"
+                ~ "^firewall\\.\\1\\.name=\\x27"
+                ~ (item.0.value.name | default(item.0.key))
+                ~ "\\x27$"
+              )
+          ) if item.1.result == '' else []
+        }]
+      }}
+  loop: >-
+    {{
+      router_firewall_zones
+      | dict2items
+      | zip(router_firewall_named_zones.results)
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.key }}"
+  changed_when: false
+
+- name: Reject firewall zone names owned by another named section
+  ansible.builtin.assert:
+    that:
+      - item.named_name_matches | length == 0
+    fail_msg: >-
+      Firewall zone '{{ item.value.name | default(item.key) }}' already
+      exists under a different named UCI section ID. Declare that section ID
+      or rename the existing zone before managing it.
+  loop: "{{ router_firewall_zone_resolution }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.named_type == ''
+
+- name: Reject ambiguous anonymous firewall zones
+  ansible.builtin.assert:
+    that:
+      - item.anonymous_matches | length <= 1
+    fail_msg: >-
+      More than one anonymous firewall zone is named
+      '{{ item.value.name | default(item.key) }}'.
+      Resolve duplicate sections before managing this zone.
+  loop: "{{ router_firewall_zone_resolution }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Find references to firewall zones being removed
   community.openwrt.uci:
-    command: absent
-    key: firewall.ansible_router_firewall_dropbear_extra_wan
-    autocommit: true
+    command: find_all
+    config: firewall
+    type: "{{ item.1.type }}"
+    option: "{{ item.1.option }}"
+    find: "{{ item.0.actual_name }}"
+  loop: >-
+    {{
+      (router_firewall_zone_resolution
+       | selectattr('value.state', 'defined')
+       | selectattr('value.state', 'equalto', 'absent')
+       | list)
+      | product([
+          {'type': 'rule', 'option': 'src'},
+          {'type': 'rule', 'option': 'dest'},
+          {'type': 'redirect', 'option': 'src'},
+          {'type': 'redirect', 'option': 'dest'},
+          {'type': 'forwarding', 'option': 'src'},
+          {'type': 'forwarding', 'option': 'dest'}
+        ])
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.key }}:{{ item.1.type }}.{{ item.1.option }}"
+  register: router_firewall_zone_references
+  changed_when: false
+
+- name: Reject removal of referenced firewall zones
+  ansible.builtin.assert:
+    that:
+      - item.result_list | length == 0
+    fail_msg: >-
+      Cannot remove firewall zone
+      '{{ item.item.0.actual_name }}':
+      it is referenced by {{ item.item.1.type }} sections through
+      option '{{ item.item.1.option }}'.
+  loop: "{{ router_firewall_zone_references.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.0.key }}"
+
+- name: Initialize firewall UCI operations
+  ansible.builtin.set_fact:
+    router_firewall_operations:
+      - command: ensure
+        key: firewall.@defaults[0]
+        type: defaults
+        value:
+          input: "{{ router_firewall_input }}"
+          forward: "{{ router_firewall_forward }}"
+          output: "{{ router_firewall_output }}"
+  changed_when: false
+
+- name: Add operations for existing named firewall zones
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'section',
+          'config': 'firewall',
+          'type': 'zone',
+          'name': item.key,
+          'value': (
+            item.value
+            | dict2items
+            | rejectattr('key', 'equalto', 'state')
+            | rejectattr('key', 'equalto', 'name')
+            | rejectattr('value', 'none')
+            | items2dict
+            | combine({'name': item.value.name | default(item.key)})
+          )
+        }]
+      }}
+  loop: "{{ router_firewall_zone_resolution }}"
+  loop_control:
+    label: "{{ item.key }}"
   when:
-    - >-
-      (router_firewall_dropbear_wan_zone | default('') | length == 0)
-      or (router_firewall_dropbear_extra_ports | default([]) | length == 0)
-    - >-
-      "firewall.ansible_router_firewall_dropbear_extra_wan=rule"
-      in router_firewall_uci.result
-  notify: Reload firewall
+    - item.value.state | default('present') == 'present'
+    - item.named_type == 'zone'
+  changed_when: false
+
+- name: Add operations to adopt matching anonymous firewall zones
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'section',
+          'config': 'firewall',
+          'type': 'zone',
+          'name': item.key,
+          'find': {'name': item.value.name | default(item.key)},
+          'set_find': false,
+          'value': (
+            item.value
+            | dict2items
+            | rejectattr('key', 'equalto', 'state')
+            | rejectattr('key', 'equalto', 'name')
+            | rejectattr('value', 'none')
+            | items2dict
+            | combine({'name': item.value.name | default(item.key)})
+          )
+        }]
+      }}
+  loop: "{{ router_firewall_zone_resolution }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - item.value.state | default('present') == 'present'
+    - item.named_type == ''
+    - item.anonymous_matches | length == 1
+  changed_when: false
+
+- name: Add operations to create missing firewall zones
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'section',
+          'config': 'firewall',
+          'type': 'zone',
+          'name': item.key,
+          'value': (
+            item.value
+            | dict2items
+            | rejectattr('key', 'equalto', 'state')
+            | rejectattr('key', 'equalto', 'name')
+            | rejectattr('value', 'none')
+            | items2dict
+            | combine({'name': item.value.name | default(item.key)})
+          )
+        }]
+      }}
+  loop: "{{ router_firewall_zone_resolution }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - item.value.state | default('present') == 'present'
+    - item.named_type == ''
+    - item.anonymous_matches | length == 0
+  changed_when: false
+
+- name: Add explicit firewall zone option removals
+  ansible.builtin.include_tasks: add_null_option_operations.yml
+  loop: "{{ router_firewall_zone_resolution }}"
+  loop_control:
+    loop_var: router_firewall_zone
+    label: "{{ router_firewall_zone.key }}"
+
+- name: Add operations to remove named firewall zones
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'absent',
+          'key': 'firewall.' ~ item.key
+        }]
+      }}
+  loop: "{{ router_firewall_zone_resolution }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - item.value.state | default('present') == 'absent'
+    - item.named_type == 'zone'
+  changed_when: false
+
+- name: Add operations to remove matching anonymous firewall zones
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'absent',
+          'config': 'firewall',
+          'type': 'zone',
+          'find': {'name': item.value.name | default(item.key)}
+        }]
+      }}
+  loop: "{{ router_firewall_zone_resolution }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - item.value.state | default('present') == 'absent'
+    - item.named_type == ''
+    - item.anonymous_matches | length == 1
+  changed_when: false
+
+- name: Add optional additional Dropbear WAN firewall rule
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'section',
+          'config': 'firewall',
+          'type': 'rule',
+          'name': 'ansible_router_firewall_dropbear_extra_wan',
+          'value': {
+            'name': 'Ansible managed Dropbear extra ports WAN',
+            'src': router_firewall_dropbear_wan_zone,
+            'proto': 'tcp',
+            'dest_port': router_firewall_dropbear_extra_ports
+                          | map('string') | join(' '),
+            'target': 'ACCEPT'
+          },
+          'replace': true
+        }]
+      }}
+  when:
+    - router_firewall_dropbear_wan_zone | length > 0
+    - router_firewall_dropbear_extra_ports | length > 0
+  changed_when: false
+
+- name: Add operation to remove optional additional Dropbear WAN rule
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'absent',
+          'key': 'firewall.ansible_router_firewall_dropbear_extra_wan'
+        }]
+      }}
+  when: >-
+    router_firewall_dropbear_wan_zone | length == 0 or
+    router_firewall_dropbear_extra_ports | length == 0
+  changed_when: false
+
+- name: Apply firewall configuration in one UCI transaction
+  block:
+    - name: Apply staged firewall configuration and commit once
+      community.openwrt.uci:
+        autocommit: true
+        operations: "{{ router_firewall_operations }}"
+      register: router_firewall_apply_result
+      when: router_firewall_operations | length > 0
+      notify: Reload firewall
+  rescue:
+    - name: Discard uncommitted firewall UCI changes after an error
+      community.openwrt.uci:
+        command: revert
+        config: firewall
+      failed_when: false
+
+    - name: Report firewall configuration failure
+      ansible.builtin.fail:
+        msg: >-
+          Applying the firewall configuration failed. Uncommitted UCI changes
+          were reverted; inspect the preceding UCI error before retrying.

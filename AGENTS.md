@@ -16,15 +16,15 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `docs/configuration.md` – detailed router configuration and inventory guide
 - `scripts/owrt-extra.sh` – read-only OpenWrt state discovery for Ansible migration
 - `extensions/molecule/default/` – Molecule scenario for hostname,
-  packages, and base services
+  firewall zones, packages, and base services
 - `extensions/molecule/network-static/` – isolated configuration-only
   tests for static IPv4 settings
 - `extensions/molecule/network-dhcp/` – isolated configuration-only
   tests for DHCP client settings and IPv4 DHCP server status
 - `roles/router_system/` – manages hostname, timezone, NTP, logging, ASU
   settings, and optional additional Dropbear listeners
-- `roles/router_firewall/` – configures firewall default policies and
-  opt-in WAN access for additional Dropbear ports
+- `roles/router_firewall/` – manages firewall default policies, declarative
+  zones, and opt-in WAN access for additional Dropbear ports
 - `roles/router_packages/` – dynamically installs the default package list
 - `roles/router_base/` – enables core services and removes obsolete config
 - `roles/router_network/` – manages explicitly configured IPv4 interface
@@ -580,8 +580,9 @@ dependencies, conditions, matrix, and commands.
   options and optional additional Dropbear listeners. Additional ports
   default to empty and use the router's existing system accounts and SSH
   authorized keys. `router_firewall` opens those ports on WAN only when
-  `router_firewall_dropbear_wan_zone` is set; it defaults to empty. The ASU
-  package must be installed separately; the remote syslog address
+  `router_firewall_dropbear_wan_zone` is set; it defaults to empty. The role
+  also supports declarative firewall zones through `router_firewall_zones`.
+  The ASU package must be installed separately; the remote syslog address
   (`router_system_log_ip`) intentionally has no default.
 - `roles/router_network` demonstrates explicit UCI configuration through
   `router_network_interfaces`, including optional nested DHCP settings
