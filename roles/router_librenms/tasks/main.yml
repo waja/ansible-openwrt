@@ -139,6 +139,15 @@
         - wlRate.sh
         - wlSNR.sh
       notify: Restart SNMP daemon
+
+    - name: Deploy LibreNMS hardware detection script
+      community.openwrt.copy:
+        src: hardware
+        dest: /etc/librenms/hardware
+        owner: root
+        group: root
+        mode: '0755'
+      notify: Restart SNMP daemon
   always:
     - name: Remove temporary LibreNMS download directory from the controller
       ansible.builtin.file:
@@ -177,8 +186,8 @@
         args: ''
       - name: hardware
         section: ansible_router_librenms_hardware
-        prog: /bin/cat
-        args: /sys/firmware/devicetree/base/model
+        prog: /etc/librenms/hardware
+        args: ''
       - name: interfaces
         section: ansible_router_librenms_interfaces
         prog: /bin/cat
