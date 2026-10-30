@@ -38,7 +38,9 @@ jobs:
 
       - name: Commit updated lockfiles.
         run: |
-          if git diff --quiet -- .github/workflows/requirements-*.txt; then
+          git add .github/workflows/requirements-*.txt
+
+          if git diff --cached --quiet; then
             echo "CI dependency locks are already up to date."
             exit 0
           fi
@@ -46,6 +48,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/requirements-*.txt
           git commit -m "chore(ci): refresh Python dependency locks"
           git push
