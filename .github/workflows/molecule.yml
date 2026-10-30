@@ -39,6 +39,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          exit 1 # Temporary fail-open test: force the changes job to fail.
 
           # Run validation if the base commit is unavailable; do not guess.
           if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
