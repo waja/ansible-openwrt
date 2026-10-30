@@ -88,6 +88,13 @@ SNMP restart.
 
 SNMP extend entries are managed through UCI. The executable path is stored
 in `prog` and command-line arguments are stored separately in `args`.
+
+The role deploys a small `hardware` helper for LibreNMS hardware detection.
+It prefers the Device Tree model, then DMI product information. On QEMU/KVM
+systems it reports the virtual machine vendor and product when available;
+when no hardware metadata is exposed, it falls back to the OpenWrt
+architecture. This avoids assuming that every OpenWrt target has a Device
+Tree or DMI interface.
 The role owns only sections prefixed with
 `ansible_router_librenms_`; other SNMP settings and extend sections are
 left untouched. Obsolete sections with this prefix are removed when the
@@ -95,7 +102,8 @@ wireless interface mapping changes.
 
 The role configures the following LibreNMS extend names:
 
-- `distro` and `hardware` for OS and hardware detection
+- `distro` and `hardware` for OS and hardware detection (`hardware` uses
+  Device Tree, DMI, and a generic fallback for virtualized/minimal systems)
 - `interfaces` and `clients-wlan` for interface mapping and aggregate
   associated-client count
 - Per-interface `clients`, `frequency`, `noise-floor`, `rate`
