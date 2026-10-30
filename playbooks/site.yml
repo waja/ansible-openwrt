@@ -33,3 +33,7 @@
       tags:
         - router_snmpd
       when: router_snmpd_enabled | bool
+    - role: router_librenms
+      tags:
+        - router_librenms
+      when: router_librenms_enabled | bool

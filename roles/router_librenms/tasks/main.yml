@@ -1,0 +1,365 @@
+# roles/router_librenms/tasks/main.yml
+---
+- name: Validate LibreNMS source reference
+  ansible.builtin.assert:
+    that:
+      - router_librenms_source_ref is string
+      - router_librenms_source_ref is match('^[A-Za-z0-9._/-]+$')
+      - "'..' not in router_librenms_source_ref"
+    fail_msg: >-
+      router_librenms_source_ref must be a branch, tag, or commit reference
+      containing only letters, digits, dots, underscores, slashes, and hyphens.
+
+- name: Validate LibreNMS wireless interface mappings
+  ansible.builtin.assert:
+    that:
+      - router_librenms_wireless_interfaces is sequence
+      - router_librenms_wireless_interfaces is not string
+      - >-
+        router_librenms_wireless_interfaces
+        | select('mapping')
+        | list
+        | length == router_librenms_wireless_interfaces | length
+      - >-
+        router_librenms_wireless_interfaces
+        | map(attribute='interface')
+        | list
+        | unique
+        | length == router_librenms_wireless_interfaces | length
+      - >-
+        router_librenms_wireless_interfaces
+        | map(attribute='name')
+        | list
+        | unique
+        | length == router_librenms_wireless_interfaces | length
+      - >-
+        router_librenms_wireless_interfaces
+        | map(attribute='interface')
+        | map('regex_replace', '[^A-Za-z0-9_]', '_')
+        | list
+        | unique
+        | length == router_librenms_wireless_interfaces | length
+    fail_msg: >-
+      Define wireless interfaces as mappings with unique interface and name
+      values. Interface names must also produce unique UCI section IDs.
+
+- name: Validate individual LibreNMS wireless interface mappings
+  ansible.builtin.assert:
+    that:
+      - item.keys() | difference(['interface', 'name']) | length == 0
+      - item.interface is string
+      - item.interface is match('^[A-Za-z0-9_.:-]+$')
+      - item.name is string
+      - item.name is match('^[A-Za-z0-9_.-]+$')
+    fail_msg: >-
+      Each mapping must contain only interface and name. Values may contain
+      letters, digits, underscores, dots, colons, and hyphens.
+  loop: "{{ router_librenms_wireless_interfaces }}"
+  loop_control:
+    label: "{{ item.interface | default('invalid') }}"
+
+- name: Download and deploy current LibreNMS scripts
+  block:
+    - name: Create temporary LibreNMS download directory on the controller
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: ansible-librenms-
+      register: router_librenms_download_dir
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Resolve configured LibreNMS source ref to a commit
+      ansible.builtin.uri:
+        url: >-
+          https://api.github.com/repos/librenms/librenms-agent/commits/{{
+            router_librenms_source_ref | urlencode
+          }}
+        method: GET
+        headers:
+          Accept: application/vnd.github+json
+        return_content: true
+        status_code: 200
+        timeout: 30
+        validate_certs: true
+      register: router_librenms_upstream_commit
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Download LibreNMS scripts from the resolved upstream commit
+      ansible.builtin.get_url:
+        url: >-
+          {{
+            'https://raw.githubusercontent.com/librenms/librenms-agent/'
+            ~ router_librenms_upstream_commit.json.sha ~ '/' ~ item.path
+          }}
+        dest: "{{ router_librenms_download_dir.path }}/{{ item.name }}"
+        mode: '0600'
+        force: true
+        timeout: 30
+        validate_certs: true
+      loop:
+        - name: distro
+          path: snmp/distro
+        - name: wlClients.sh
+          path: snmp/Openwrt/wlClients.sh
+        - name: wlFrequency.sh
+          path: snmp/Openwrt/wlFrequency.sh
+        - name: wlNoiseFloor.sh
+          path: snmp/Openwrt/wlNoiseFloor.sh
+        - name: wlRate.sh
+          path: snmp/Openwrt/wlRate.sh
+        - name: wlSNR.sh
+          path: snmp/Openwrt/wlSNR.sh
+      loop_control:
+        label: "{{ item.name }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Create LibreNMS script directory
+      community.openwrt.file:
+        path: /etc/librenms
+        state: directory
+        mode: '0755'
+
+    - name: Deploy downloaded LibreNMS scripts
+      community.openwrt.copy:
+        src: "{{ router_librenms_download_dir.path }}/{{ item }}"
+        dest: "/etc/librenms/{{ item }}"
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - distro
+        - wlClients.sh
+        - wlFrequency.sh
+        - wlNoiseFloor.sh
+        - wlRate.sh
+        - wlSNR.sh
+      notify: Restart SNMP daemon
+  always:
+    - name: Remove temporary LibreNMS download directory from the controller
+      ansible.builtin.file:
+        path: "{{ router_librenms_download_dir.path }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      when:
+        - router_librenms_download_dir is defined
+        - router_librenms_download_dir.path is defined
+      changed_when: false
+
+- name: Deploy LibreNMS wireless interface mapping
+  community.openwrt.template:
+    src: wlInterfaces.txt.j2
+    dest: /etc/librenms/wlInterfaces.txt
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart SNMP daemon
+
+- name: Preserve LibreNMS scripts during sysupgrade
+  community.openwrt.lineinfile:
+    path: /etc/sysupgrade.conf
+    line: /etc/librenms
+    regex: '^/etc/librenms$'
+    state: present
+    create: true
+
+- name: Initialize managed LibreNMS SNMP extend entries
+  ansible.builtin.set_fact:
+    router_librenms_extend_entries:
+      - name: distro
+        section: ansible_router_librenms_distro
+        prog: /etc/librenms/distro
+        args: ''
+      - name: hardware
+        section: ansible_router_librenms_hardware
+        prog: /bin/cat
+        args: /sys/firmware/devicetree/base/model
+      - name: interfaces
+        section: ansible_router_librenms_interfaces
+        prog: /bin/cat
+        args: /etc/librenms/wlInterfaces.txt
+      - name: clients-wlan
+        section: ansible_router_librenms_clients_all
+        prog: /etc/librenms/wlClients.sh
+        args: ''
+  changed_when: false
+
+- name: Add per-interface client and frequency entries
+  ansible.builtin.set_fact:
+    router_librenms_extend_entries: >-
+      {{
+        router_librenms_extend_entries + [
+          {
+            'name': 'clients-' ~ item.interface,
+            'section': 'ansible_router_librenms_'
+              ~ (item.interface | regex_replace('[^A-Za-z0-9_]', '_'))
+              ~ '_clients',
+            'prog': '/etc/librenms/wlClients.sh',
+            'args': item.interface
+          },
+          {
+            'name': 'frequency-' ~ item.interface,
+            'section': 'ansible_router_librenms_'
+              ~ (item.interface | regex_replace('[^A-Za-z0-9_]', '_'))
+              ~ '_frequency',
+            'prog': '/etc/librenms/wlFrequency.sh',
+            'args': item.interface
+          }
+        ]
+      }}
+  loop: "{{ router_librenms_wireless_interfaces }}"
+  loop_control:
+    label: "{{ item.interface }}"
+  changed_when: false
+
+- name: Add per-interface rate entries
+  ansible.builtin.set_fact:
+    router_librenms_extend_entries: >-
+      {{
+        router_librenms_extend_entries + [{
+          'name': 'rate-' ~ item.1 ~ '-' ~ item.0.interface ~ '-' ~ item.2,
+          'section': 'ansible_router_librenms_'
+            ~ (item.0.interface | regex_replace('[^A-Za-z0-9_]', '_'))
+            ~ '_rate_' ~ item.1 ~ '_' ~ item.2,
+          'prog': '/etc/librenms/wlRate.sh',
+          'args': item.0.interface ~ ' ' ~ item.1 ~ ' ' ~ item.2
+        }]
+      }}
+  loop: >-
+    {{
+      router_librenms_wireless_interfaces
+      | product(['tx', 'rx'], ['min', 'avg', 'max'])
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.interface }} {{ item.1 }} {{ item.2 }}"
+  changed_when: false
+
+- name: Add per-interface noise-floor entries
+  ansible.builtin.set_fact:
+    router_librenms_extend_entries: >-
+      {{
+        router_librenms_extend_entries + [{
+          'name': 'noise-floor-' ~ item.interface,
+          'section': 'ansible_router_librenms_'
+            ~ (item.interface | regex_replace('[^A-Za-z0-9_]', '_'))
+            ~ '_noise_floor',
+          'prog': '/etc/librenms/wlNoiseFloor.sh',
+          'args': item.interface
+        }]
+      }}
+  loop: "{{ router_librenms_wireless_interfaces }}"
+  loop_control:
+    label: "{{ item.interface }}"
+  changed_when: false
+
+- name: Add per-interface SNR entries
+  ansible.builtin.set_fact:
+    router_librenms_extend_entries: >-
+      {{
+        router_librenms_extend_entries + [{
+          'name': 'snr-' ~ item.0.interface ~ '-' ~ item.1,
+          'section': 'ansible_router_librenms_'
+            ~ (item.0.interface | regex_replace('[^A-Za-z0-9_]', '_'))
+            ~ '_snr_' ~ item.1,
+          'prog': '/etc/librenms/wlSNR.sh',
+          'args': item.0.interface ~ ' ' ~ item.1
+        }]
+      }}
+  loop: >-
+    {{
+      router_librenms_wireless_interfaces
+      | product(['min', 'avg', 'max'])
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.interface }} {{ item.1 }}"
+  changed_when: false
+
+- name: Read existing SNMP configuration
+  community.openwrt.uci:
+    command: show
+    config: snmpd
+  register: router_librenms_snmpd_config
+  changed_when: false
+
+- name: Reject conflicting non-extend managed section IDs
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_librenms_snmpd_config.result
+        | regex_findall(
+            '(?m)^snmpd\.ansible_router_librenms_[A-Za-z0-9_]+=(?!extend$).+$'
+          )
+        | length == 0
+    fail_msg: >-
+      A section using the reserved ansible_router_librenms_ prefix exists
+      but is not an SNMP extend section. Resolve the conflict first.
+
+- name: Find existing role-managed LibreNMS SNMP sections
+  ansible.builtin.set_fact:
+    router_librenms_existing_sections: >-
+      {{
+        router_librenms_snmpd_config.result
+        | regex_findall(
+            '(?m)^snmpd\.(ansible_router_librenms_[A-Za-z0-9_]+)=extend$'
+          )
+      }}
+  changed_when: false
+
+- name: Initialize LibreNMS SNMP UCI operations
+  ansible.builtin.set_fact:
+    router_librenms_uci_operations: []
+  changed_when: false
+
+- name: Remove obsolete role-managed SNMP extend sections
+  ansible.builtin.set_fact:
+    router_librenms_uci_operations: >-
+      {{
+        router_librenms_uci_operations + [{
+          'command': 'absent',
+          'key': 'snmpd.' ~ item
+        }]
+      }}
+  loop: >-
+    {{
+      router_librenms_existing_sections
+      | difference(
+          router_librenms_extend_entries | map(attribute='section') | list
+        )
+    }}
+  changed_when: false
+
+- name: Add managed LibreNMS SNMP extend sections
+  ansible.builtin.set_fact:
+    router_librenms_uci_operations: >-
+      {{
+        router_librenms_uci_operations + [{
+          'command': 'section',
+          'config': 'snmpd',
+          'type': 'extend',
+          'name': item.section,
+          'replace': true,
+          'value': {
+            'name': item.name,
+            'prog': item.prog,
+            'args': item.args
+          }
+        }]
+      }}
+  loop: "{{ router_librenms_extend_entries }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+
+- name: Apply LibreNMS SNMP extend configuration
+  community.openwrt.uci:
+    operations: "{{ router_librenms_uci_operations }}"
+    autocommit: true
+  when: router_librenms_uci_operations | length > 0
+  notify: Restart SNMP daemon

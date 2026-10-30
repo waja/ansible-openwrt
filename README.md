@@ -31,7 +31,8 @@ to the individual [system](docs/roles/router_system.md),
 [network](docs/roles/router_network.md),
 [packages](docs/roles/router_packages.md),
 [base services](docs/roles/router_base.md),
-[SNMP](docs/roles/router_snmpd.md), and
+[SNMP](docs/roles/router_snmpd.md),
+[LibreNMS](docs/roles/router_librenms.md), and
 [package audit](docs/roles/router_package_audit.md) guides.
 
 ## Requirements
@@ -215,6 +216,7 @@ See the [router configuration overview](docs/configuration.md) for playbook usag
 - `roles/router_base/` — base service configuration
 - `roles/router_network/` — IPv4 interface addressing and per-interface DHCP server settings
 - `roles/router_snmpd/` — optional SNMP community configuration
+- `roles/router_librenms/` — optional LibreNMS wireless sensor integration
 - `roles/router_package_audit/` — package baseline comparison
 - `requirements.yml` — pinned Ansible role and collection dependencies
 - `extensions/molecule/default/` — Molecule test scenario

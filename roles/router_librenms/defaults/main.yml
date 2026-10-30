@@ -1,0 +1,5 @@
+# roles/router_librenms/defaults/main.yml
+---
+router_librenms_enabled: false
+router_librenms_source_ref: master
+router_librenms_wireless_interfaces: []
