@@ -192,13 +192,30 @@ for release versions, image tags, container names, paths, and CI matrix values.
 - In `converge.yml`: pass test values directly to `include_role` via
   `vars:` so they are visible and scoped
 - Do not use `command`/`shell` when a module exists.
+- Group related UCI writes by configuration package in one
+  `community.openwrt.uci` task using `operations` and
+  `autocommit: true`. This commits the package once after all operations
+  succeed, rather than leaving staged changes or committing each option
+  separately. The collection dependency must support `operations`.
+- Keep service reloads/restarts in handlers notified by the successful UCI
+  task; do not use a generic commit handler because handler execution order
+  does not guarantee a commit before every service handler.
+- If a configuration option is optional and cannot cleanly be included in
+  the grouped operations, use a separate conditional UCI task with
+  `autocommit: true`.
+- Molecule tests for UCI-managed settings must verify both effective values
+  and persistence in the configuration file, and ensure no staged UCI
+  changes remain for the affected package.
 - `ansible.builtin.raw` is allowed in `prepare.yml` because no Python
   environment is available on the target yet.
 - Shared service-lock tasks live in
-  `includes/router_service_restart_lock/` and are included by
-  `router_base` and `router_packages`. They coordinate service operations
-  on Python-free OpenWrt targets; do not copy this locking design into new
-  features without a separate design review.
+  `includes/router_service_restart_lock/` and are used by `router_system`,
+  `router_base`, and `router_packages`. The system role holds the lock
+  across its UCI transactions and flushes its runtime-apply handler before
+  releasing it, preventing overlapping runs from mixing system-package
+  changes. The lock coordinates operations on Python-free OpenWrt targets;
+  do not copy this locking design into new features without a separate
+  design review.
 - Set `router_service_restart_lock_timeout` to override the shared lock
   timeout (default 1860 seconds). Legacy role-specific timeout variables
   remain accepted as fallbacks.

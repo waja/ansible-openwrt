@@ -1,74 +1,68 @@
 # roles/router_system/tasks/main.yml
 ---
-- name: Configure system hostname
-  community.openwrt.uci:
-    command: set
-    key: system.@system[0].hostname
-    value: "{{ router_system_hostname }}"
+- name: Acquire the shared service restart lock
+  ansible.builtin.include_tasks:
+    file: ../../../includes/router_service_restart_lock/acquire.yml
 
-- name: Configure timezone value
-  community.openwrt.uci:
-    command: set
-    key: system.@system[0].timezone
-    value: "{{ router_system_timezone }}"
+- name: Configure router system settings while holding the lock
+  block:
+    - name: Configure system settings in one UCI transaction
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: set
+            key: system.@system[0].hostname
+            value: "{{ router_system_hostname }}"
+          - command: set
+            key: system.@system[0].timezone
+            value: "{{ router_system_timezone }}"
+          - command: set
+            key: system.@system[0].zonename
+            value: "{{ router_system_timezone_name }}"
+          - command: set
+            key: system.ntp.enabled
+            value: "{{ 1 if router_system_ntp_enabled else 0 }}"
+          - command: set
+            key: system.ntp.server
+            value: "{{ router_system_ntp_servers }}"
+          - command: set
+            key: system.@system[0].log_proto
+            value: "{{ router_system_log_proto }}"
+          - command: set
+            key: system.@system[0].conloglevel
+            value: "{{ router_system_conloglevel }}"
+          - command: set
+            key: system.@system[0].cronloglevel
+            value: "{{ router_system_cronloglevel }}"
+      notify: Apply router system configuration
 
-- name: Configure timezone name
-  community.openwrt.uci:
-    command: set
-    key: system.@system[0].zonename
-    value: "{{ router_system_timezone_name }}"
+    - name: Configure attended sysupgrade settings in one UCI transaction
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: set
+            key: attendedsysupgrade.client.auto_search
+            value: "{{ router_system_asu_auto_search }}"
+          - command: set
+            key: attendedsysupgrade.client.login_check_for_upgrades
+            value: "{{ router_system_asu_login_check_for_upgrades }}"
+          - command: set
+            key: attendedsysupgrade.client.upgrade_packages
+            value: "{{ router_system_asu_upgrade_packages }}"
 
-- name: Configure NTP client state
-  community.openwrt.uci:
-    command: set
-    key: system.ntp.enabled
-    value: "{{ 1 if router_system_ntp_enabled else 0 }}"
+    - name: Configure remote syslog server
+      community.openwrt.uci:
+        command: set
+        key: system.@system[0].log_ip
+        value: "{{ router_system_log_ip }}"
+        autocommit: true
+      when: router_system_log_ip is defined
+      notify: Apply router system configuration
 
-- name: Configure NTP server list
-  community.openwrt.uci:
-    command: set
-    key: system.ntp.server
-    value: "{{ router_system_ntp_servers }}"
+    - name: Apply notified configuration handlers before releasing the lock
+      ansible.builtin.meta: flush_handlers
 
-- name: Configure system log protocol
-  community.openwrt.uci:
-    command: set
-    key: system.@system[0].log_proto
-    value: "{{ router_system_log_proto }}"
-
-- name: Configure console log level
-  community.openwrt.uci:
-    command: set
-    key: system.@system[0].conloglevel
-    value: "{{ router_system_conloglevel }}"
-
-- name: Configure cron log level
-  community.openwrt.uci:
-    command: set
-    key: system.@system[0].cronloglevel
-    value: "{{ router_system_cronloglevel }}"
-
-- name: Configure attended sysupgrade automatic search
-  community.openwrt.uci:
-    command: set
-    key: attendedsysupgrade.client.auto_search
-    value: "{{ router_system_asu_auto_search }}"
-
-- name: Configure attended sysupgrade login upgrade check
-  community.openwrt.uci:
-    command: set
-    key: attendedsysupgrade.client.login_check_for_upgrades
-    value: "{{ router_system_asu_login_check_for_upgrades }}"
-
-- name: Configure attended sysupgrade package upgrades
-  community.openwrt.uci:
-    command: set
-    key: attendedsysupgrade.client.upgrade_packages
-    value: "{{ router_system_asu_upgrade_packages }}"
-
-- name: Configure remote syslog server
-  community.openwrt.uci:
-    command: set
-    key: system.@system[0].log_ip
-    value: "{{ router_system_log_ip }}"
-  when: router_system_log_ip is defined
+  always:
+    - name: Release the shared service restart lock
+      ansible.builtin.include_tasks:
+        file: ../../../includes/router_service_restart_lock/release.yml

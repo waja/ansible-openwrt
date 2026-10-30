@@ -13,14 +13,14 @@
         name: router_system
       vars:
         router_system_hostname: molecule-test-router
-        router_system_timezone: UTC
-        router_system_timezone_name: Etc/UTC
+        router_system_timezone: CET-1CEST,M3.5.0,M10.5.0/3
+        router_system_timezone_name: Europe/Berlin
         router_system_ntp_enabled: false
         router_system_ntp_servers:
           - 0.example.invalid
           - 1.example.invalid
-        router_system_log_proto: udp
-        router_system_conloglevel: 8
+        router_system_log_proto: tcp
+        router_system_conloglevel: 4
         router_system_cronloglevel: 7
         router_system_asu_auto_search: 0
         router_system_asu_login_check_for_upgrades: 1
@@ -129,18 +129,68 @@
       ansible.builtin.assert:
         that:
           - "'hostname=molecule-test-router' in router_system_uci.stdout"
-          - "'timezone=UTC' in router_system_uci.stdout"
-          - "'zonename=Etc/UTC' in router_system_uci.stdout"
+          - "'timezone=CET-1CEST,M3.5.0,M10.5.0/3' in router_system_uci.stdout"
+          - "'zonename=Europe/Berlin' in router_system_uci.stdout"
           - "'ntp_enabled=0' in router_system_uci.stdout"
           - "'0.example.invalid' in router_system_uci.stdout"
           - "'1.example.invalid' in router_system_uci.stdout"
-          - "'log_proto=udp' in router_system_uci.stdout"
-          - "'conloglevel=8' in router_system_uci.stdout"
+          - "'log_proto=tcp' in router_system_uci.stdout"
+          - "'conloglevel=4' in router_system_uci.stdout"
           - "'cronloglevel=7' in router_system_uci.stdout"
           - "'asu_auto_search=0' in router_system_uci.stdout"
           - "'asu_login_check_for_upgrades=1' in router_system_uci.stdout"
           - "'asu_upgrade_packages=1' in router_system_uci.stdout"
           - "'log_ip=192.0.2.234' in router_system_uci.stdout"
+
+    - name: Verify system timezone is applied at runtime
+      ansible.builtin.raw: |
+        if [ -L /tmp/localtime ]; then
+          actual_timezone="$(readlink /tmp/localtime)"
+          if [ "$actual_timezone" != \
+            /usr/share/zoneinfo/Europe/Berlin ]; then
+            echo "Unexpected runtime timezone link: $actual_timezone"
+            exit 1
+          fi
+        else
+          actual_timezone="$(cat /tmp/TZ)"
+          if [ "$actual_timezone" != \
+            'CET-1CEST,M3.5.0,M10.5.0/3' ]; then
+            echo "Unexpected runtime TZ value: $actual_timezone"
+            exit 1
+          fi
+        fi
+      changed_when: false
+
+    - name: Verify system settings are persisted
+      ansible.builtin.raw: |
+        test -z "$(uci changes system)" || {
+          echo "Uncommitted changes remain in system UCI configuration"
+          exit 1
+        }
+        test -z "$(uci changes attendedsysupgrade)" || {
+          echo "Uncommitted changes remain in attendedsysupgrade"
+          exit 1
+        }
+        grep -F "option hostname 'molecule-test-router'" \
+          /etc/config/system || exit 1
+        grep -F "option timezone 'CET-1CEST,M3.5.0,M10.5.0/3'" \
+          /etc/config/system || exit 1
+        grep -F "option zonename 'Europe/Berlin'" \
+          /etc/config/system || exit 1
+        grep -F "option enabled '0'" /etc/config/system || exit 1
+        grep -F "list server '0.example.invalid'" /etc/config/system || exit 1
+        grep -F "list server '1.example.invalid'" /etc/config/system || exit 1
+        grep -F "option log_proto 'tcp'" /etc/config/system || exit 1
+        grep -F "option conloglevel '4'" /etc/config/system || exit 1
+        grep -F "option cronloglevel '7'" /etc/config/system || exit 1
+        grep -F "option auto_search '0'" \
+          /etc/config/attendedsysupgrade || exit 1
+        grep -F "option login_check_for_upgrades '1'" \
+          /etc/config/attendedsysupgrade || exit 1
+        grep -F "option upgrade_packages '1'" \
+          /etc/config/attendedsysupgrade || exit 1
+        grep -F "option log_ip '192.0.2.234'" /etc/config/system || exit 1
+      changed_when: false
 
     - name: Calculate package list for a changed managed service list
       ansible.builtin.include_role:
