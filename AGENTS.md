@@ -498,7 +498,7 @@ dependencies, conditions, matrix, and commands.
   options. The ASU package must be installed separately; the remote syslog
   address (`router_system_log_ip`) intentionally has no default.
 - `roles/router_network` demonstrates explicit UCI configuration through
-  `router_network_interfaces` and `router_network_dhcp_interfaces`
+  `router_network_interfaces`, including optional nested DHCP settings
 - `converge.yml` shows how test values are passed via `vars:` to
   `include_role`
 - Before pushing, run the fast local checks above (after installing
