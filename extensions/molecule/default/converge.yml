@@ -37,6 +37,7 @@
         router_firewall_input: ACCEPT
         router_firewall_forward: ACCEPT
         router_firewall_output: ACCEPT
+        router_firewall_apply_runtime_changes: false
       tags:
         - molecule-idempotence-notest
 
@@ -58,6 +59,16 @@
         router_firewall_input: ACCEPT
         router_firewall_forward: ACCEPT
         router_firewall_output: ACCEPT
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          molecule_guest_test:
+            network:
+              - lan
+            input: REJECT
+            output: ACCEPT
+            forward: REJECT
+            masq: false
+            mtu_fix: true
         router_firewall_dropbear_extra_ports:
           - 2222
           - 2223
@@ -72,6 +83,14 @@
         uci -q get \
           firewall.ansible_router_firewall_dropbear_extra_wan.dest_port \
           || exit 1
+        printf 'zone_name='
+        uci -q get firewall.molecule_guest_test.name || exit 1
+        printf 'zone_network='
+        uci -q get firewall.molecule_guest_test.network || exit 1
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
       register: router_firewall_uci
       changed_when: false
 
@@ -82,6 +101,8 @@
           - "'forward=ACCEPT' in router_firewall_uci.stdout"
           - "'output=ACCEPT' in router_firewall_uci.stdout"
           - "'extra_rule=2222 2223' in router_firewall_uci.stdout"
+          - "'zone_name=molecule_guest_test' in router_firewall_uci.stdout"
+          - "'zone_network=lan' in router_firewall_uci.stdout"
 
     - name: Apply router packages role
       ansible.builtin.include_role:
