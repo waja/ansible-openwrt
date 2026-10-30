@@ -244,3 +244,5 @@ ansible-playbook -i inventory.ini --syntax-check playbooks/audit_packages.yml
 
 The syntax checks use the inventory so Ansible can resolve the `openwrt`
 host pattern. These checks do not replace running the Molecule scenario.
+
+<!-- Temporary CI path-filter probe; remove after validation. -->
