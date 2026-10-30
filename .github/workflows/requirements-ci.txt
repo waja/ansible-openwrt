@@ -1,2 +1,0 @@
-# CI-only Python dependencies shared by the workflow jobs.
-ansible-core==2.21.5
