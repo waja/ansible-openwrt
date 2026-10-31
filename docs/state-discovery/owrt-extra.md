@@ -101,32 +101,32 @@ comparisons in `/tmp/owrt-diff/`. The principal sections are:
 | Section | What it reports | How to interpret it |
 | --- | --- | --- |
 | 1. UCI diff | Sorted comparison of factory and current `uci show` output. |
-| | Lines marked `<` are from the reference; `>` are from live. |
-| | Review intent; anonymous section indexes can shift. |
+| | Lines marked `<` are from the reference; `>` are from live. | |
+| | Review intent; anonymous section indexes can shift. | |
 | 2. Files for Ansible | New or changed overlay files not classified as UCI, |
-| | secret, package-owned, or known generated files. Mode/owner |
-| | and sysupgrade-list hints are included where available. |
-| | Candidates only; inspect content and identify the owner. |
+| | secret, package-owned, or known generated files. Mode/owner | |
+| | and sysupgrade-list hints are included where available. | |
+| | Candidates only; inspect content and identify the owner. | |
 | 3. Package files | Package-owned files with an `.apk-new` or `.apk-old` |
-| | marker. Inspect both versions and decide which is authoritative. |
+| | marker. Inspect both versions and decide which is authoritative. | |
 | 4. Services | Enablement differences inferred from `/etc/rc.d` links |
-| | and whiteouts. Package installation may enable services too. |
+| | and whiteouts. Package installation may enable services too. | |
 | 5. Symlinks/deletions | Changed symlinks and deletions in the overlay. |
-| | Check intent and whether the target is generated or package-managed. |
+| | Check intent and whether the target is generated or package-managed. | |
 | 6. Packages | APK world additions/removals, installed-package |
-| | differences, and repository/feed or signing-key changes. |
-| | The world list is the starting point for explicitly requested |
-| | packages; dependencies and version differences are context. |
+| | differences, and repository/feed or signing-key changes. | |
+| | The world list is the starting point for explicitly requested | |
+| | packages; dependencies and version differences are context. | |
 | 3a. APK audit | Output from `apk audit --system`, if supported. |
-| | Finds modified package-owned files outside protected paths. |
-| | Complements the overlay scan. See [issue #52][issue-52]. |
+| | Finds modified package-owned files outside protected paths. | |
+| | Complements the overlay scan. See [issue #52][issue-52]. | |
 | 7. Info only | UCI/secret paths, account/group differences, ignored |
-| | files, and sysupgrade persistence information. Context only; |
-| | not every item belongs in Ansible. |
+| | files, and sysupgrade persistence information. Context only; | |
+| | not every item belongs in Ansible. | |
 | 8. U-Boot | `fw_printenv` output and shell-history check for |
-| | `fw_setenv`. Recovery evidence only; not routine Ansible state. |
+| | `fw_setenv`. Recovery evidence only; not routine Ansible state. | |
 | 9. Host keys | Files copied with `-H`. Highly sensitive recovery |
-| | material; keep it separate from ordinary discovery output. |
+| | material; keep it separate from ordinary discovery output. | |
 
 ### Files retained in `/tmp/owrt-diff/`
 
