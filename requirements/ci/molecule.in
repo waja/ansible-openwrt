@@ -1,0 +1,5 @@
+# Molecule test toolchain.
+ansible-core==2.21.5
+molecule==26.10.0
+molecule-plugins[docker]==26.10.12
+netaddr==1.3.0
