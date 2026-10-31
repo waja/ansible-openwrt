@@ -302,13 +302,16 @@ done deliberately: install them at their original paths with restrictive
 permissions before the relevant service starts for the first time, or
 restart that service afterwards.
 
-After retrieving the evidence you need, remove the report and copied
-script from the router:
+After retrieving the evidence you need, remove the report through the
+script's guarded cleanup mode, then remove the copied script:
 
 ```sh
-rm -rf /tmp/owrt-diff
+sh /tmp/owrt-extra.sh -c
 rm -f /tmp/owrt-extra.sh
 ```
+
+Do not replace the guarded cleanup with a manual `rm -rf`: the `-c`
+mode checks the lock and refuses symlinked or mounted report paths.
 
 If you used `-k`, clean up the retained reference mount as described
 in the options section before removing `/tmp/ref`. Rebooting also clears
