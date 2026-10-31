@@ -13,6 +13,7 @@ name: Validate CI dependency locks
       - "scripts/update-ci-lockfiles.sh"
   push:
     paths:
+      - ".python-version"
       - "requirements/ci/*.in"
       - "requirements/ci/*.txt"
       - ".github/workflows/update-ci-lockfiles.yml"
