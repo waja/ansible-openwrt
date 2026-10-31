@@ -189,8 +189,10 @@ independent work items:
 
 - [#51 — Document the current discovery workflow and its
   limitations](https://github.com/waja/ansible-openwrt/issues/51)
-- [#52 — Evaluate `apk audit --system`](https://github.com/waja/ansible-openwrt/issues/52)
-- [#53 — Assess runtime-only state discovery](https://github.com/waja/ansible-openwrt/issues/53)
+- [#52 — Evaluate `apk audit --system`](
+  https://github.com/waja/ansible-openwrt/issues/52)
+- [#53 — Assess runtime-only state discovery](
+  https://github.com/waja/ansible-openwrt/issues/53)
 
 This workflow is not intended to clone a router's live state. Runtime
 snapshots, generated files, credentials, hardware calibration data and
