@@ -47,6 +47,27 @@
       "depNameTemplate": "koalaman/shellcheck",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the pinned pip-tools lockfile generator",
+      "managerFilePatterns": [
+        "/^requirements\\/ci\\/pip-tools\\.in$/"
+      ],
+      "matchStrings": [
+        "pip-tools==(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "pip-tools",
+      "datasourceTemplate": "pypi",
+      "versioningTemplate": "pep440"
     }
-  ]
+  ],
+  "pip-compile": {
+    "managerFilePatterns": [
+      "/^requirements\\/ci\\/(lint|ansible-test|molecule)\\.txt$/"
+    ]
+  },
+  "pip_requirements": {
+    "enabled": false
+  }
 }

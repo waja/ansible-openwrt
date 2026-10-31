@@ -1,0 +1,56 @@
+# .github/workflows/update-ci-lockfiles.yml
+---
+name: Validate CI dependency locks
+
+"on":
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".python-version"
+      - "requirements/ci/*.in"
+      - "requirements/ci/*.txt"
+      - ".github/workflows/update-ci-lockfiles.yml"
+      - "scripts/update-ci-lockfiles.sh"
+  push:
+    paths:
+      - ".python-version"
+      - "requirements/ci/*.in"
+      - "requirements/ci/*.txt"
+      - ".github/workflows/update-ci-lockfiles.yml"
+      - "scripts/update-ci-lockfiles.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-locks:
+    name: Validate generated dependency locks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the codebase.
+        uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Python 3.
+        uses: >-
+          actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version-file: .python-version
+
+      - name: Install the pinned lockfile generator.
+        run: |
+          python -m pip install --disable-pip-version-check \
+            --requirement requirements/ci/pip-tools.in
+
+      - name: Regenerate all CI dependency locks.
+        run: |
+          bash scripts/update-ci-lockfiles.sh
+
+      - name: Verify lockfiles are up to date.
+        run: |
+          if ! git diff --exit-code -- requirements/ci/*.txt; then
+            echo "::error::CI dependency lockfiles are stale."
+            echo "Update the .in inputs and regenerate the .txt files with:"
+            echo "  bash scripts/update-ci-lockfiles.sh"
+            exit 1
+          fi

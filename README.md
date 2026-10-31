@@ -240,13 +240,19 @@ git ls-files -z -- scripts/ '*.md' ':(exclude)collections/**' | xargs -0 -r code
 These checks detect shell issues, formatting problems, Markdown conventions,
 and likely spelling errors. They do not provide a full grammar check.
 
+The shared Ansible Core version is defined in
+`requirements/ci/ansible-core.in`. Python is selected through
+`.python-version`, and the lockfile generator version is defined in
+`requirements/ci/pip-tools.in`.
+
 ## Development checks
 
 Install the lint tools used by the project, then run the checks. On a control
 node with Python and pip available, install them with:
 
 ```bash
-python -m pip install yamllint ansible-lint
+python -m pip install --require-hashes \
+  -r requirements/ci/lint.txt
 ```
 
 Then run the checks used by the project:
@@ -260,3 +266,12 @@ ansible-playbook -i inventory.ini --syntax-check playbooks/audit_packages.yml
 
 The syntax checks use the inventory so Ansible can resolve the `openwrt`
 host pattern. These checks do not replace running the Molecule scenario.
+
+## CI dependency lock maintenance
+
+The CI Python toolchains are hash-locked separately for lint, Ansible
+sanity/unit tests, and Molecule. Edit the matching `.in` input and regenerate
+all lockfiles with `bash scripts/update-ci-lockfiles.sh`. The script requires
+the `pip-tools` version in `requirements/ci/pip-tools.in`; Python is selected
+from `.python-version`. CI validates lockfile freshness. A weekly workflow
+opens or updates a maintenance PR when transitive dependencies change.
