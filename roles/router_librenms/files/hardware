@@ -15,6 +15,7 @@ done
 
 dmi_vendor=""
 dmi_product=""
+dmi_version=""
 
 if [ -r /sys/class/dmi/id/sys_vendor ]; then
     dmi_vendor="$(cat /sys/class/dmi/id/sys_vendor)"
@@ -22,6 +23,22 @@ fi
 
 if [ -r /sys/class/dmi/id/product_name ]; then
     dmi_product="$(cat /sys/class/dmi/id/product_name)"
+fi
+
+if [ -r /sys/class/dmi/id/product_version ]; then
+    dmi_version="$(cat /sys/class/dmi/id/product_version)"
+fi
+
+# Sophos encodes the model and revision in product_version (e.g. 125Wr3).
+if [ "$dmi_vendor" = "Sophos" ] && [ "$dmi_product" = "SG" ]; then
+    sophos_model="$(
+        printf '%s\n' "$dmi_version" |
+            sed -n 's/^\([0-9][0-9]*\)[Ww][rR]\([0-9][0-9]*\)$/Sophos SG \1w Rev. \2/p'
+    )"
+    if [ -n "$sophos_model" ]; then
+        printf '%s\n' "$sophos_model"
+        exit 0
+    fi
 fi
 
 case "$dmi_vendor" in
