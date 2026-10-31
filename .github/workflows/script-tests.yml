@@ -131,15 +131,20 @@ jobs:
                 "> network.wg0.psk=psk-secret" \
                 "> network.wg0.preshared_key=preshared-secret" \
                 "> network.wg1.preshared-key=preshared-hyphen-secret" \
+                "> network.wg0.secret_key=secret-key-value" \
+                "> network.wg0.client-key=client-key-value" \
                 "> network.wg0.public_key=public-value" \
                 "> system.@system[0].hostname=router-name" \
                 "> system.@user[0].password=\$1\$salt\$hash" \
                 > /tmp/uci-fixture.txt
+              cp /tmp/uci-fixture.txt /tmp/uci-fixture.original
               sh /tmp/owrt-extra-test.sh --redact-uci-diff \
                 /tmp/uci-fixture.txt > /tmp/uci-redacted.txt
+              cmp -s /tmp/uci-fixture.txt /tmp/uci-fixture.original
               for secret in \
                 wifi-secret wireguard-secret psk-secret \
-                preshared-secret preshared-hyphen-secret salt hash; do
+                preshared-secret preshared-hyphen-secret \
+                secret-key-value client-key-value salt hash; do
                 if grep -Fq "$secret" /tmp/uci-redacted.txt; then
                   echo "Secret leaked by UCI redaction: $secret" >&2
                   exit 1
@@ -184,6 +189,22 @@ jobs:
               test ! -e /tmp/owrt-diff
               test -d /tmp/ref/merged
               rm -rf /tmp/ref
+
+              # Cleanup refuses a mounted report path when mounts are permitted.
+              mkdir -m 700 /tmp/owrt-diff
+              if mount -t tmpfs tmpfs /tmp/owrt-diff 2>/dev/null; then
+                if sh /tmp/owrt-extra-test.sh -c \
+                  > /tmp/mounted.stdout 2> /tmp/mounted.stderr; then
+                  echo "Expected cleanup to refuse a mounted report path." >&2
+                  umount /tmp/owrt-diff
+                  exit 1
+                fi
+                grep -Fq "Refusing to clean mounted path" /tmp/mounted.stderr
+                umount /tmp/owrt-diff
+              else
+                echo "SKIP: mount namespace does not permit tmpfs mount test."
+              fi
+              rmdir /tmp/owrt-diff
 
               # Cleanup refuses a symlink instead of following it.
               mkdir -m 700 /tmp/report-target
