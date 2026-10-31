@@ -47,3 +47,10 @@ service state rather than configuration. Review each candidate before
 managing it with Ansible. Data outside the overlay, such as calibration
 data and bootloader storage, is not suitable for normal Ansible
 configuration.
+
+## Migration architecture
+
+The two-stage discovery and Ansible assessment design, including the
+machine-readable bundle contract, is documented in the
+[state discovery architecture guide](architecture.md). The bundle schema
+is a target format; the current script does not yet generate it.

@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/waja/ansible-openwrt/blob/development/docs/state-discovery/schema/discovery-bundle.schema.json",
+  "title": "OpenWrt state discovery bundle",
+  "description": "Versioned machine-readable observations collected from an OpenWrt router. This schema describes evidence, not desired configuration or Ansible intent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "created_at", "target", "discovery", "evidence", "findings", "limitations"],
+  "properties": {
+    "format": { "const": "waja.ansible-openwrt.state-discovery" },
+    "format_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Major.minor bundle format version. Major changes may be incompatible; minor changes are additive."
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["board", "release"],
+      "properties": {
+        "board": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "release": { "type": ["string", "null"] },
+        "architecture": { "type": ["string", "null"] },
+        "hostname": {
+          "type": ["string", "null"],
+          "description": "Sensitive in some environments; omit or redact when necessary."
+        }
+      }
+    },
+    "discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "tool_version", "reference"],
+      "properties": {
+        "tool": { "const": "scripts/owrt-extra.sh" },
+        "tool_version": { "type": ["string", "null"] },
+        "reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "status"],
+          "properties": {
+            "kind": { "enum": ["reconstructed-factory", "unavailable", "other"] },
+            "status": { "enum": ["complete", "partial", "failed", "not-run"] },
+            "description": { "type": ["string", "null"] },
+            "evidence_ids": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/id" }
+            }
+          }
+        },
+        "started_at": { "type": ["string", "null"], "format": "date-time" },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "limitations": { "type": "array", "items": { "$ref": "#/$defs/limitation" } }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "location", "sensitivity", "availability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": {
+          "enum": ["command-output", "file", "diff", "metadata", "log", "other"]
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Bundle-relative path or stable logical locator. Never an arbitrary host path."
+        },
+        "media_type": { "type": ["string", "null"] },
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "description": "Digest of the included evidence bytes. A digest derived from secret material is itself sensitive and must not be included in a normal bundle."
+        },
+        "sensitivity": {
+          "enum": ["public", "internal", "sensitive", "secret", "unknown"]
+        },
+        "availability": {
+          "enum": ["included", "redacted", "omitted", "unavailable"]
+        },
+        "redaction": {
+          "type": ["string", "null"],
+          "description": "What was redacted or why evidence was omitted."
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "subject", "action", "observation", "evidence_ids", "limitations"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id",
+          "description": "Stable for a normalized category and subject when that subject has a stable identity."
+        },
+        "category": {
+          "enum": ["uci", "filesystem", "package", "service", "symlink", "account", "feed", "key", "runtime", "network", "firewall", "hardware", "other"]
+        },
+        "subject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "identifier", "identity_stability"],
+          "properties": {
+            "kind": {
+              "enum": ["uci-section", "uci-option", "file", "directory", "package", "service", "symlink", "user", "group", "feed", "key", "interface", "route", "rule", "process", "module", "sysctl", "device", "other"]
+            },
+            "identifier": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Semantic identifier when identity_stability is stable; otherwise a best-effort locator that must not be treated as cross-run identity."
+            },
+            "identity_stability": {
+              "enum": ["stable", "unstable", "unknown"],
+              "description": "Whether the subject can be identified consistently across discovery runs. Never mark an anonymous or scan-order-derived identifier as stable."
+            },
+            "path": { "type": ["string", "null"] }
+          }
+        },
+        "action": {
+          "enum": ["added", "modified", "removed", "present", "absent", "unknown"]
+        },
+        "observation": {
+          "type": "object",
+          "description": "Observed facts only. No inferred purpose, desired state, mapping or recommendation.",
+          "additionalProperties": true
+        },
+        "comparison": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "baseline": {},
+            "current": {}
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "limitations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        }
+      }
+    },
+    "limitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scope", "status", "description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "scope": {
+          "enum": ["uci", "filesystem", "packages", "services", "runtime", "network", "firewall", "hardware", "secrets", "reference", "other"]
+        },
+        "status": {
+          "enum": ["not-checked", "unsupported", "not-applicable", "unassessable", "incomplete", "failed"],
+          "description": "not-checked: no check was performed; unsupported: the collector cannot perform the check; not-applicable: the check does not apply to this device or configuration; unassessable: checked, but the result could not be interpreted; incomplete: only part of the relevant state was checked; failed: the check was attempted but execution failed."
+        },
+        "description": { "type": "string", "minLength": 1 },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "evidence": {
+            "contains": {
+              "properties": {
+                "sensitivity": { "const": "secret" }
+              },
+              "required": ["sensitivity"]
+            }
+          }
+        },
+        "required": ["evidence"]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "if": { "properties": { "sensitivity": { "const": "secret" } }, "required": ["sensitivity"] },
+              "then": { "properties": { "sha256": { "type": "null" } } }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
