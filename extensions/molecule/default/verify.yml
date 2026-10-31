@@ -70,7 +70,11 @@
         that:
           - >-
             router_firewall_null_options_show.result
-            is not search("firewall\\.guest_test\\.(network|input|masq|mtu_fix|masq_src|masq_dest|masq_allow_invalid|log|log_limit|helper)=")
+            is not search(
+              "firewall\\.guest_test\\."
+              ~ "(network|input|masq|mtu_fix|masq_src|masq_dest|"
+              ~ "masq_allow_invalid|log|log_limit|helper)="
+            )
 
     - name: Test explicit false firewall zone options
       ansible.builtin.include_role:
