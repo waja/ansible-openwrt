@@ -5,10 +5,15 @@ customized OpenWrt 25.12 router before bringing it under Ansible
 management. The script compares the running system with a reconstructed
 factory reference and reports likely configuration candidates.
 
-The script is a read-only discovery aid, not an Ansible playbook and not
-a configuration generator. It does not change the live UCI configuration,
-install packages, or apply any of the reported differences. Review every
-finding and decide explicitly whether it belongs in Ansible.
+The script does not change live UCI configuration, install packages, or
+apply reported differences. However, factory-generation scripts run in a
+chroot and are not a security sandbox. They can still affect live state
+through interfaces exposed by the kernel or device nodes. The collector
+does not bind the live `/proc`, `/sys`, or `/dev` into the chroot, but
+review device-specific `config_generate` and `uci-defaults` scripts for
+side effects before running it. Treat discovery as read-only with respect
+to the live configuration managed by the collector, not as a guarantee
+that arbitrary factory scripts are side-effect free.
 
 ## Prerequisites
 
@@ -24,9 +29,11 @@ factory files. It mounts a temporary overlay on `/rom`, runs
 `config_generate` and the factory `uci-defaults` scripts in that
 reference, and compares the result with the live system. This is a
 best-effort reconstruction, not a pristine copy of the router's original
-factory state. Device-specific initialization and unavailable hardware
-can affect the result. Errors during reference generation are written
-to `/tmp/owrt-diff/chroot.log` and reported as warnings.
+factory state. Device-specific initialization and unavailable hardware can affect the
+result. Errors are written to `/tmp/owrt-diff/chroot.log`. The script
+checks the exit status of `config_generate`, each `uci-defaults`
+script, and `uci commit`; failures mark the reference as incomplete even
+if later commands succeed.
 
 ## Run the discovery
 
@@ -38,17 +45,28 @@ ssh root@router1 'sh /tmp/owrt-extra.sh'
 ```
 
 The report and retained evidence are written below
-`/tmp/owrt-diff/`. The directory is created with restrictive
-permissions and resides in RAM on a normal OpenWrt system. Retrieve only
-the files you need over an appropriately protected connection.
+`/tmp/owrt-diff/`. Each run obtains a lock at `/tmp/owrt-extra.lock`;
+concurrent runs are refused because the reference mount and report path
+are shared. Each accepted run starts with a fresh report directory,
+removing files from previous or interrupted runs. The directory is
+created with restrictive permissions and resides in RAM on a normal
+OpenWrt system. Retrieve only the files you need over a protected
+connection.
 
 ### Options
 
 | Option | Behavior |
 | --- | --- |
-| `-k` | Keep the temporary factory reference mounted at `/tmp/ref/merged` after the run so you can inspect it. Without this option, a reference built by this run is unmounted and removed. |
-| `-f` | Rebuild the factory reference even if `/tmp/ref/merged` is already mounted. An existing reference is cleaned up before rebuilding. |
-| `-H` | Additionally copy available Dropbear/OpenSSH host keys and the uhttpd certificate/key into `/tmp/owrt-diff/secrets/`. These files are copied in plaintext. |
+| Option | Behavior |
+| --- | --- |
+| `-k` | Keep the temporary reference mounted after the run. |
+| | Path: `/tmp/ref/merged`. |
+| | Otherwise, a reference built by this run is removed. |
+| `-f` | Rebuild the factory reference, even if one is mounted. |
+| | An existing reference is cleaned up before rebuilding. |
+| `-H` | Export available Dropbear/OpenSSH host keys and the |
+| | uhttpd certificate/key to `/tmp/owrt-diff/secrets/`. |
+| | These files are copied in plaintext. |
 | `-h` | Print the script's usage notes. |
 
 Options can be combined, for example `-f -k` to rebuild and retain the
@@ -56,18 +74,23 @@ reference. If a reference was retained with `-k`, a later run without
 `-f` reuses it; that later run does not automatically remove the
 pre-existing mount.
 
-To remove a retained reference, first ensure its child bind mounts are
-unmounted, then unmount the reference and remove its temporary directory:
+To remove a retained reference, unmount its child mounts and then the
+reference. Stop if any unmount fails; do not run the removal command
+unless every unmount succeeded and no mount remains below `/tmp/ref`:
 
 ```sh
-umount /tmp/ref/merged/dev /tmp/ref/merged/sys /tmp/ref/merged/proc
-umount /tmp/ref/merged
+umount /tmp/ref/merged/dev &&
+umount /tmp/ref/merged/sys &&
+umount /tmp/ref/merged/proc &&
+umount /tmp/ref/merged &&
+! grep -F ' /tmp/ref/' /proc/mounts &&
 rm -rf /tmp/ref
 ```
 
-Only run the cleanup commands for mounts that exist. Do not remove
-`/tmp/ref` while anything is still mounted below it. Rebooting the
-router also clears these temporary RAM-backed mounts.
+If a path is not mounted, omit its `umount` command. If any unmount
+fails or the mount check finds a remaining mount, stop and investigate;
+never use recursive removal while a child mount remains. Rebooting the
+router also clears temporary RAM-backed mounts.
 
 ## Understand the report
 
@@ -76,16 +99,33 @@ comparisons in `/tmp/owrt-diff/`. The principal sections are:
 
 | Section | What it reports | How to interpret it |
 | --- | --- | --- |
-| 1. UCI diff | Sorted comparison of factory and current `uci show` output. Lines marked `<` are from the reference; `>` are from the live router. | Review the setting and its intent. Anonymous section indexes can shift when sections are inserted, so do not treat an index such as `@rule[3]` as a stable identity. |
-| 2. Files for Ansible | New or changed files in the overlay that are not classified as UCI, secret, package-owned, or known generated files. It includes mode/owner information where available and a sysupgrade-list hint. | These are candidates, not confirmed configuration. Inspect file content and identify the owning service before managing them. |
-| 3. Package files you modified | Package-owned files for which an `.apk-new` or `.apk-old` marker was found. | The marker indicates a package update conflict or related file change; inspect both files and determine which version should be authoritative. |
-| 4. Services | Service enablement differences inferred from `/etc/rc.d` links and whiteouts. | Confirm the package and service relationship. Package installation may enable services as a side effect. |
-| 5. Other symlinks and deleted files | Changed symlinks and deletions represented in the overlay. | Check whether the change is intentional and whether the target is generated or package-managed. |
-| 6. Packages | Explicit APK world additions/removals, installed-package differences from the reference, and repository/feed or signing-key changes. | The world list is the useful starting point for explicitly requested packages. Installed dependencies and version differences are context, not necessarily packages to declare individually. |
-| 3a. APK system audit | Output from `apk audit --system`, when the installed APK supports it. | This can identify modified package-owned system files outside protected configuration paths. It complements, rather than replaces, the overlay scan. See [issue #52](https://github.com/waja/ansible-openwrt/issues/52) for runtime validation status. |
-| 7. Info only | UCI file paths, secret-related paths, account/group differences, ignored files, and sysupgrade persistence information. | This section provides context and pointers; it does not mean every listed item should be managed by Ansible. |
-| 8. U-Boot environment | Saved output from `fw_printenv`, if available, and a check of shell history for `fw_setenv`. | Informational and recovery evidence only. Do not turn these values into routine Ansible tasks. |
-| 9. Host keys | Files copied when `-H` is selected. | Highly sensitive recovery material. Keep it separate from ordinary discovery output. |
+| 1. UCI diff | Sorted comparison of factory and current `uci show` output. |
+| | Lines marked `<` are from the reference; `>` are from live. |
+| | Review intent; anonymous section indexes can shift. |
+| 2. Files for Ansible | New or changed overlay files not classified as UCI, |
+| | secret, package-owned, or known generated files. Mode/owner |
+| | and sysupgrade-list hints are included where available. |
+| | Candidates only; inspect content and identify the owner. |
+| 3. Package files | Package-owned files with an `.apk-new` or `.apk-old` |
+| | marker. Inspect both versions and decide which is authoritative. |
+| 4. Services | Enablement differences inferred from `/etc/rc.d` links |
+| | and whiteouts. Package installation may enable services too. |
+| 5. Symlinks/deletions | Changed symlinks and deletions in the overlay. |
+| | Check intent and whether the target is generated or package-managed. |
+| 6. Packages | APK world additions/removals, installed-package |
+| | differences, and repository/feed or signing-key changes. |
+| | The world list is the starting point for explicitly requested |
+| | packages; dependencies and version differences are context. |
+| 3a. APK audit | Output from `apk audit --system`, if supported. |
+| | Finds modified package-owned files outside protected paths. |
+| | Complements the overlay scan. See [issue #52](https://github.com/waja/ansible-openwrt/issues/52). |
+| 7. Info only | UCI/secret paths, account/group differences, ignored |
+| | files, and sysupgrade persistence information. Context only; |
+| | not every item belongs in Ansible. |
+| 8. U-Boot | `fw_printenv` output and shell-history check for |
+| | `fw_setenv`. Recovery evidence only; not routine Ansible state. |
+| 9. Host keys | Files copied with `-H`. Highly sensitive recovery |
+| | material; keep it separate from ordinary discovery output. |
 
 ### Files retained in `/tmp/owrt-diff/`
 
@@ -94,7 +134,7 @@ contain:
 
 - `factory.show` and `current.show`: sorted UCI state from the
   reconstructed reference and live router.
-- `uci.diff`: the unified difference between those UCI snapshots.
+- `uci.diff`: normal-format difference between the UCI snapshots.
 - `packages.yml`: a starting list of package additions and removals.
   Its variable names are generic placeholders, not variables consumed
   directly by this project's roles.
@@ -216,9 +256,11 @@ device before any recovery operation.
 ## Security and cleanup
 
 Treat the entire report as sensitive until you have reviewed it.
-UCI values and raw diffs can contain Wi-Fi passwords and other plaintext
-credentials. The script avoids printing password hashes in its normal
-summary, but that does not make the retained output safe to publish.
+UCI values and raw diffs can contain Wi-Fi passwords, password hashes,
+and other plaintext credentials. The terminal summary redacts common
+crypt(3) password hashes in UCI differences and masks the password field
+in `/etc/passwd` comparisons. Raw files such as `factory.show`,
+`current.show`, and `uci.diff` are not redacted and remain sensitive.
 Do not commit raw discovery output, attach it to public issues, or store
 it in an unprotected shared location.
 
@@ -250,6 +292,8 @@ off-device is stored securely and delete it when it is no longer needed.
 
 The reconstructed reference is a best-effort approximation of factory
 state, not a guaranteed exact representation of the original device.
+Factory scripts run without live `/proc`, `/sys`, and `/dev` bind
+mounts, but the chroot is not a security boundary.
 The rootfs container used in CI checks shell syntax and command-line
 behavior but does not provide a booted device-like overlay environment.
 The full mount/chroot workflow and detection of actual overlay changes
