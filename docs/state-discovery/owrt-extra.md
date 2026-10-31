@@ -29,7 +29,8 @@ factory files. It mounts a temporary overlay on `/rom`, runs
 `config_generate` and the factory `uci-defaults` scripts in that
 reference, and compares the result with the live system. This is a
 best-effort reconstruction, not a pristine copy of the router's original
-factory state. Device-specific initialization and unavailable hardware can affect the
+factory state. Device-specific initialization and unavailable hardware can
+affect the
 result. Errors are written to `/tmp/owrt-diff/chroot.log`. The script
 checks the exit status of `config_generate`, each `uci-defaults`
 script, and `uci commit`; failures mark the reference as incomplete even
@@ -118,7 +119,8 @@ comparisons in `/tmp/owrt-diff/`. The principal sections are:
 | | packages; dependencies and version differences are context. |
 | 3a. APK audit | Output from `apk audit --system`, if supported. |
 | | Finds modified package-owned files outside protected paths. |
-| | Complements the overlay scan. See [issue #52](https://github.com/waja/ansible-openwrt/issues/52). |
+| | Complements the overlay scan. See [issue #52] |
+| | (https://github.com/waja/ansible-openwrt/issues/52). |
 | 7. Info only | UCI/secret paths, account/group differences, ignored |
 | | files, and sysupgrade persistence information. Context only; |
 | | not every item belongs in Ansible. |
