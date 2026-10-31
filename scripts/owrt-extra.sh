@@ -49,14 +49,27 @@ BUILT=0
 # Serialize access to the shared reference mount and report directory.
 if ! mkdir "$LOCK" 2>/dev/null; then
     echo "Another owrt-extra.sh run may be active (lock: $LOCK)." >&2
+    if [ -r "$LOCK/pid" ]; then
+        echo "Lock owner PID: $(cat "$LOCK/pid")" >&2
+    else
+        echo "Lock owner PID is unavailable; inspect the lock before removing it." >&2
+    fi
     exit 1
 fi
+# Install a minimal trap immediately so prerequisite failures cannot orphan
+# the lock. The full cleanup trap below replaces this on normal startup.
+trap 'rm -rf "$LOCK"' EXIT
+trap 'exit 1' HUP INT TERM
+printf '%s\\n' "$" > "$LOCK/pid" || {
+    echo "Cannot record lock owner in $LOCK/pid." >&2
+    exit 1
+}
 
 [ -d "$UPPER" ] || { echo "$UPPER not found (no overlay?)" >&2; exit 1; }
 [ -d /rom ]     || { echo "/rom not found, cannot rebuild the factory state." >&2; exit 1; }
 [ -r /etc/board.json ] || { echo "/etc/board.json is missing." >&2; exit 1; }
 
-T=$(mktemp -d) || { rmdir "$LOCK"; exit 1; }
+T=$(mktemp -d) || exit 1
 # Never mix evidence from separate or interrupted runs.
 rm -rf "$OUT" || { rm -rf "$T"; rmdir "$LOCK"; exit 1; }
 mkdir -m 700 "$OUT" || { rm -rf "$T"; rmdir "$LOCK"; exit 1; }
