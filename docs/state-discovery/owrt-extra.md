@@ -58,8 +58,6 @@ connection.
 
 | Option | Behavior |
 | --- | --- |
-| Option | Behavior |
-| --- | --- |
 | `-k` | Keep the temporary reference mounted after the run. |
 | | Path: `/tmp/ref/merged`. |
 | | Otherwise, a reference built by this run is removed. |
