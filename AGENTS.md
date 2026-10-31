@@ -46,6 +46,13 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   git-ignored
 - `requirements.yml` – authoritative, version-pinned source for
   Ansible role and collection dependencies used locally and in CI.
+- `.python-version` – shared Python version for CI workflows
+- `requirements/ci/*.in` and `requirements/ci/*.txt` – direct Python
+  dependency inputs and generated hash-locked CI toolchains
+- `requirements/ci/pip-tools.in` – pinned lockfile generator version
+- `scripts/update-ci-lockfiles.sh` – lockfile generation and validation
+- `.github/workflows/update-ci-lockfiles.yml` – lockfile freshness validation
+- `.github/workflows/refresh-ci-lockfiles.yml` – weekly lockfile refresh PR
 - `.github/workflows/molecule.yml` – main Ansible/Molecule CI pipeline
 - `.github/workflows/script-tests.yml` – state-discovery script smoke tests
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
@@ -421,7 +428,16 @@ entries in `requirements.yml`.
 The workflow file is the source of truth. Keep this section synchronized
 with it.
 
-- Python version: `3.14`
+- Python version: read from `.python-version` by `actions/setup-python`.
+- Python dependencies are split into lint, Ansible sanity/unit tests,
+  and Molecule toolchains. `requirements/ci/ansible-core.in` defines the
+  shared Ansible Core version; each group lock includes that input.
+- `requirements/ci/pip-tools.in` is the single source for the lockfile
+  generator version. Both lock workflows install from it, and the update
+  script validates the installed version against it.
+- Generate or refresh locks with `bash scripts/update-ci-lockfiles.sh`.
+  CI regenerates them and fails if committed lockfiles are stale.
+  A separate weekly workflow opens or updates a PR only when locks change.
 - Triggers: `workflow_dispatch`, weekly schedules (Sunday at 06:17 and
   07:17 UTC), pull requests, and pushes to `development` and `master`.
   The workflow starts for all push and pull-request events so required checks
@@ -434,6 +450,9 @@ with it.
 ### Jobs
 
 - `lint`
+  - Installs the hash-locked lint toolchain from
+    `requirements/ci/lint.txt` with `--require-hashes` and checks it
+    with `python -m pip check`.
   - Runs `yamllint .`.
   - Installs pinned roles and collections from `requirements.yml` into
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
@@ -445,6 +464,8 @@ with it.
   - Does not imply that collection scaffolding should be added.
 - `sanity` and `units`
   - Depend on `lint` and `check-structure`.
+  - Install the hash-locked Ansible test toolchain from
+    `requirements/ci/ansible-test.txt`.
   - Run only when `has_collection == 'true'`.
   - Use `ansible-test` with `${{ env.ANSIBLE_PYTHON_VERSION }}`.
 - `molecule`
@@ -455,6 +476,8 @@ with it.
   - Runs for scheduled/manual events and whenever any changed file is not
     Markdown. It skips the matrix only for Markdown-only changes. If the
     base commit is unavailable or Git cannot produce the diff, it runs.
+  - Installs the hash-locked Molecule toolchain from
+    `requirements/ci/molecule.txt` with `--require-hashes`.
   - Sets `MOLECULE_GLOB` to discover scenarios under
     `extensions/molecule/`.
   - Matrix lists OpenWrt release versions and scenarios `default`,
