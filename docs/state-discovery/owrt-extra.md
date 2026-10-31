@@ -54,6 +54,13 @@ created with restrictive permissions and resides in RAM on a normal
 OpenWrt system. Retrieve only the files you need over a protected
 connection.
 
+A process killed with SIGKILL or a power loss can leave a stale lock.
+Before removing it manually, verify that no owrt-extra.sh process is
+running and inspect /proc/mounts for mounts below /tmp/ref/. Do not
+remove the lock while a run is active or while reference mounts remain
+in an uncertain state. If cleanup failed, the script deliberately keeps
+the lock to prevent another run from reusing that reference.
+
 ### Options
 
 | Option | Behavior |
