@@ -16,14 +16,19 @@ ssh root@router1 'sh /tmp/owrt-extra.sh'
 ```
 
 The report is written to `/tmp/owrt-diff/` in RAM. Treat it as sensitive:
-UCI output can include Wi-Fi passwords and other secrets. The script does
-not print password hashes, and host-key export is opt-in (`-H`); with
-`-H`, private keys are copied in plaintext under
-`/tmp/owrt-diff/secrets/`. Review and securely retrieve only what
-you need, then remove the report and script from the router.
+the terminal summary masks common password hashes and credential-named
+UCI options, but raw evidence can still contain secrets. Host-key export
+is opt-in (`-H`); with `-H`, private keys are copied in plaintext under
+`/tmp/owrt-diff/secrets/`. A new run refuses to overwrite an existing
+report. After securely retrieving what you need, remove the report with
+`sh /tmp/owrt-extra.sh -c`, then remove the copied script.
 
 Options: `-k` keeps the temporary factory reference mounted for
-inspection, `-f` rebuilds that reference, and `-H` exports host keys.
+inspection, `-f` rebuilds that reference, `-H` exports host keys, and
+`-c` explicitly removes an existing report without touching the reference
+mount. Use `-c` on its own. To review an existing raw UCI diff with the
+terminal redaction filter, use
+`sh /tmp/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
 Read the script's help (`sh /tmp/owrt-extra.sh -h`) before using these
 options.
 

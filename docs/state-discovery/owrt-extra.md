@@ -48,11 +48,19 @@ ssh root@router1 'sh /tmp/owrt-extra.sh'
 The report and retained evidence are written below
 `/tmp/owrt-diff/`. Each run obtains a lock at `/tmp/owrt-extra.lock`;
 concurrent runs are refused because the reference mount and report path
-are shared. Each accepted run starts with a fresh report directory,
-removing files from previous or interrupted runs. The directory is
-created with restrictive permissions and resides in RAM on a normal
-OpenWrt system. Retrieve only the files you need over a protected
-connection.
+are shared. A run refuses to start if a report directory already exists;
+it never silently removes evidence from a previous or interrupted run.
+The directory is created with restrictive permissions and resides in
+RAM on a normal OpenWrt system. Retrieve only the files you need over
+a protected connection.
+
+After retrieving or securely preserving the report, remove it explicitly
+with `sh /tmp/owrt-extra.sh -c`. This cleanup mode acquires and releases
+the normal run lock, refuses a pre-existing lock, symlink, or mounted
+report path, removes only `/tmp/owrt-diff/`, and exits without touching
+`/tmp/ref/`. It is safe to repeat when no report exists. A normal
+discovery run can then be started again. The `-c` option must be used
+on its own.
 
 A process killed with SIGKILL or a power loss can leave a stale lock.
 Before removing it manually, verify that no owrt-extra.sh process is
@@ -75,6 +83,11 @@ process and mounts are confirmed absent, remove the stale lock with
 | `-H` | Export available Dropbear/OpenSSH host keys and the |
 | | uhttpd certificate/key to `/tmp/owrt-diff/secrets/`. |
 | | These files are copied in plaintext. |
+| `-c` | Remove the existing report directory and exit. |
+| | Refuses existing locks, symlinks, and mounted report paths. |
+| | Removes only the report; acquires/releases its own lock. |
+| `--redact-uci-diff FILE` | Print a redacted view of an existing |
+| | UCI diff to stdout without changing the raw file. |
 | `-h` | Print the script's usage notes. |
 
 Options can be combined, for example `-f -k` to rebuild and retain the
@@ -266,9 +279,15 @@ device before any recovery operation.
 Treat the entire report as sensitive until you have reviewed it.
 UCI values and raw diffs can contain Wi-Fi passwords, password hashes,
 and other plaintext credentials. The terminal summary redacts common
-crypt(3) password hashes in UCI differences and masks the password field
-in `/etc/passwd` comparisons. Raw files such as `factory.show`,
-`current.show`, and `uci.diff` are not redacted and remain sensitive.
+crypt(3) password hashes and values of credential-named UCI options,
+including wireless keys/PSKs, WireGuard private keys, passwords,
+passphrases, secrets, and tokens. This is a best-effort display filter,
+not a complete secret scanner. The same filter is available for an
+existing diff, for example
+`sh /tmp/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
+The password field in `/etc/passwd` comparisons is also masked. Raw
+files such as `factory.show`, `current.show`, and `uci.diff` are
+deliberately not redacted and remain sensitive.
 Do not commit raw discovery output, attach it to public issues, or store
 it in an unprotected shared location.
 
