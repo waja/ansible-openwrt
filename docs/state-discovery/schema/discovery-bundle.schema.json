@@ -79,7 +79,11 @@
           "description": "Bundle-relative path or stable logical locator. Never an arbitrary host path."
         },
         "media_type": { "type": ["string", "null"] },
-        "sha256": { "type": ["string", "null"], "pattern": "^[a-fA-F0-9]{64}$" },
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "description": "Digest of the included evidence bytes. A digest derived from secret material is itself sensitive and must not be included in a normal bundle."
+        },
         "sensitivity": {
           "enum": ["public", "internal", "sensitive", "secret", "unknown"]
         },
@@ -107,12 +111,20 @@
         "subject": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "identifier"],
+          "required": ["kind", "identifier", "identity_stability"],
           "properties": {
             "kind": {
               "enum": ["uci-section", "uci-option", "file", "directory", "package", "service", "symlink", "user", "group", "feed", "key", "interface", "route", "rule", "process", "module", "sysctl", "device", "other"]
             },
-            "identifier": { "type": "string", "minLength": 1 },
+            "identifier": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Semantic identifier when identity_stability is stable; otherwise a best-effort locator that must not be treated as cross-run identity."
+            },
+            "identity_stability": {
+              "enum": ["stable", "unstable", "unknown"],
+              "description": "Whether the subject can be identified consistently across discovery runs. Never mark an anonymous or scan-order-derived identifier as stable."
+            },
             "path": { "type": ["string", "null"] }
           }
         },
@@ -154,7 +166,10 @@
         "scope": {
           "enum": ["uci", "filesystem", "packages", "services", "runtime", "network", "firewall", "hardware", "secrets", "reference", "other"]
         },
-        "status": { "enum": ["not-checked", "unsupported", "incomplete", "failed"] },
+        "status": {
+          "enum": ["not-checked", "unsupported", "not-applicable", "unassessable", "incomplete", "failed"],
+          "description": "not-checked: no check was performed; unsupported: the collector cannot perform the check; not-applicable: the check does not apply to this device or configuration; unassessable: checked, but the result could not be interpreted; incomplete: only part of the relevant state was checked; failed: the check was attempted but execution failed."
+        },
         "description": { "type": "string", "minLength": 1 },
         "evidence_ids": {
           "type": "array",
@@ -163,5 +178,32 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "evidence": {
+            "contains": {
+              "properties": {
+                "sensitivity": { "const": "secret" }
+              },
+              "required": ["sensitivity"]
+            }
+          }
+        },
+        "required": ["evidence"]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "if": { "properties": { "sensitivity": { "const": "secret" } }, "required": ["sensitivity"] },
+              "then": { "properties": { "sha256": { "type": "null" } } }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
