@@ -67,8 +67,26 @@
             input: REJECT
             output: ACCEPT
             forward: REJECT
-            masq: false
+            enabled: true
+            device:
+              - tun+
+            subnet:
+              - 192.0.2.0/24
+            masq: true
+            masq6: true
+            masq_src:
+              - 192.0.2.0/24
+            masq_dest:
+              - 198.51.100.0/24
+            masq_allow_invalid: true
             mtu_fix: true
+            family: any
+            log: 3
+            log_limit: 10/minute
+            auto_helper: false
+            helper:
+              - ftp
+            counter: true
           new_guest:
             network:
               - lan
@@ -90,6 +108,36 @@
         uci -q get firewall.guest_test.name || exit 1
         printf 'zone_network='
         uci -q get firewall.guest_test.network || exit 1
+        printf 'zone_enabled='
+        uci -q get firewall.guest_test.enabled || exit 1
+        printf 'zone_device='
+        uci -q get firewall.guest_test.device || exit 1
+        printf 'zone_subnet='
+        uci -q get firewall.guest_test.subnet || exit 1
+        printf 'zone_masq='
+        uci -q get firewall.guest_test.masq || exit 1
+        printf 'zone_masq6='
+        uci -q get firewall.guest_test.masq6 || exit 1
+        printf 'zone_masq_src='
+        uci -q get firewall.guest_test.masq_src || exit 1
+        printf 'zone_masq_dest='
+        uci -q get firewall.guest_test.masq_dest || exit 1
+        printf 'zone_masq_allow_invalid='
+        uci -q get firewall.guest_test.masq_allow_invalid || exit 1
+        printf 'zone_mtu_fix='
+        uci -q get firewall.guest_test.mtu_fix || exit 1
+        printf 'zone_family='
+        uci -q get firewall.guest_test.family || exit 1
+        printf 'zone_log='
+        uci -q get firewall.guest_test.log || exit 1
+        printf 'zone_log_limit='
+        uci -q get firewall.guest_test.log_limit || exit 1
+        printf 'zone_auto_helper='
+        uci -q get firewall.guest_test.auto_helper || exit 1
+        printf 'zone_helper='
+        uci -q get firewall.guest_test.helper || exit 1
+        printf 'zone_counter='
+        uci -q get firewall.guest_test.counter || exit 1
         printf 'new_zone_name='
         uci -q get firewall.new_guest.name || exit 1
         test -z "$(uci changes firewall)" || {
@@ -108,7 +156,47 @@
           - "'extra_rule=2222 2223' in router_firewall_uci.stdout"
           - "'zone_name=guest_test' in router_firewall_uci.stdout"
           - "'zone_network=lan' in router_firewall_uci.stdout"
+          - "'zone_enabled=1' in router_firewall_uci.stdout"
+          - "'zone_device=tun+' in router_firewall_uci.stdout"
+          - "'zone_subnet=192.0.2.0/24' in router_firewall_uci.stdout"
+          - "'zone_masq=1' in router_firewall_uci.stdout"
+          - "'zone_masq6=1' in router_firewall_uci.stdout"
+          - "'zone_masq_src=192.0.2.0/24' in router_firewall_uci.stdout"
+          - "'zone_masq_dest=198.51.100.0/24' in router_firewall_uci.stdout"
+          - "'zone_masq_allow_invalid=1' in router_firewall_uci.stdout"
+          - "'zone_mtu_fix=1' in router_firewall_uci.stdout"
+          - "'zone_family=any' in router_firewall_uci.stdout"
+          - "'zone_log=3' in router_firewall_uci.stdout"
+          - "'zone_log_limit=10/minute' in router_firewall_uci.stdout"
+          - "'zone_auto_helper=0' in router_firewall_uci.stdout"
+          - "'zone_helper=ftp' in router_firewall_uci.stdout"
+          - "'zone_counter=1' in router_firewall_uci.stdout"
           - "'new_zone_name=new_guest' in router_firewall_uci.stdout"
+
+    - name: Verify firewall zone options are persisted
+      ansible.builtin.raw: |
+        zone_config="$(sed -n \
+          "/^config zone 'guest_test'$/,/^config /p" /etc/config/firewall)"
+        for option in enabled masq masq6 masq_allow_invalid mtu_fix \
+          auto_helper family log log_limit counter; do
+          printf '%s\n' "$zone_config" | \
+            grep -F "option $option " >/dev/null || {
+              echo "Missing persisted firewall zone option: $option"
+              exit 1
+            }
+        done
+        for option in network device subnet masq_src masq_dest helper; do
+          printf '%s\n' "$zone_config" | \
+            grep -F "list $option " >/dev/null || {
+              echo "Missing persisted firewall zone list: $option"
+              exit 1
+            }
+        done
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
+      changed_when: false
 
     - name: Apply router packages role
       ansible.builtin.include_role:
