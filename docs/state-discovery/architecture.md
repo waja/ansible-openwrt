@@ -49,8 +49,12 @@ discovery/
 - `evidence/` contains raw or safely redacted source material referenced
   by the manifest. Paths are relative to the bundle root.
 - `report.md` is generated from the manifest and evidence. It is a
-  presentation artifact, not a second source of truth. Consumers must
-  never parse it.
+  presentation artifact, not a second source of truth. It may be included
+  in the bundle for human review, but it is never an input to any later
+  processing step. Assessment tools, validators, migration generators and
+  other consumers must not parse, scrape or otherwise derive data from it.
+  If information is needed by a consumer, it must be represented in the
+  manifest or referenced evidence.
 
 Consumers must validate the manifest against the schema before use.
 The schema validates structure and types; the bundle writer and
@@ -70,8 +74,30 @@ The `format` field identifies the format and `format_version` uses
 
 The schema is strict about the outer structure and defined records.
 Category-specific observed values live in `finding.observation`, whose
-properties are intentionally extensible. New categories, action values
-or changes to field meaning require a schema/version review.
+properties are intentionally extensible. This flexibility must not become
+an excuse for ad-hoc, inconsistent keys. Producers must follow the
+category conventions below and document any additional fields they emit:
+
+| Category | Expected observation fields (where applicable) |
+| --- | --- |
+| `uci` | `config`, `section_type`, `section_name`, `option`, `value` |
+| `filesystem` | `path`, `object_type`, `mode`, `owner`, `group`, `size` |
+| `package` | `name`, `version`, `status`, `source` |
+| `service` | `name`, `enabled`, `running`, `init_script` |
+| `symlink` | `path`, `target` |
+| `account` | `name`, `uid`, `gid`, `shell`, `groups` |
+| `feed` | `name`, `url`, `enabled` |
+| `network` | `interface`, `device`, `protocol`, `addresses` |
+| `firewall` | `config`, `section_type`, `section_name`, `options` |
+| `runtime` | `object_type`, `name`, `state` |
+
+These are conventions, not a claim that every field is always available.
+Use explicit null/unknown values or record a limitation rather than
+silently omitting a field whose absence could be misread. Do not put
+assessment conclusions or inferred intent in observations. As the
+collector matures, frequently used category patterns can be promoted into
+schema definitions. New categories, action values, or changes to field
+meaning require a schema/version review.
 
 ### Findings and stable identity
 
@@ -85,12 +111,18 @@ Each finding records:
 - One or more references to supporting evidence.
 - References to applicable detection limitations.
 
-Finding IDs should be deterministic for the same normalized category
-and subject when that subject has a stable identity. Do not derive IDs
-from report line numbers, traversal order or mutable array positions.
-Some objects—especially anonymous UCI sections—do not have a reliable
-cross-run identity. Mark that limitation instead of pretending that an
-index is stable. Evidence IDs need only be unique within one bundle.
+Finding IDs must be derived from semantic identity: the normalized
+category and stable subject attributes. They must never depend on report
+line numbers, traversal order, scan order, generated timestamps or
+mutable array positions. The same identifiable object should therefore
+receive the same finding ID across runs, even if discovery order changes.
+
+Some objects—especially anonymous UCI sections—have no reliable
+cross-run identity. The subject must explicitly mark its identity
+stability as `unstable` or `unknown`; a scan-local index may be retained
+as a locator, but must not be presented as a stable identity. In that
+case, a cross-run deterministic finding ID cannot be promised.
+Evidence IDs need only be unique within one bundle.
 
 An empty findings list does not prove that the router has no custom
 state. The manifest must also report checks that were unsupported,
@@ -114,6 +146,11 @@ policy is data-minimizing:
   explanation when content is not included.
 - Treat raw command output and diffs as sensitive until inspected.
   Redaction must happen before a bundle is shared or committed.
+- A digest or fingerprint derived from secret material is itself
+  sensitive: it can disclose equality or help confirm guesses. Do not
+  include hashes of private keys, passwords, tokens, password hashes or
+  other secret values in a normal bundle. Hash only the safely redacted
+  artifact that is actually included.
 - Keep bundles out of Git by default and store them with access controls
   appropriate to router configuration backups.
 
@@ -130,9 +167,11 @@ supporting evidence, and highlight uncertainty, detection gaps and
 sensitive material. Regenerating it must not change the manifest or
 evidence.
 
-The report is deliberately not an input to the assessment tool. The
-generator consumes only the validated machine-readable bundle, never
-Markdown, terminal output or ad-hoc shell formatting.
+The report is deliberately not an input to the assessment tool or to
+any other automated consumer. The generator consumes only the validated
+machine-readable manifest and referenced evidence, never Markdown,
+terminal output or ad-hoc shell formatting. No later stage may recover
+structured data by parsing the generated report.
 
 ## Assessment categories
 
