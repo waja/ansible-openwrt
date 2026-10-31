@@ -56,11 +56,6 @@ fi
 # the lock. The full cleanup trap below replaces this on normal startup.
 trap 'rm -rf "$LOCK"' EXIT
 trap 'exit 1' HUP INT TERM
-printf '%s\n' "$" > "$LOCK/pid" || {
-    echo "Cannot record lock owner in $LOCK/pid." >&2
-    exit 1
-}
-
 [ -d "$UPPER" ] || { echo "$UPPER not found (no overlay?)" >&2; exit 1; }
 [ -d /rom ]     || { echo "/rom not found, cannot rebuild the factory state." >&2; exit 1; }
 [ -r /etc/board.json ] || { echo "/etc/board.json is missing." >&2; exit 1; }
