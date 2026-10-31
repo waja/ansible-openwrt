@@ -45,6 +45,7 @@ REF=$R/merged
 OUT=/tmp/owrt-diff
 LOCK=/tmp/owrt-extra.lock
 BUILT=0
+LOCK_KEEP=0
 
 # Serialize access to the shared reference mount and report directory.
 if ! mkdir "$LOCK" 2>/dev/null; then
@@ -94,6 +95,7 @@ cleanup_ref() {
 finish() {
     rm -rf "$T"
     lock_release=1
+    [ "$LOCK_KEEP" = 1 ] && lock_release=0
     if [ "$BUILT" = 1 ] && { [ "$KEEP" = 0 ] || [ "$REF_READY" = 0 ]; }; then
         cleanup_ref || {
             echo "WARNING: reference cleanup incomplete; keeping lock $LOCK." >&2
@@ -165,7 +167,7 @@ if is_mounted "$REF" && [ "$FORCE" = 0 ]; then
     echo "Using existing reference overlay $REF (use -f to rebuild)." >&2
 else
     if [ -e "$R" ]; then
-        cleanup_ref || exit 1
+        cleanup_ref || { LOCK_KEEP=1; exit 1; }
     fi
     echo "Building factory state under $REF ..." >&2
     build_ref || { echo "Failed to build the reference overlay." >&2; exit 1; }
