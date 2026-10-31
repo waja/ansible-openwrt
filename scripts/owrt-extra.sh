@@ -40,10 +40,13 @@ redact_uci_diff() {
                 sub(/^.*\./, "", option)
                 option = tolower(option)
                 suffix = "password|passwd|passphrase|secret|psk|" \
-                    "private_key|privatekey|privkey|auth_key|" \
-                    "api_key|access_token|token"
+                    "preshared[-_]key|presharedkey|private[-_]key|" \
+                    "privatekey|privkey|auth[-_]key|api[-_]key|" \
+                    "access[-_]token|token"
                 if (option == "key" || option == "wep_key" ||
-                    option == "psk" || option == "private_key" ||
+                    option == "psk" || option == "preshared_key" ||
+                    option == "preshared-key" || option == "presharedkey" ||
+                    option == "private_key" || option == "private-key" ||
                     option == "privatekey" || option == "privkey" ||
                     option == "password" || option == "passwd" ||
                     option == "passphrase" || option == "secret" ||
