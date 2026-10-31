@@ -111,6 +111,16 @@ or issue rather than relying on an external link alone.
   to combine changes. Keep each PR focused on its corresponding work item.
 - Use GitHub's native sub-issue relationships when available; otherwise keep
   the parent issue's linked work-item list accurate.
+- Create every new pull request targeting `development` as a **Draft**.
+  Keep it in draft while implementation, self-review, and required checks
+  are still in progress. Mark it ready for review only after the change is
+  complete, the full diff has been reviewed, applicable checks have run,
+  and the PR is ready for reviewer feedback. If further implementation
+  changes are needed, convert it back to draft until they are complete.
+- Do not commit or push changes directly to `development` or `master`.
+  Changes to either protected integration branch must be proposed and
+  merged through a pull request. This applies to all contributors,
+  including repository maintainers.
 
 ## Development workflow
 
