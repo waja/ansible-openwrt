@@ -6,6 +6,10 @@ reconstructed factory reference and collect likely Ansible candidates.
 Copy it to the router and run it there as root on OpenWrt; it is not an
 Ansible playbook.
 
+See the [owrt-extra.sh user guide](owrt-extra.md) for prerequisites,
+options, report sections, retained files, security precautions, migration
+guidance, and known limitations.
+
 ```sh
 scp scripts/owrt-extra.sh root@router1:/tmp/owrt-extra.sh
 ssh root@router1 'sh /tmp/owrt-extra.sh'
