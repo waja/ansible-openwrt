@@ -17,6 +17,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   inventory organization, and links to role-specific guides
 - `docs/roles/<role_name>.md` – detailed configuration guide for each
   role with documented user-facing options, including `router_librenms`
+- `docs/state-discovery/` – discovery workflow, bundle format and schema,
+  evidence handling, and Ansible assessment design
 - `scripts/owrt-extra.sh` – read-only OpenWrt state discovery for Ansible migration
 - `extensions/molecule/default/` – Molecule scenario for hostname,
   firewall zones, packages, and base services
