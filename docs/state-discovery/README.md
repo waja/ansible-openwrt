@@ -48,7 +48,6 @@ managing it with Ansible. Data outside the overlay, such as calibration
 data and bootloader storage, is not suitable for normal Ansible
 configuration.
 
-
 ## Migration architecture
 
 The two-stage discovery and Ansible assessment design, including the
