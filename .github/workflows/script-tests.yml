@@ -129,6 +129,8 @@ jobs:
                 "< wireless.default_radio.key=wifi-secret" \
                 "> network.wg0.private_key=wireguard-secret" \
                 "> network.wg0.psk=psk-secret" \
+                "> network.wg0.preshared_key=preshared-secret" \
+                "> network.wg1.preshared-key=preshared-hyphen-secret" \
                 "> network.wg0.public_key=public-value" \
                 "> system.@system[0].hostname=router-name" \
                 "> system.@user[0].password=\$1\$salt\$hash" \
@@ -136,7 +138,8 @@ jobs:
               sh /tmp/owrt-extra-test.sh --redact-uci-diff \
                 /tmp/uci-fixture.txt > /tmp/uci-redacted.txt
               for secret in \
-                wifi-secret wireguard-secret psk-secret salt hash; do
+                wifi-secret wireguard-secret psk-secret \
+                preshared-secret preshared-hyphen-secret salt hash; do
                 if grep -Fq "$secret" /tmp/uci-redacted.txt; then
                   echo "Secret leaked by UCI redaction: $secret" >&2
                   exit 1
