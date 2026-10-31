@@ -105,21 +105,121 @@ jobs:
 
       - name: Check shell syntax and command-line behavior
         run: |
+          mkdir -p "$RUNNER_TEMP/owrt-test"
+          cp scripts/owrt-extra.sh "$RUNNER_TEMP/owrt-test/owrt-extra.sh"
           docker run --rm \
-            -v "$PWD/scripts/owrt-extra.sh:/tmp/owrt-extra.sh:ro" \
+            -v "$RUNNER_TEMP/owrt-test:/opt/owrt-test:ro" \
             --entrypoint /bin/sh \
             "openwrt/rootfs:x86_64-openwrt-${{ matrix.openwrt_version }}" \
             -c '
               set -eu
-              sh -n /tmp/owrt-extra.sh
+              cp /opt/owrt-test/owrt-extra.sh /tmp/owrt-extra-test.sh
+              sh -n /tmp/owrt-extra-test.sh
 
-              sh /tmp/owrt-extra.sh -h > /tmp/help.txt
+              sh /tmp/owrt-extra-test.sh -h > /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-k([[:space:]]|$)" /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-f([[:space:]]|$)" /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-H([[:space:]]|$)" /tmp/help.txt
+              grep -Eq -- "^[[:space:]#]*-c([[:space:]]|$)" /tmp/help.txt
+              grep -Fq -- "--redact-uci-diff FILE" /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-h([[:space:]]|$)" /tmp/help.txt
 
-              if sh /tmp/owrt-extra.sh --invalid \
+              # Exercise redaction using representative UCI output.
+              printf "%s\\n" \
+                "< wireless.default_radio.key=wifi-secret" \
+                "> network.wg0.private_key=wireguard-secret" \
+                "> network.wg0.psk=psk-secret" \
+                "> network.wg0.preshared_key=preshared-secret" \
+                "> network.wg1.preshared-key=preshared-hyphen-secret" \
+                "> network.wg0.secret_key=secret-key-value" \
+                "> network.wg0.client-key=client-key-value" \
+                "> network.wg0.public_key=public-value" \
+                "> system.@system[0].hostname=router-name" \
+                "> system.@user[0].password=\$1\$salt\$hash" \
+                > /tmp/uci-fixture.txt
+              cp /tmp/uci-fixture.txt /tmp/uci-fixture.original
+              sh /tmp/owrt-extra-test.sh --redact-uci-diff \
+                /tmp/uci-fixture.txt > /tmp/uci-redacted.txt
+              cmp -s /tmp/uci-fixture.txt /tmp/uci-fixture.original
+              for secret in \
+                wifi-secret wireguard-secret psk-secret \
+                preshared-secret preshared-hyphen-secret \
+                secret-key-value client-key-value salt hash; do
+                if grep -Fq "$secret" /tmp/uci-redacted.txt; then
+                  echo "Secret leaked by UCI redaction: $secret" >&2
+                  exit 1
+                fi
+              done
+              grep -Fq "[REDACTED]" /tmp/uci-redacted.txt
+              grep -Fq "public-value" /tmp/uci-redacted.txt
+              grep -Fq "router-name" /tmp/uci-redacted.txt
+
+              # Existing reports must survive a new run attempt.
+              mkdir -m 700 /tmp/owrt-diff
+              echo preserved > /tmp/owrt-diff/marker
+              if sh /tmp/owrt-extra-test.sh \
+                > /tmp/existing.stdout 2> /tmp/existing.stderr; then
+                echo "Expected an existing report to block a new run." >&2
+                exit 1
+              fi
+              test "$(cat /tmp/owrt-diff/marker)" = preserved
+              grep -Fq -- " -c" /tmp/existing.stderr
+
+              # -c removes only the report and is safe to repeat.
+              sh /tmp/owrt-extra-test.sh -c
+              test ! -e /tmp/owrt-diff
+              sh /tmp/owrt-extra-test.sh -c
+              test ! -e /tmp/owrt-diff
+
+              # Cleanup must respect an existing run lock.
+              mkdir -m 700 /tmp/owrt-extra.lock
+              mkdir -m 700 /tmp/owrt-diff
+              echo locked > /tmp/owrt-diff/marker
+              mkdir -p /tmp/ref/merged
+              if sh /tmp/owrt-extra-test.sh -c \
+                > /tmp/locked.stdout 2> /tmp/locked.stderr; then
+                echo "Expected cleanup to respect an existing lock." >&2
+                exit 1
+              fi
+              test -d /tmp/owrt-extra.lock
+              test "$(cat /tmp/owrt-diff/marker)" = locked
+              test -d /tmp/ref/merged
+              rmdir /tmp/owrt-extra.lock
+              sh /tmp/owrt-extra-test.sh -c
+              test ! -e /tmp/owrt-diff
+              test -d /tmp/ref/merged
+              rm -rf /tmp/ref
+
+              # Cleanup refuses a mounted report path when mounts are permitted.
+              mkdir -m 700 /tmp/owrt-diff
+              if mount -t tmpfs tmpfs /tmp/owrt-diff 2>/dev/null; then
+                if sh /tmp/owrt-extra-test.sh -c \
+                  > /tmp/mounted.stdout 2> /tmp/mounted.stderr; then
+                  echo "Expected cleanup to refuse a mounted report path." >&2
+                  umount /tmp/owrt-diff
+                  exit 1
+                fi
+                grep -Fq "Refusing to clean mounted path" /tmp/mounted.stderr
+                umount /tmp/owrt-diff
+              else
+                echo "SKIP: mount namespace does not permit tmpfs mount test."
+              fi
+              rmdir /tmp/owrt-diff
+
+              # Cleanup refuses a symlink instead of following it.
+              mkdir -m 700 /tmp/report-target
+              ln -s /tmp/report-target /tmp/owrt-diff
+              if sh /tmp/owrt-extra-test.sh -c \
+                > /tmp/cleanup.stdout 2> /tmp/cleanup.stderr; then
+                echo "Expected cleanup to refuse a report symlink." >&2
+                exit 1
+              fi
+              test -L /tmp/owrt-diff
+              test -d /tmp/report-target
+              rm /tmp/owrt-diff
+              rmdir /tmp/report-target
+
+              if sh /tmp/owrt-extra-test.sh --invalid \
                 > /tmp/invalid.stdout 2> /tmp/invalid.stderr; then
                 echo "Expected an unknown option to fail." >&2
                 exit 1
@@ -132,7 +232,7 @@ jobs:
               fi
               test ! -s /tmp/invalid.stdout
               if [ "$(cat /tmp/invalid.stderr)" != \
-                "Unknown option: --invalid (allowed: -k -f -H -h)" ] || \
+                "Unknown option: --invalid (allowed: -k -f -H -c -h)" ] || \
                 [ "$(wc -l < /tmp/invalid.stderr)" -ne 1 ]; then
                 echo "Unexpected stderr for an unknown option:" >&2
                 cat /tmp/invalid.stderr >&2

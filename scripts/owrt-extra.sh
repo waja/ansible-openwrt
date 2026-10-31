@@ -16,28 +16,89 @@
 #   -f   Rebuild the throwaway overlay even if one is already mounted
 #   -H   Copy host keys (dropbear, openssh if present, uhttpd certificate)
 #        to /tmp/owrt-diff/secrets/ (plaintext!)
+#   -c   Remove the previous report in /tmp/owrt-diff, then exit
+#   --redact-uci-diff FILE  Print a redacted copy of an existing UCI diff
 #   -h   Show this help
 #
-# Runs are serialized with /tmp/owrt-extra.lock. Each run starts with a fresh
-# /tmp/owrt-diff directory. Factory scripts run in a chroot without live
-# /proc, /sys or /dev bind mounts; inspect local scripts for other side effects.
-# WARNING: Raw data can contain plaintext secrets. Keep it private and delete
-# it when you are done.
+# Runs are serialized with /tmp/owrt-extra.lock. A new run refuses to
+# overwrite an existing /tmp/owrt-diff report; use -c to remove it explicitly.
+# Factory scripts run in a chroot without live /proc, /sys or /dev bind mounts;
+# inspect local scripts for other side effects. Raw data can contain plaintext
+# secrets. Keep it private and delete it when you are done.
+
+# Redact the display copy only. Raw snapshots and uci.diff remain intact.
+redact_uci_diff() {
+    sed -E 's/\$[0-9A-Za-z]+\$[^ "'"'"';]*/[REDACTED PASSWORD HASH]/g' "$1" |
+        awk '
+            {
+                eq = index($0, "=")
+                if (!eq) {
+                    print
+                    next
+                }
+                option = substr($0, 1, eq - 1)
+                sub(/^.*\./, "", option)
+                option = tolower(option)
+                suffix = "password|passwd|passphrase|secret|psk|" \
+                    "preshared[-_]key|presharedkey|private[-_]key|" \
+                    "privatekey|privkey|secret[-_]key|client[-_]key|" \
+                    "encryption[-_]key|signing[-_]key|shared[-_]key|" \
+                    "auth[-_]key|api[-_]key|access[-_]token|token"
+                if (option == "key" || option == "wep_key" ||
+                    option == "psk" || option == "preshared_key" ||
+                    option == "preshared-key" || option == "presharedkey" ||
+                    option == "private_key" || option == "private-key" ||
+                    option == "privatekey" || option == "privkey" || \
+                    option == "secret_key" || option == "secret-key" || \
+                    option == "client_key" || option == "client-key" || \
+                    option == "encryption_key" || option == "encryption-key" || \
+                    option == "signing_key" || option == "signing-key" || \
+                    option == "shared_key" || option == "shared-key" || \
+                    option == "password" || option == "passwd" ||
+                    option == "passphrase" || option == "secret" ||
+                    option == "shared_secret" || option == "auth_key" ||
+                    option == "api_key" || option == "access_token" ||
+                    option == "token" || option ~ ("[-_](" suffix ")$")) {
+                    print substr($0, 1, eq) "\047[REDACTED]\047"
+                } else {
+                    print
+                }
+            }
+        '
+}
+
+# This read-only mode is also useful for safely reviewing an existing raw diff.
+if [ "${1:-}" = "--redact-uci-diff" ]; then
+    [ "$#" = 2 ] || {
+        echo "Usage: $0 --redact-uci-diff FILE" >&2
+        exit 1
+    }
+    redact_uci_diff "$2"
+    exit $?
+fi
 
 KEEP=0
 FORCE=0
 HOSTKEYS=0
+CLEAN=0
 for a in "$@"; do
     case "$a" in
         -k) KEEP=1 ;;
         -f) FORCE=1 ;;
         -H) HOSTKEYS=1 ;;
+        -c) CLEAN=1 ;;
         -h|--help) sed -n '2,/^$/p' "$0"; exit 0 ;;
-        *) echo "Unknown option: $a (allowed: -k -f -H -h)" >&2; exit 1 ;;
+        *) echo "Unknown option: $a (allowed: -k -f -H -c -h)" >&2; exit 1 ;;
     esac
 done
 
 [ "$(id -u)" = 0 ] || { echo "Please run as root." >&2; exit 1; }
+if [ "$CLEAN" = 1 ] && {
+    [ "$KEEP" = 1 ] || [ "$FORCE" = 1 ] || [ "$HOSTKEYS" = 1 ];
+}; then
+    echo "Option -c must be used on its own." >&2
+    exit 1
+fi
 
 UPPER=/overlay/upper
 R=/tmp/ref
@@ -47,6 +108,8 @@ LOCK=/tmp/owrt-extra.lock
 BUILT=0
 REF_READY=0
 LOCK_KEEP=0
+
+umask 077
 
 # Serialize access to the shared reference mount and report directory.
 if ! mkdir "$LOCK" 2>/dev/null; then
@@ -58,16 +121,44 @@ fi
 # the lock. The full cleanup trap below replaces this on normal startup.
 trap 'rm -rf "$LOCK"' EXIT
 trap 'exit 1' HUP INT TERM
+
+is_mounted() { grep -Fq " $1 " /proc/mounts; }
+
+# Cleanup is deliberately report-only. It never touches /tmp/ref or the
+# lock directory, and refuses symlinks and mounted report paths.
+if [ "$CLEAN" = 1 ]; then
+    if [ -L "$OUT" ]; then
+        echo "Refusing to clean symlink $OUT." >&2
+        exit 1
+    fi
+    if [ -e "$OUT" ]; then
+        [ -d "$OUT" ] || { echo "$OUT exists but is not a directory." >&2; exit 1; }
+        if grep -Fq " $OUT " /proc/mounts ||
+           grep -Fq " $OUT/" /proc/mounts; then
+            echo "Refusing to clean mounted path $OUT." >&2
+            exit 1
+        fi
+        rm -rf "$OUT" || { echo "Could not remove $OUT." >&2; exit 1; }
+        echo "Removed report directory $OUT."
+    else
+        echo "No report directory to remove."
+    fi
+    exit 0
+fi
+
+# Never discard evidence from a previous or interrupted run.
+if [ -e "$OUT" ] || [ -L "$OUT" ]; then
+    echo "Report directory already exists: $OUT" >&2
+    echo "Review or retrieve it, then remove it explicitly with: $0 -c" >&2
+    exit 1
+fi
+
 [ -d "$UPPER" ] || { echo "$UPPER not found (no overlay?)" >&2; exit 1; }
 [ -d /rom ]     || { echo "/rom not found, cannot rebuild the factory state." >&2; exit 1; }
 [ -r /etc/board.json ] || { echo "/etc/board.json is missing." >&2; exit 1; }
 
 T=$(mktemp -d) || exit 1
-# Never mix evidence from separate or interrupted runs.
-rm -rf "$OUT" || { rm -rf "$T"; exit 1; }
 mkdir -m 700 "$OUT" || { rm -rf "$T"; exit 1; }
-
-is_mounted() { grep -Fq " $1 " /proc/mounts; }
 
 # Tear down $R. Only deletes if nothing is mounted below it anymore, otherwise
 # rm -rf could follow a leftover bind mount into /dev, /proc or /sys.
@@ -175,8 +266,6 @@ else
     REF_READY=1
 fi
 
-umask 077
-
 # Files OpenWrt itself treats as user configuration (kept by sysupgrade)
 sysupgrade -l 2>/dev/null | sort -u > "$T/keep"
 
@@ -188,9 +277,9 @@ uci -q -c "$REF/etc/config" show 2>/dev/null | sort > "$OUT/factory.show"
 uci -q show 2>/dev/null | sort > "$OUT/current.show"
 diff "$OUT/factory.show" "$OUT/current.show" > "$OUT/uci.diff"
 if [ -s "$OUT/uci.diff" ]; then
-    # Keep raw evidence in the protected report directory, but never print
-    # common crypt(3) password hashes in the terminal summary.
-    sed -E 's/\$[0-9A-Za-z]+\$[^ "'"'"';]*/[REDACTED PASSWORD HASH]/g' "$OUT/uci.diff"
+    # Keep raw evidence unchanged; redact hashes and credential-valued UCI
+    # options only in the human-readable terminal summary.
+    redact_uci_diff "$OUT/uci.diff"
 else
     echo "(no differences)"
 fi
