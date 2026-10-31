@@ -116,10 +116,13 @@ or issue rather than relying on an external link alone.
   Mark it ready for review only after the full diff has been reviewed, all
   checks required for that PR by the applicable workflows and repository
   policy have reached successful conclusions, and the PR is ready for
-  reviewer feedback. The applicable workflows determine which checks run;
-  do not assume every PR requires every test suite. If further
-  implementation changes are needed, convert the PR back to draft until
-  they are complete.
+  reviewer feedback. For a specific PR, applicable checks are all checks
+  required by repository policy or triggered by the GitHub Actions workflows
+  for that PR, including jobs selected by path filters, conditions, and test
+  matrices. Workflows or jobs that are not triggered because their documented
+  conditions are not met are not required. Do not assume every workflow or
+  test suite must run for every PR. If further implementation changes are
+  needed, convert the PR back to draft until they are complete.
 - Do not commit or push changes directly to `development` or `master`.
   All changes to either integration branch, including emergency fixes and
   automated maintenance changes, must be proposed and merged through a
