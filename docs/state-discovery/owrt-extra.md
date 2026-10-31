@@ -59,7 +59,9 @@ Before removing it manually, verify that no owrt-extra.sh process is
 running and inspect /proc/mounts for mounts below /tmp/ref/. Do not
 remove the lock while a run is active or while reference mounts remain
 in an uncertain state. If cleanup failed, the script deliberately keeps
-the lock to prevent another run from reusing that reference.
+the lock to prevent another run from reusing that reference. Once the
+process and mounts are confirmed absent, remove the stale lock with
+`rm -rf /tmp/owrt-extra.lock`.
 
 ### Options
 
