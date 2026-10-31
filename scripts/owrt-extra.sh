@@ -51,7 +51,6 @@ if ! mkdir "$LOCK" 2>/dev/null; then
     echo "Another owrt-extra.sh run may be active (lock: $LOCK)." >&2
     exit 1
 fi
-printf '%s\n' "$" > "$LOCK/pid"
 
 [ -d "$UPPER" ] || { echo "$UPPER not found (no overlay?)" >&2; exit 1; }
 [ -d /rom ]     || { echo "/rom not found, cannot rebuild the factory state." >&2; exit 1; }
