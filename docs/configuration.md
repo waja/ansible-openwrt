@@ -37,9 +37,10 @@ ansible-playbook -i inventory.ini playbooks/site.yml \
 ```
 
 Available tags are `router_network`, `router_system`,
-`router_firewall`, `router_packages`, `router_base`, and
-`router_snmpd`. The SNMP role is skipped unless
-`router_snmpd_enabled: true` is set. OpenWrt initialization runs
+`router_firewall`, `router_packages`, `router_base`,
+`router_snmpd`, and `router_librenms`. The SNMP and LibreNMS roles are
+skipped unless `router_snmpd_enabled: true` and
+`router_librenms_enabled: true` are set. OpenWrt initialization runs
 automatically. Selecting one role does not automatically run other project
 roles that may be prerequisites; review the selected tasks before execution.
 

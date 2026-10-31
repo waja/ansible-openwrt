@@ -189,6 +189,103 @@
           /etc/config/snmpd || exit 1
       changed_when: false
 
+    - name: Seed an unrelated SNMP extend section
+      community.openwrt.uci:
+        command: section
+        config: snmpd
+        type: extend
+        name: molecule_unrelated_extend
+        value:
+          name: molecule-unrelated
+          prog: /bin/echo
+          args: preserved
+        autocommit: true
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Apply LibreNMS integration role
+      ansible.builtin.include_role:
+        name: router_librenms
+      vars:
+        router_librenms_enabled: true
+        router_librenms_wireless_interfaces:
+          - interface: radio0-ap0
+            name: wl-test
+
+    - name: Verify LibreNMS files, SNMP extend entries, and persistence
+      ansible.builtin.raw: |
+        test -x /etc/librenms/distro || exit 1
+        test -x /etc/librenms/hardware || exit 1
+        test -x /etc/librenms/wlClients.sh || exit 1
+        test -x /etc/librenms/wlFrequency.sh || exit 1
+        test -x /etc/librenms/wlNoiseFloor.sh || exit 1
+        test -x /etc/librenms/wlRate.sh || exit 1
+        test -x /etc/librenms/wlSNR.sh || exit 1
+        grep -Fx 'radio0-ap0,wl-test' /etc/librenms/wlInterfaces.txt \
+          || exit 1
+        printf 'community='
+        uci -q get snmpd.public.community || exit 1
+        printf 'sysname='
+        uci -q get 'snmpd.@system[0].sysName' || exit 1
+        printf 'distro_prog='
+        uci -q get snmpd.ansible_router_librenms_distro.prog || exit 1
+        printf 'hardware_prog='
+        uci -q get snmpd.ansible_router_librenms_hardware.prog || exit 1
+        printf 'hardware_output='
+        /etc/librenms/hardware || exit 1
+        printf 'rate_prog='
+        uci -q get \
+          snmpd.ansible_router_librenms_radio0_ap0_rate_tx_min.prog \
+          || exit 1
+        printf 'rate_args='
+        uci -q get \
+          snmpd.ansible_router_librenms_radio0_ap0_rate_tx_min.args \
+          || exit 1
+        printf 'snr_args='
+        uci -q get \
+          snmpd.ansible_router_librenms_radio0_ap0_snr_avg.args \
+          || exit 1
+        printf 'unrelated='
+        uci -q get snmpd.molecule_unrelated_extend.args || exit 1
+        grep -Fx '/etc/librenms' /etc/sysupgrade.conf || exit 1
+        test -z "$(uci changes snmpd)" || {
+          echo "Uncommitted changes remain in SNMP UCI configuration"
+          exit 1
+        }
+      register: router_librenms_verification
+      changed_when: false
+
+    - name: Assert LibreNMS integration configuration
+      ansible.builtin.assert:
+        that:
+          - >-
+            'community=molecule-monitoring-secret'
+            in router_librenms_verification.stdout
+          - >-
+            'sysname=molecule-lab-preserved'
+            in router_librenms_verification.stdout
+          - >-
+            'distro_prog=/etc/librenms/distro'
+            in router_librenms_verification.stdout
+          - >-
+            'hardware_prog=/etc/librenms/hardware'
+            in router_librenms_verification.stdout
+          - >-
+            router_librenms_verification.stdout
+            is search('hardware_output=.+')
+          - >-
+            'rate_prog=/etc/librenms/wlRate.sh'
+            in router_librenms_verification.stdout
+          - >-
+            'rate_args=radio0-ap0 tx min'
+            in router_librenms_verification.stdout
+          - >-
+            'snr_args=radio0-ap0 avg'
+            in router_librenms_verification.stdout
+          - >-
+            'unrelated=preserved'
+            in router_librenms_verification.stdout
+
     - name: Apply router base role
       ansible.builtin.include_role:
         name: router_base

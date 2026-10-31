@@ -16,7 +16,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `docs/configuration.md` – router configuration overview, playbook usage,
   inventory organization, and links to role-specific guides
 - `docs/roles/<role_name>.md` – detailed configuration guide for each
-  role with documented user-facing options
+  role with documented user-facing options, including `router_librenms`
 - `scripts/owrt-extra.sh` – read-only OpenWrt state discovery for Ansible migration
 - `extensions/molecule/default/` – Molecule scenario for hostname,
   firewall zones, packages, and base services
@@ -35,6 +35,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   addressing and DHCP server settings
 - `roles/router_snmpd/` – optionally replaces the default SNMP community
   while retaining the package's read-only access mappings
+- `roles/router_librenms/` – deploys pinned LibreNMS scripts and manages
+  role-owned SNMP extend entries and sysupgrade persistence
 - `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
   `defaults/main.yml`
