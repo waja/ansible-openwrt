@@ -467,7 +467,7 @@ with it.
   - Install the hash-locked Ansible test toolchain from
     `requirements/ci/ansible-test.txt`.
   - Run only when `has_collection == 'true'`.
-  - Use `ansible-test` with `${{ env.ANSIBLE_PYTHON_VERSION }}`.
+  - Use `ansible-test` with `${{ steps.python.outputs.python-version }}`.
 - `molecule`
   - Depends on `changes`, `check-structure`, `lint`, `sanity`, and
     `units`. It runs only after structure and lint prerequisites pass.
@@ -580,7 +580,7 @@ dependencies, conditions, matrix, and commands.
   community.openwrt.{{ … }}` is expected for the dynamic package
   manager pattern. Do not hardcode the module to silence it.
 - `argument --python: expected one argument`: the variable used in
-  the workflow does not exist. Use `${{ env.ANSIBLE_PYTHON_VERSION }}`.
+  the workflow does not exist. Use `${{ steps.python.outputs.python-version }}`.
 - `couldn't resolve module/action 'community.openwrt.uci'`: collections
   are not installed. Run `ansible-galaxy collection install
   community.openwrt`.
