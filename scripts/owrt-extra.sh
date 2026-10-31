@@ -41,13 +41,19 @@ redact_uci_diff() {
                 option = tolower(option)
                 suffix = "password|passwd|passphrase|secret|psk|" \
                     "preshared[-_]key|presharedkey|private[-_]key|" \
-                    "privatekey|privkey|auth[-_]key|api[-_]key|" \
-                    "access[-_]token|token"
+                    "privatekey|privkey|secret[-_]key|client[-_]key|" \
+                    "encryption[-_]key|signing[-_]key|shared[-_]key|" \
+                    "auth[-_]key|api[-_]key|access[-_]token|token"
                 if (option == "key" || option == "wep_key" ||
                     option == "psk" || option == "preshared_key" ||
                     option == "preshared-key" || option == "presharedkey" ||
                     option == "private_key" || option == "private-key" ||
-                    option == "privatekey" || option == "privkey" ||
+                    option == "privatekey" || option == "privkey" || \
+                    option == "secret_key" || option == "secret-key" || \
+                    option == "client_key" || option == "client-key" || \
+                    option == "encryption_key" || option == "encryption-key" || \
+                    option == "signing_key" || option == "signing-key" || \
+                    option == "shared_key" || option == "shared-key" || \
                     option == "password" || option == "passwd" ||
                     option == "passphrase" || option == "secret" ||
                     option == "shared_secret" || option == "auth_key" ||
