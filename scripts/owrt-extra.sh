@@ -51,7 +51,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
     echo "Another owrt-extra.sh run may be active (lock: $LOCK)." >&2
     exit 1
 fi
-echo "$" > "$LOCK/pid"
+printf '%s\n' "$" > "$LOCK/pid"
 
 [ -d "$UPPER" ] || { echo "$UPPER not found (no overlay?)" >&2; exit 1; }
 [ -d /rom ]     || { echo "/rom not found, cannot rebuild the factory state." >&2; exit 1; }
@@ -90,7 +90,7 @@ cleanup_ref() {
 
 finish() {
     rm -rf "$T"
-    if [ "$BUILT" = 1 ] && [ "$KEEP" = 0 ]; then
+    if [ "$BUILT" = 1 ] && { [ "$KEEP" = 0 ] || [ "$REF_READY" = 0 ]; }; then
         cleanup_ref || echo "WARNING: reference cleanup incomplete." >&2
     fi
     rm -rf "$LOCK"
@@ -152,6 +152,7 @@ build_ref() {
 
 # --- Step 0: provide the reference ----------------------------------------
 if is_mounted "$REF" && [ "$FORCE" = 0 ]; then
+    REF_READY=1
     echo "Using existing reference overlay $REF (use -f to rebuild)." >&2
 else
     if [ -e "$R" ]; then
@@ -159,6 +160,7 @@ else
     fi
     echo "Building factory state under $REF ..." >&2
     build_ref || { echo "Failed to build the reference overlay." >&2; exit 1; }
+    REF_READY=1
 fi
 
 umask 077
