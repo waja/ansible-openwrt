@@ -90,11 +90,14 @@ SNMP extend entries are managed through UCI. The executable path is stored
 in `prog` and command-line arguments are stored separately in `args`.
 
 The role deploys a small `hardware` helper for LibreNMS hardware detection.
-It prefers the Device Tree model, then DMI product information. On QEMU/KVM
-systems it reports the virtual machine vendor and product when available;
-when no hardware metadata is exposed, it falls back to the OpenWrt
-architecture. This avoids assuming that every OpenWrt target has a Device
-Tree or DMI interface.
+It prefers the Device Tree model, then DMI product information. Sophos SG
+appliances are reported using their DMI vendor, product, and encoded model
+revision (for example, `Sophos SG 125w Rev. 3` from `Sophos`, `SG`, and
+`125Wr3`). On QEMU/KVM systems it reports the virtual machine vendor and
+product when available; when no hardware metadata is exposed, it falls back
+to the OpenWrt architecture. This avoids assuming that every OpenWrt target
+has a Device Tree or DMI interface.
+
 The role owns only sections prefixed with
 `ansible_router_librenms_`; other SNMP settings and extend sections are
 left untouched. Obsolete sections with this prefix are removed when the
@@ -126,7 +129,7 @@ Run the role together with its package, base-service, and SNMP prerequisites
 through the standard playbook. The SNMP variables shown above must be set:
 
 ```bash
-ansible-playbook -i inventory.ini playbooks/site.yml \
-  --limit router1 \
+ansible-playbook -i inventory.ini playbooks/site.yml \\
+  --limit router1 \\
   --tags router_packages,router_base,router_snmpd,router_librenms
 ```
