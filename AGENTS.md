@@ -112,15 +112,24 @@ or issue rather than relying on an external link alone.
 - Use GitHub's native sub-issue relationships when available; otherwise keep
   the parent issue's linked work-item list accurate.
 - Create every new pull request targeting `development` as a **Draft**.
-  Keep it in draft while implementation, self-review, and required checks
-  are still in progress. Mark it ready for review only after the change is
-  complete, the full diff has been reviewed, applicable checks have run,
-  and the PR is ready for reviewer feedback. If further implementation
-  changes are needed, convert it back to draft until they are complete.
+  Keep it in draft while implementation and self-review are in progress.
+  Mark it ready for review only after the full diff has been reviewed, all
+  checks required for that PR by the applicable workflows and repository
+  policy have reached successful conclusions, and the PR is ready for
+  reviewer feedback. The applicable workflows determine which checks run;
+  do not assume every PR requires every test suite. If further
+  implementation changes are needed, convert the PR back to draft until
+  they are complete.
 - Do not commit or push changes directly to `development` or `master`.
-  Changes to either protected integration branch must be proposed and
-  merged through a pull request. This applies to all contributors,
-  including repository maintainers.
+  All changes to either integration branch, including emergency fixes and
+  automated maintenance changes, must be proposed and merged through a
+  pull request. This applies to all contributors, including repository
+  maintainers.
+- These are the repository's required contribution rules. GitHub branch
+  protection and ruleset settings are a separate enforcement mechanism;
+  verify those settings independently and keep this document aligned
+  with the repository's actual merge policy. Do not claim that a rule is
+  technically enforced by GitHub unless that enforcement has been verified.
 
 ## Development workflow
 
