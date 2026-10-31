@@ -4,7 +4,8 @@ This guide explains how to apply the playbooks, select individual roles,
 and organize inventory variables. Detailed role options and examples live
 in the corresponding role guides. For guidance on inspecting an existing
 router before managing it with Ansible, see the
-[OpenWrt state discovery guide](state-discovery/README.md).
+[OpenWrt state discovery guide](state-discovery/README.md) and its
+[owrt-extra.sh user guide](state-discovery/owrt-extra.md).
 
 ## Apply the standard configuration
 

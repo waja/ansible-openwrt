@@ -18,9 +18,11 @@
 #        to /tmp/owrt-diff/secrets/ (plaintext!)
 #   -h   Show this help
 #
-# The live configuration is not modified. Raw data stays in /tmp/owrt-diff/.
-# WARNING: It contains plaintext secrets (Wi-Fi keys etc.). The directory is
-# root-only and lives in RAM; delete it when you are done.
+# Runs are serialized with /tmp/owrt-extra.lock. Each run starts with a fresh
+# /tmp/owrt-diff directory. Factory scripts run in a chroot without live
+# /proc, /sys or /dev bind mounts; inspect local scripts for other side effects.
+# WARNING: Raw data can contain plaintext secrets. Keep it private and delete
+# it when you are done.
 
 KEEP=0
 FORCE=0
@@ -41,26 +43,51 @@ UPPER=/overlay/upper
 R=/tmp/ref
 REF=$R/merged
 OUT=/tmp/owrt-diff
+LOCK=/tmp/owrt-extra.lock
 BUILT=0
+REF_READY=0
+LOCK_KEEP=0
 
+# Serialize access to the shared reference mount and report directory.
+if ! mkdir "$LOCK" 2>/dev/null; then
+    echo "Another owrt-extra.sh run may be active (lock: $LOCK)." >&2
+    echo "Check for an active run and inspect reference mounts before removing a stale lock." >&2
+    exit 1
+fi
+# Install a minimal trap immediately so prerequisite failures cannot orphan
+# the lock. The full cleanup trap below replaces this on normal startup.
+trap 'rm -rf "$LOCK"' EXIT
+trap 'exit 1' HUP INT TERM
 [ -d "$UPPER" ] || { echo "$UPPER not found (no overlay?)" >&2; exit 1; }
 [ -d /rom ]     || { echo "/rom not found, cannot rebuild the factory state." >&2; exit 1; }
 [ -r /etc/board.json ] || { echo "/etc/board.json is missing." >&2; exit 1; }
 
 T=$(mktemp -d) || exit 1
-mkdir -p "$OUT" && chmod 700 "$OUT" || exit 1
+# Never mix evidence from separate or interrupted runs.
+rm -rf "$OUT" || { rm -rf "$T"; exit 1; }
+mkdir -m 700 "$OUT" || { rm -rf "$T"; exit 1; }
 
-is_mounted() { grep -q " $1 " /proc/mounts; }
+is_mounted() { grep -Fq " $1 " /proc/mounts; }
 
 # Tear down $R. Only deletes if nothing is mounted below it anymore, otherwise
 # rm -rf could follow a leftover bind mount into /dev, /proc or /sys.
 cleanup_ref() {
     for m in dev sys proc; do
-        is_mounted "$R/merged/$m" && umount "$R/merged/$m"
+        if is_mounted "$R/merged/$m"; then
+            umount "$R/merged/$m" || {
+                echo "WARNING: cannot unmount $R/merged/$m; keeping $R." >&2
+                return 1
+            }
+        fi
     done
-    is_mounted "$REF" && umount "$REF"
-    if grep -q " $R/" /proc/mounts; then
-        echo "WARNING: something is still mounted below $R, deleting nothing." >&2
+    if is_mounted "$REF"; then
+        umount "$REF" || {
+            echo "WARNING: cannot unmount $REF; keeping $R." >&2
+            return 1
+        }
+    fi
+    if grep -Fq " $R/" /proc/mounts; then
+        echo "WARNING: mounts remain below $R; deleting nothing." >&2
         return 1
     fi
     rm -rf "$R"
@@ -68,11 +95,20 @@ cleanup_ref() {
 
 finish() {
     rm -rf "$T"
-    if [ "$BUILT" = 1 ] && [ "$KEEP" = 0 ]; then
-        cleanup_ref
+    lock_release=1
+    [ "$LOCK_KEEP" = 1 ] && lock_release=0
+    if [ "$BUILT" = 1 ] && { [ "$KEEP" = 0 ] || [ "$REF_READY" = 0 ]; }; then
+        cleanup_ref || {
+            echo "WARNING: reference cleanup incomplete; keeping lock $LOCK." >&2
+            lock_release=0
+        }
     fi
+    # Keep the lock if mounts could not be cleaned up. This prevents a later
+    # run from reusing or deleting a reference with unknown mount state.
+    [ "$lock_release" = 1 ] && rm -rf "$LOCK"
 }
 trap finish EXIT
+trap 'exit 1' HUP INT TERM
 
 build_ref() {
     BUILT=1
@@ -83,34 +119,60 @@ build_ref() {
     mkdir -p "$REF/etc"
     cp /etc/board.json "$REF/etc/board.json"
 
-    mount -o bind /proc "$REF/proc"
-    mount -o bind /sys  "$REF/sys"
-    mount -o bind /dev  "$REF/dev"
-
-    # The script must expand variables inside the chroot, not on the host.
+    # Do not expose the live kernel or device interfaces to factory scripts.
+    # The chroot is not a security sandbox: review device-specific scripts.
+    # Each command runs separately so one failure cannot be hidden by a
+    # later successful uci-defaults script.
     # shellcheck disable=SC2016
     chroot "$REF" /bin/sh -c '
+        failed=0
         /bin/config_generate
+        rc=$?
+        if [ "$rc" -ne 0 ]; then
+            echo "FAIL: /bin/config_generate (exit $rc)"
+            failed=1
+        fi
         for f in /etc/uci-defaults/*; do
-            [ -f "$f" ] && (. "$f") && rm -f "$f"
+            [ -f "$f" ] || continue
+            (
+                . "$f"
+            )
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+                echo "FAIL: $f (exit $rc)"
+                failed=1
+            else
+                rm -f "$f"
+            fi
         done
         uci commit
-    ' > "$OUT/chroot.log" 2>&1 || \
-        echo "WARNING: factory generation reported errors, see $OUT/chroot.log" >&2
-
-    umount "$REF/dev" "$REF/sys" "$REF/proc"
+        rc=$?
+        if [ "$rc" -ne 0 ]; then
+            echo "FAIL: uci commit (exit $rc)"
+            failed=1
+        fi
+        exit "$failed"
+    ' > "$OUT/chroot.log" 2>&1
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "WARNING: factory generation was incomplete (exit $rc)." >&2
+        echo "Review failed commands in $OUT/chroot.log" >&2
+        return 1
+    fi
     return 0
 }
 
 # --- Step 0: provide the reference ----------------------------------------
 if is_mounted "$REF" && [ "$FORCE" = 0 ]; then
+    REF_READY=1
     echo "Using existing reference overlay $REF (use -f to rebuild)." >&2
 else
     if [ -e "$R" ]; then
-        cleanup_ref || exit 1
+        cleanup_ref || { LOCK_KEEP=1; exit 1; }
     fi
     echo "Building factory state under $REF ..." >&2
     build_ref || { echo "Failed to build the reference overlay." >&2; exit 1; }
+    REF_READY=1
 fi
 
 umask 077
@@ -125,7 +187,13 @@ print_section "1. UCI diff ('<' = factory, '>' = current)"
 uci -q -c "$REF/etc/config" show 2>/dev/null | sort > "$OUT/factory.show"
 uci -q show 2>/dev/null | sort > "$OUT/current.show"
 diff "$OUT/factory.show" "$OUT/current.show" > "$OUT/uci.diff"
-if [ -s "$OUT/uci.diff" ]; then cat "$OUT/uci.diff"; else echo "(no differences)"; fi
+if [ -s "$OUT/uci.diff" ]; then
+    # Keep raw evidence in the protected report directory, but never print
+    # common crypt(3) password hashes in the terminal summary.
+    sed -E 's/\$[0-9A-Za-z]+\$[^ "'"'"';]*/[REDACTED PASSWORD HASH]/g' "$OUT/uci.diff"
+else
+    echo "(no differences)"
+fi
 echo "Note: anonymous sections (@rule[3] etc.) are numbered; inserting one shifts"
 echo "all following indexes in the diff."
 
@@ -374,7 +442,15 @@ if [ -s "$T/secret" ]; then sed 's|^|   /|' "$T/secret"; else echo "   (none)"; 
 echo "-- Users/groups differing from factory (no hashes in passwd/group;"
 echo "   accounts created by installed packages show up here as well):"
 for f in etc/passwd etc/group; do
-    [ -e "$REF/$f" ] && diff "$REF/$f" "/$f" | grep '^[<>]' | sed 's|^|   |'
+    if [ -e "$REF/$f" ]; then
+        if [ "$f" = etc/passwd ]; then
+            diff "$REF/$f" "/$f" |
+                sed -E 's/^([<>][^:]*:)[^:]*:/\1[REDACTED]:/' |
+                grep '^[<>]' | sed 's|^|   |'
+        else
+            diff "$REF/$f" "/$f" | grep '^[<>]' | sed 's|^|   |'
+        fi
+    fi
 done > "$T/pg"
 if [ -s "$T/pg" ]; then cat "$T/pg"; else echo "   (identical)"; fi
 echo "-- Unmodified package files: $(wc -l < "$T/pkgclean") (not listed)"
