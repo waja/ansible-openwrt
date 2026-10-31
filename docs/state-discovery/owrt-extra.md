@@ -280,8 +280,9 @@ Treat the entire report as sensitive until you have reviewed it.
 UCI values and raw diffs can contain Wi-Fi passwords, password hashes,
 and other plaintext credentials. The terminal summary redacts common
 crypt(3) password hashes and values of credential-named UCI options,
-including wireless keys/PSKs, WireGuard private keys, passwords,
-passphrases, secrets, and tokens. This is a best-effort display filter,
+including wireless keys/PSKs, WireGuard private keys, secret/client/
+encryption/signing/shared keys, passwords, passphrases, secrets, and
+tokens. This is a best-effort display filter,
 not a complete secret scanner. The same filter is available for an
 existing diff, for example
 `sh /tmp/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
