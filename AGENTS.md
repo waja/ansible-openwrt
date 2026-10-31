@@ -99,13 +99,36 @@ or CI workflows.
 - Do not add workflow-level path filters that can leave required checks
   pending.
 
-Use `docs/reference-projects.md` as a curated set of external
-Ansible/OpenWrt examples when researching relevant design questions,
-implementation patterns, or test cases. Treat those repositories as
-unverified examples, not project requirements: check official module
-documentation and verify compatibility, safety, and behavior before adopting
-an approach. Record lasting decisions in the relevant project documentation
-or issue rather than relying on an external link alone.
+### Reference project research
+
+For every new implementation PR, review `docs/reference-projects.md`
+during the planning phase. The goal is to discover useful approaches,
+missing requirements, operational risks, edge cases, and test cases before
+the implementation direction is settled.
+
+- Identify which listed projects are relevant to the problem or feature.
+  Inspect their implementation when it can provide useful detail; do not
+  browse unrelated projects merely to satisfy this rule.
+- Apply this especially to new roles and features, extensions of existing
+  behavior, new user-facing options, and architectural or design decisions.
+- Look for relevant examples when dealing with OpenWrt-specific behavior,
+  UCI ownership and transactions, release or hardware differences, package
+  managers, idempotence, service reloads, disruptive changes, and recovery.
+- Also consult the references when evaluating security-sensitive behavior,
+  migrations or upgrades, monitoring and integrations, cross-role
+  interactions, or test and CI design.
+- For unclear bugs, use relevant projects to identify alternative approaches
+  and possible causes, but verify findings against the actual failure and
+  supported environment.
+- Trivial corrections and documentation-only formatting changes normally
+  do not need reference research. If no listed project is relevant, proceed
+  without forcing a comparison.
+- Treat external repositories as unverified examples, never as specifications
+  or project requirements. Verify any adopted idea against official module
+  documentation, supported OpenWrt versions, this repository's conventions,
+  and tests.
+- Record relevant findings and lasting design decisions in the issue or
+  project documentation; do not rely on an external link alone.
 
 ## Issue and PR workflow
 
@@ -161,6 +184,12 @@ use commits on the PR branch as a scratchpad for intermediate experiments.
 6. Report which checks actually ran and their results. Clearly distinguish
    static inspection from executed tests. If a check cannot run locally, say
    why and rely on CI where appropriate; do not imply it passed.
+
+For implementation PRs, include reference-project research in the planning
+and self-review: check whether relevant examples revealed missing
+requirements, edge cases, operational risks, or tests. Mention material
+findings in the issue or PR; a forced list of unrelated projects is not
+required.
 
 If a mistake has already been pushed, fix and verify the complete change before
 adding more commits. Consolidate noisy commits only when they are your own and
