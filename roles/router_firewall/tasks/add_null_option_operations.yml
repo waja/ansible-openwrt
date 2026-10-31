@@ -1,0 +1,40 @@
+# roles/router_firewall/tasks/add_null_option_operations.yml
+---
+- name: Add operation to remove an explicitly null zone option
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + (
+          [{
+            'command': 'absent',
+            'key': 'firewall.' ~ router_firewall_zone.key ~ '.' ~ item.key
+          }]
+          if router_firewall_named_zones.results[
+            router_firewall_zone_index
+          ].result == 'zone'
+          else [{
+            'command': 'absent',
+            'config': 'firewall',
+            'type': 'zone',
+            'find': {
+              'name': router_firewall_zone.value.name
+                      | default(router_firewall_zone.key)
+            },
+            'value': [item.key]
+          }]
+        )
+      }}
+  loop: "{{ router_firewall_zone.value | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - router_firewall_zone.value.state | default('present') == 'present'
+    - item.key not in ['name', 'state']
+    - item.value is none
+    - >-
+      router_firewall_named_zones.results[router_firewall_zone_index].result
+      == 'zone' or
+      router_firewall_matching_zones.results[
+        router_firewall_zone_index
+      ].result_list | length == 1
+  changed_when: false

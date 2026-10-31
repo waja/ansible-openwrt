@@ -67,8 +67,26 @@
             input: REJECT
             output: ACCEPT
             forward: REJECT
-            masq: false
+            enabled: true
+            device:
+              - tun+
+            subnet:
+              - 192.0.2.0/24
+            masq: true
+            masq6: true
+            masq_src:
+              - 192.0.2.0/24
+            masq_dest:
+              - 198.51.100.0/24
+            masq_allow_invalid: true
             mtu_fix: true
+            family: any
+            log: 3
+            log_limit: 10/minute
+            auto_helper: false
+            helper:
+              - ftp
+            counter: true
           new_guest:
             network:
               - lan
@@ -77,38 +95,108 @@
           - 2223
         router_firewall_dropbear_wan_zone: wan
 
-    - name: Verify firewall defaults
-      ansible.builtin.raw: |
-        printf 'input='; uci -q get firewall.@defaults[0].input || exit 1
-        printf 'forward='; uci -q get firewall.@defaults[0].forward || exit 1
-        printf 'output='; uci -q get firewall.@defaults[0].output || exit 1
-        printf 'extra_rule='
-        uci -q get \
-          firewall.ansible_router_firewall_dropbear_extra_wan.dest_port \
-          || exit 1
-        printf 'zone_name='
-        uci -q get firewall.guest_test.name || exit 1
-        printf 'zone_network='
-        uci -q get firewall.guest_test.network || exit 1
-        printf 'new_zone_name='
-        uci -q get firewall.new_guest.name || exit 1
-        test -z "$(uci changes firewall)" || {
-          echo "Uncommitted changes remain in firewall UCI configuration"
-          exit 1
-        }
+    - name: Read committed firewall configuration through UCI
+      community.openwrt.uci:
+        command: show
+        config: firewall
       register: router_firewall_uci
       changed_when: false
 
     - name: Assert firewall defaults
       ansible.builtin.assert:
         that:
-          - "'input=ACCEPT' in router_firewall_uci.stdout"
-          - "'forward=ACCEPT' in router_firewall_uci.stdout"
-          - "'output=ACCEPT' in router_firewall_uci.stdout"
-          - "'extra_rule=2222 2223' in router_firewall_uci.stdout"
-          - "'zone_name=guest_test' in router_firewall_uci.stdout"
-          - "'zone_network=lan' in router_firewall_uci.stdout"
-          - "'new_zone_name=new_guest' in router_firewall_uci.stdout"
+          - >-
+              "firewall.@defaults[0].input='ACCEPT'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].forward='ACCEPT'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].output='ACCEPT'"
+              in router_firewall_uci.result
+          - >-
+              ("firewall.ansible_router_firewall_dropbear_extra_wan."
+              ~ "dest_port='2222 2223'")
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.name='guest_test'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.network='lan'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.enabled='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.device='tun+'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.subnet='192.0.2.0/24'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq6='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq_src='192.0.2.0/24'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq_dest='198.51.100.0/24'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq_allow_invalid='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.mtu_fix='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.family='any'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.log='3'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.log_limit='10/minute'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.auto_helper='0'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.helper='ftp'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.counter='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.new_guest.name='new_guest'"
+              in router_firewall_uci.result
+
+    - name: Verify firewall zone options are persisted
+      ansible.builtin.raw: |
+        zone_config="$(sed -n \
+          "/^config zone 'guest_test'$/,/^config /p" /etc/config/firewall)"
+        for option in enabled masq masq6 masq_allow_invalid mtu_fix \
+          auto_helper family log log_limit counter; do
+          printf '%s\n' "$zone_config" | \
+            grep -F "option $option " >/dev/null || {
+              echo "Missing persisted firewall zone option: $option"
+              exit 1
+            }
+        done
+        for option in network device subnet masq_src masq_dest helper; do
+          printf '%s\n' "$zone_config" | \
+            grep -F "list $option " >/dev/null || {
+              echo "Missing persisted firewall zone list: $option"
+              exit 1
+            }
+        done
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
+      changed_when: false
 
     - name: Apply router packages role
       ansible.builtin.include_role:
