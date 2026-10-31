@@ -49,11 +49,7 @@ BUILT=0
 # Serialize access to the shared reference mount and report directory.
 if ! mkdir "$LOCK" 2>/dev/null; then
     echo "Another owrt-extra.sh run may be active (lock: $LOCK)." >&2
-    if [ -r "$LOCK/pid" ]; then
-        echo "Lock owner PID: $(cat "$LOCK/pid")" >&2
-    else
-        echo "Lock owner PID is unavailable; inspect the lock before removing it." >&2
-    fi
+    echo "Check for an active run and inspect reference mounts before removing a stale lock." >&2
     exit 1
 fi
 # Install a minimal trap immediately so prerequisite failures cannot orphan
