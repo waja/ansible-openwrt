@@ -65,27 +65,12 @@
       register: router_firewall_null_options_show
       changed_when: false
 
-    - name: Verify null removes list, scalar, and boolean options
+    - name: Verify null removes every explicitly cleared zone option
       ansible.builtin.assert:
         that:
           - >-
             router_firewall_null_options_show.result
-            is not search("firewall\\.guest_test\\.masq_src=")
-          - >-
-            router_firewall_null_options_show.result
-            is not search("firewall\\.guest_test\\.masq_dest=")
-          - >-
-            router_firewall_null_options_show.result
-            is not search("firewall\\.guest_test\\.masq_allow_invalid=")
-          - >-
-            router_firewall_null_options_show.result
-            is not search("firewall\\.guest_test\\.log=")
-          - >-
-            router_firewall_null_options_show.result
-            is not search("firewall\\.guest_test\\.log_limit=")
-          - >-
-            router_firewall_null_options_show.result
-            is not search("firewall\\.guest_test\\.helper=")
+            is not search("firewall\\.guest_test\\.(network|input|masq|mtu_fix|masq_src|masq_dest|masq_allow_invalid|log|log_limit|helper)=")
 
     - name: Test explicit false firewall zone options
       ansible.builtin.include_role:
@@ -211,6 +196,76 @@
         that:
           - >-
             router_firewall_invalid_log_limit_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Capture invalid firewall zone policy validation
+      block:
+        - name: Attempt to configure an unsupported zone policy
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              invalid_policy:
+                input: ALLOW
+      rescue:
+        - name: Record the invalid policy validation failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_policy_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify unsupported zone policies are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_policy_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Capture invalid firewall zone family validation
+      block:
+        - name: Attempt to configure an unsupported zone family
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              invalid_family:
+                family: ipv5
+      rescue:
+        - name: Record the invalid family validation failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_family_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify unsupported zone families are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_family_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Capture invalid firewall zone list item validation
+      block:
+        - name: Attempt to configure a non-string zone list item
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              invalid_list_item:
+                device:
+                  - true
+      rescue:
+        - name: Record the invalid list item validation failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_list_item_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify zone lists reject non-string items
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_list_item_failure
             == 'Validate firewall zone option types and values'
 
     - name: Create an anonymous duplicate for named-section precedence
