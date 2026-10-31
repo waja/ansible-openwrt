@@ -45,6 +45,7 @@ REF=$R/merged
 OUT=/tmp/owrt-diff
 LOCK=/tmp/owrt-extra.lock
 BUILT=0
+REF_READY=0
 LOCK_KEEP=0
 
 # Serialize access to the shared reference mount and report directory.
