@@ -60,7 +60,7 @@ fi
 # the lock. The full cleanup trap below replaces this on normal startup.
 trap 'rm -rf "$LOCK"' EXIT
 trap 'exit 1' HUP INT TERM
-printf '%s\\n' "$" > "$LOCK/pid" || {
+printf '%s\n' "$" > "$LOCK/pid" || {
     echo "Cannot record lock owner in $LOCK/pid." >&2
     exit 1
 }
@@ -71,8 +71,8 @@ printf '%s\\n' "$" > "$LOCK/pid" || {
 
 T=$(mktemp -d) || exit 1
 # Never mix evidence from separate or interrupted runs.
-rm -rf "$OUT" || { rm -rf "$T"; rmdir "$LOCK"; exit 1; }
-mkdir -m 700 "$OUT" || { rm -rf "$T"; rmdir "$LOCK"; exit 1; }
+rm -rf "$OUT" || { rm -rf "$T"; exit 1; }
+mkdir -m 700 "$OUT" || { rm -rf "$T"; exit 1; }
 
 is_mounted() { grep -Fq " $1 " /proc/mounts; }
 
@@ -102,10 +102,16 @@ cleanup_ref() {
 
 finish() {
     rm -rf "$T"
+    lock_release=1
     if [ "$BUILT" = 1 ] && { [ "$KEEP" = 0 ] || [ "$REF_READY" = 0 ]; }; then
-        cleanup_ref || echo "WARNING: reference cleanup incomplete." >&2
+        cleanup_ref || {
+            echo "WARNING: reference cleanup incomplete; keeping lock $LOCK." >&2
+            lock_release=0
+        }
     fi
-    rm -rf "$LOCK"
+    # Keep the lock if mounts could not be cleaned up. This prevents a later
+    # run from reusing or deleting a reference with unknown mount state.
+    [ "$lock_release" = 1 ] && rm -rf "$LOCK"
 }
 trap finish EXIT
 trap 'exit 1' HUP INT TERM
