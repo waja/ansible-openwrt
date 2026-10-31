@@ -119,8 +119,7 @@ comparisons in `/tmp/owrt-diff/`. The principal sections are:
 | | packages; dependencies and version differences are context. |
 | 3a. APK audit | Output from `apk audit --system`, if supported. |
 | | Finds modified package-owned files outside protected paths. |
-| | Complements the overlay scan. See [issue #52] |
-| | (https://github.com/waja/ansible-openwrt/issues/52). |
+| | Complements the overlay scan. See [issue #52][issue-52]. |
 | 7. Info only | UCI/secret paths, account/group differences, ignored |
 | | files, and sysupgrade persistence information. Context only; |
 | | not every item belongs in Ansible. |
@@ -306,3 +305,5 @@ defined by the [state discovery architecture](architecture.md).
 Its report directory is a legacy collection of files, not a
 schema-valid bundle. The bundle writer, generated report, and later
 Ansible assessment/generation stage are separate implementation work.
+
+[issue-52]: https://github.com/waja/ansible-openwrt/issues/52
