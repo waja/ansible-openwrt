@@ -14,6 +14,20 @@
   "reviewers": [
     "waja"
   ],
+  "pip-compile": {
+    "managerFilePatterns": [
+      "/^requirements\\\\/ci\\\\/(lint|ansible-test|molecule)\\\\.txt$/"
+    ]
+  },
+  "pip_requirements": {
+    "enabled": false
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 4am on monday"
+    ]
+  },
   "packageRules": [
     {
       "matchDatasources": [
@@ -32,21 +46,6 @@
         "docker"
       ],
       "groupName": "container base images"
-    }
-  ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "description": "Update the ShellCheck version installed by its GitHub Action",
-      "managerFilePatterns": [
-        "/\\.github/workflows/lint-scripts-docs\\.yml$/"
-      ],
-      "matchStrings": [
-        "- name: Lint POSIX shell scripts[\\s\\S]*?version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
-      ],
-      "depNameTemplate": "koalaman/shellcheck",
-      "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver"
     }
   ]
 }
