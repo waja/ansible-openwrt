@@ -1,0 +1,39 @@
+# roles/router_storage/tasks/resize_stage.yml
+---
+- name: Start the appropriate OpenWrt root expansion stage
+  ansible.builtin.raw: |
+    set -eu
+    if [ "{{ router_storage_resize_stage }}" = partition ]; then
+      resize_script=/etc/uci-defaults/70-rootpt-resize
+    else
+      resize_script=/etc/uci-defaults/80-rootfs-resize
+    fi
+    test -s "$resize_script"
+    ( sleep 2; sh "$resize_script" ) \
+      >/tmp/router-storage-resize.log 2>&1 </dev/null &
+  changed_when: true
+
+- name: Wait for SSH to stop during the OpenWrt reboot
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: "{{ ansible_port | default(22) }}"
+    state: stopped
+    delay: 0
+    sleep: 2
+    connect_timeout: 5
+    timeout: 180
+  delegate_to: localhost
+
+- name: Wait for SSH after the OpenWrt resize reboot
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: "{{ ansible_port | default(22) }}"
+    state: started
+    delay: 15
+    sleep: 10
+    connect_timeout: 5
+    timeout: 900
+  delegate_to: localhost
+
+- name: Re-detect root storage after expansion stage
+  ansible.builtin.include_tasks: detect.yml
