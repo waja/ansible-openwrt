@@ -1015,7 +1015,9 @@
     - name: Verify the declarative firewall rule and list option
       ansible.builtin.assert:
         that:
-          - "'firewall.molecule_allow_ssh=rule' in router_firewall_rule_show.result"
+          - >-
+            'firewall.molecule_allow_ssh=rule'
+            in router_firewall_rule_show.result
           - >-
             "firewall.molecule_allow_ssh.name='Molecule allow SSH'"
             in router_firewall_rule_show.result
