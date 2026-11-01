@@ -109,11 +109,11 @@ is_sensitive_path() {
         etc/dropbear/*_host_key|etc/ssh/*_key|\
         etc/uhttpd.key|etc/uhttpd.*.key|\
         etc/ssl/private/*|etc/pki/private/*|etc/keys/*|\
-        etc/wireguard/*|etc/openvpn/*.key|etc/openvpn/*.pem|\
+        etc/wireguard/*|etc/openvpn/*.key|\
         etc/openvpn/*.p12|etc/openvpn/*.pfx|etc/ipsec.secrets|\
         etc/swanctl/private/*|\
         root/.ssh/id_rsa|root/.ssh/id_ed25519|root/.ssh/id_ecdsa|\
-        root/.ssh/id_dsa|*.key|*.pem|*.p12|*.pfx|*.pkcs12)
+        root/.ssh/id_dsa|*.key|*.p12|*.pfx|*.pkcs12)
             return 0 ;;
         *)
             return 1 ;;
