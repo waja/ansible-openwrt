@@ -12,7 +12,7 @@ fail() {
     exit 1
 }
 reset_case() {
-    rm -rf /tmp/owrt-diff /tmp/owrt-extra.lock /tmp/ref
+    rm -rf /tmp/owrt-diff /tmp/owrt-extra.lock /tmp/ref /tmp/owrt-test-factory-failed
 }
 assert_no_run_state() {
     [ ! -e /tmp/owrt-extra.lock ] || fail "lock left behind"
@@ -90,10 +90,33 @@ cat > "$stub/mount" <<'EOF_MOUNT'
 #!/bin/sh
 exit 0
 EOF_MOUNT
+# Simulate a still-mounted reference overlay and a failed unmount.
+# The grep wrapper reports only the reference mount; all other checks use the
+# real grep implementation.
+real_grep=$(command -v grep)
+cat > "$stub/grep" <<EOF_GREP
+#!/bin/sh
+if [ -f /tmp/owrt-test-factory-failed ] &&
+   [ "\${1:-}" = -Fq ] &&
+   [ "\${2:-}" = " /tmp/ref/merged " ] &&
+   [ "\${3:-}" = /proc/mounts ]; then
+    exit 0
+fi
+exec "$real_grep" "\$@"
+EOF_GREP
+cat > "$stub/umount" <<'EOF_UMOUNT'
+#!/bin/sh
+if [ "${OWRT_TEST_UNMOUNT_FAIL:-0}" = 1 ]; then
+    echo "simulated unmount failure: $*" >&2
+    exit 1
+fi
+exit 0
+EOF_UMOUNT
 cat > "$stub/chroot" <<'EOF_CHROOT'
 #!/bin/sh
 case "${OWRT_TEST_FACTORY_FAIL:-}" in
     config-generate)
+        : > /tmp/owrt-test-factory-failed
         echo "FAIL: /bin/config_generate (exit 41)"
         exit 1
         ;;
@@ -224,6 +247,30 @@ run_factory_failure_case uci-defaults-failure uci-defaults \
     "FAIL: /etc/uci-defaults/99-test-failure (exit 42)"
 run_factory_failure_case uci-commit-failure uci-commit \
     "FAIL: uci commit (exit 43)"
+
+# A failed unmount must preserve the reference tree and lock. A subsequent
+# invocation must refuse to start rather than reuse uncertain mount state.
+reset_case
+OWRT_TEST_FACTORY_FAIL=config-generate
+OWRT_TEST_UNMOUNT_FAIL=1
+export OWRT_TEST_FACTORY_FAIL OWRT_TEST_UNMOUNT_FAIL
+if /bin/sh "$SCRIPT" > /tmp/unmount-failure.log 2>&1; then
+    cat /tmp/unmount-failure.log >&2
+    fail "unmount failure unexpectedly succeeded"
+fi
+grep -Fq "cannot unmount /tmp/ref/merged; keeping /tmp/ref" /tmp/unmount-failure.log ||
+    { cat /tmp/unmount-failure.log >&2; fail "unmount failure diagnostic missing"; }
+grep -Fq "reference cleanup incomplete; keeping lock /tmp/owrt-extra.lock" /tmp/unmount-failure.log ||
+    fail "lock-retention diagnostic missing"
+[ -d /tmp/ref ] || fail "reference tree removed after unmount failure"
+[ -d /tmp/owrt-extra.lock ] || fail "lock released after unmount failure"
+[ -d /tmp/owrt-diff ] || fail "diagnostic report removed after unmount failure"
+if /bin/sh "$SCRIPT" > /tmp/locked-rerun.log 2>&1; then
+    fail "subsequent run ignored retained lock"
+fi
+grep -Fq "Another owrt-extra.sh run may be active" /tmp/locked-rerun.log ||
+    { cat /tmp/locked-rerun.log >&2; fail "subsequent run did not report retained lock"; }
+unset OWRT_TEST_FACTORY_FAIL OWRT_TEST_UNMOUNT_FAIL
 
 OWRT_TEST_APK_NOW=empty
 export OWRT_TEST_APK_NOW
