@@ -19,6 +19,7 @@
 #   -c   Remove the previous report in /tmp/owrt-diff, then exit
 #   --redact-uci-diff FILE  Print a redacted copy of an existing UCI diff
 #   --redact-text FILE      Print a redacted copy of an existing text file
+#   --is-sensitive-path P   Return success when P is a known sensitive path
 #   -h   Show this help
 #
 # Runs are serialized with /tmp/owrt-extra.lock. A new run refuses to
@@ -99,9 +100,37 @@ redact_uci_diff() {
     redact_text "$1"
 }
 
+# Classify known private-key and credential-store paths without reading their
+# contents. Public-key files and ordinary certificates are not secrets by
+# themselves and are intentionally excluded where their names are explicit.
+is_sensitive_path() {
+    case "$1" in
+        etc/passwd|etc/shadow|etc/group|etc/gshadow|\
+        etc/dropbear/*_host_key|etc/ssh/*_key|\
+        etc/uhttpd.key|etc/uhttpd.*.key|\
+        etc/ssl/private/*|etc/pki/private/*|etc/keys/*|\
+        etc/wireguard/*|etc/openvpn/*.key|etc/openvpn/*.pem|\
+        etc/openvpn/*.p12|etc/openvpn/*.pfx|etc/ipsec.secrets|\
+        etc/swanctl/private/*|etc/racoon/psk.txt|\
+        root/.ssh/id_rsa|root/.ssh/id_ed25519|root/.ssh/id_ecdsa|\
+        root/.ssh/id_dsa|*.key|*.pem|*.p12|*.pfx|*.pkcs12)
+            return 0 ;;
+        *)
+            return 1 ;;
+    esac
+}
+
 # Read-only helper for reviewing existing raw evidence. Neither mode modifies
 # the input file; the output is suitable only for human-readable inspection.
 case "${1:-}" in
+    --is-sensitive-path)
+        [ "$#" = 2 ] || {
+            echo "Usage: $0 --is-sensitive-path RELATIVE_PATH" >&2
+            exit 1
+        }
+        is_sensitive_path "$2"
+        exit $?
+        ;;
     --redact-uci-diff|--redact-text)
         mode=$1
         [ "$#" = 2 ] || {
@@ -418,12 +447,12 @@ find "$UPPER" -type f | rel | sort | while IFS= read -r f; do
             echo "$f" >> "$T/ignored"; continue ;;
         etc/config/*)
             echo "$f" >> "$T/uci"; continue ;;
-        etc/shadow|etc/passwd|etc/group|etc/gshadow|etc/dropbear/*_host_key|\
-        etc/ssh/*_key|etc/ssh/*_key.*|etc/uhttpd.key|etc/uhttpd.*.key|\
-        etc/ssl/private/*|etc/pki/private/*|etc/wireguard/*|\
-        etc/openvpn/*.key|etc/ipsec.secrets|etc/swanctl/private/*|\
-        etc/racoon/psk.txt)
-            echo "$f" >> "$T/secret"; continue ;;
+        *)
+            if is_sensitive_path "$f"; then
+                echo "$f" >> "$T/secret"
+                continue
+            fi
+            ;;
         etc/apk/world|etc/apk/repositories|etc/apk/repositories.d/*|etc/apk/keys/*)
             continue ;;   # handled separately in section 6
         lib/apk/*|usr/lib/opkg/*|etc/backup/*|etc/urandom.seed|\
