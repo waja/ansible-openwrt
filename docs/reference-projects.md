@@ -143,6 +143,9 @@ without understanding their assumptions.
 [rut-config]: https://github.com/3ti-Energy/Rut-config/tree/main
 [home-config]: https://github.com/Kblack0610/home-config/tree/master/ansible/roles/openwrt-iot-vlan
 
+[digitec-openwrt]: https://github.com/DigitecGalaxus/ansible-openwrt-framework
+[gunanovo-tailscale]: https://github.com/GuNanOvO/openwrt-tailscale
+[flowind-tailscale]: https://github.com/fl0w1nd/openwrt-tailscale
 [openwrt-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/index.html
 [setup-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/setup_module.html
 [uci-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/uci_module.html
