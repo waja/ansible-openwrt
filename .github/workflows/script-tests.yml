@@ -260,7 +260,7 @@ jobs:
 
               # General text redaction: key/value names, auth headers, URL
               # credentials and multi-line PEM private keys. Input stays raw.
-              cat > /tmp/sensitive-text.txt <<'EOF_SENSITIVE'
+              cat > /tmp/sensitive-text.txt <<EOF_SENSITIVE
               api_token=api-token-secret
               oauth.client_secret: client-secret-value
               Authorization: Bearer bearer-token-secret
