@@ -1,6 +1,6 @@
 # roles/router_storage/tasks/expand.yml
 ---
-- name: Download and validate the official OpenWrt root expansion script
+- name: Download and validate the official OpenWrt root expansion script (temporary legacy step)
   ansible.builtin.raw: |
     set -eu
     if [ ! -s /etc/uci-defaults/70-rootpt-resize ] ||
