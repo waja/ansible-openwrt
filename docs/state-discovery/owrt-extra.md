@@ -20,18 +20,36 @@ that arbitrary factory scripts are side-effect free.
 - An APK-based OpenWrt 25.12 system.
 - Root access on the router.
 - A mounted overlay at `/overlay/upper`, the factory image at `/rom`,
-  and a readable `/etc/board.json`.
-- The commands and utilities used by the script, including `mount`,
-  `chroot`, `uci`, `sysupgrade`, and `apk`.
+  readable `/etc/board.json`, and `/tmp/sysinfo/board_name`.
+- The commands and BusyBox applets used by the script, including `mount`,
+  `umount`, `chroot`, `find`, `comm`, `diff`, `uci`, `sysupgrade`,
+  and `apk`. On installations without the required applets, install the
+  OpenWrt packages `coreutils-comm` and `diffutils`. The script performs
+  a command preflight before creating a report; `stat` and `fw_printenv`
+  are optional.
 
 The reference reconstruction uses the router's own board data and
-factory files. It mounts a temporary overlay on `/rom`, runs
-`config_generate` and the factory `uci-defaults` scripts in that
-reference, and compares the result with the live system. This is a
-best-effort reconstruction, not a pristine copy of the router's original
+factory files. It copies `/etc/board.json` and the device's
+`/tmp/sysinfo/board_name` (plus `model`, when present) into the
+reference so `board_name()` does not fall back to the generic board.
+For `config_generate`, it mirrors the presence or absence of
+`/proc/sys/net/ipv6` as an empty directory; it does not bind the live
+`/proc` or expose kernel state.
+
+The factory defaults `12_network-generate-ula` and
+`14_network-generate-duid` are deliberately skipped. They generate
+random first-boot values that cannot be reconstructed later. Their
+current live values are recorded in `factory-generated-values.txt` and
+excluded from the ordinary UCI customization diff. Consequently, this
+comparison cannot identify later manual changes to either setting; review
+the recorded values separately if either setting is relevant.
+
+The script mounts a temporary overlay on `/rom`, runs
+`config_generate` and the remaining factory `uci-defaults` scripts
+in that reference, and compares the result with the live system. This is
+a best-effort reconstruction, not a pristine copy of the router's original
 factory state. Device-specific initialization and unavailable hardware can
-affect the
-result. Errors are written to `/tmp/owrt-diff/chroot.log`. The script
+affect the result. Errors are written to `/tmp/owrt-diff/chroot.log`. The script
 checks the exit status of `config_generate`, each `uci-defaults`
 script, and `uci commit`; failures mark the reference as incomplete even
 if later commands succeed.
@@ -155,7 +173,10 @@ contain:
 
 - `factory.show` and `current.show`: sorted UCI state from the
   reconstructed reference and live router.
-- `uci.diff`: normal-format difference between the UCI snapshots.
+- `uci.diff`: normal-format difference between the UCI snapshots,
+  excluding the non-reproducible random first-boot values.
+- `factory-generated-values.txt`: current live ULA prefix and DHCP DUID;
+  their original first-boot values cannot be recovered.
 - `packages.yml`: a starting list of package additions and removals.
   Its variable names are generic placeholders, not variables consumed
   directly by this project's roles.
@@ -326,9 +347,13 @@ state, not a guaranteed exact representation of the original device.
 Factory scripts run without live `/proc`, `/sys`, and `/dev` bind
 mounts, but the chroot is not a security boundary.
 The rootfs container used in CI checks shell syntax and command-line
-behavior but does not provide a booted device-like overlay environment.
-The full mount/chroot workflow and detection of actual overlay changes
-still need validation on a suitable OpenWrt VM or physical router.
+behavior. It is intentionally not treated as a complete router root
+filesystem: packages such as `uci` may not be present in that minimal
+image. The script's preflight therefore has to be validated on the
+actual booted OpenWrt environment. The container also does not provide
+a booted device-like overlay environment. The full mount/chroot workflow, factory inputs such as
+`/tmp/sysinfo`, and detection of actual overlay changes still need
+validation on a suitable booted OpenWrt VM or physical router.
 
 The current script does not generate the structured discovery bundle
 defined by the [state discovery architecture](architecture.md).

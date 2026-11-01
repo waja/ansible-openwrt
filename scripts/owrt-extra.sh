@@ -153,9 +153,30 @@ if [ -e "$OUT" ] || [ -L "$OUT" ]; then
     exit 1
 fi
 
+# Fail before creating a report if a required command or BusyBox applet is
+# missing. stat and fw_printenv are optional and handled at their call sites.
+check_required_commands() {
+    missing=0
+    for cmd in awk basename cat chmod chroot cmp comm cp diff dirname \
+        find grep id ln mkdir mktemp mount readlink rm sed sort sync \
+        tr uci umount sysupgrade apk wc; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            echo "Required command not found: $cmd" >&2
+            missing=1
+        fi
+    done
+    [ "$missing" = 0 ]
+}
+
+check_required_commands || {
+    echo "Cannot run discovery: required commands are missing." >&2
+    exit 1
+}
+
 [ -d "$UPPER" ] || { echo "$UPPER not found (no overlay?)" >&2; exit 1; }
 [ -d /rom ]     || { echo "/rom not found, cannot rebuild the factory state." >&2; exit 1; }
 [ -r /etc/board.json ] || { echo "/etc/board.json is missing." >&2; exit 1; }
+[ -r /tmp/sysinfo/board_name ] || { echo "/tmp/sysinfo/board_name is missing." >&2; exit 1; }
 
 T=$(mktemp -d) || exit 1
 mkdir -m 700 "$OUT" || { rm -rf "$T"; exit 1; }
@@ -207,8 +228,20 @@ build_ref() {
     mount -t overlay overlay \
         -o "lowerdir=/rom,upperdir=$R/upper,workdir=$R/work" "$REF" || return 1
 
-    mkdir -p "$REF/etc"
+    mkdir -p "$REF/etc" "$REF/tmp/sysinfo"
     cp /etc/board.json "$REF/etc/board.json"
+
+    # Preserve the device identity used by board_name() and factory scripts.
+    cp /tmp/sysinfo/board_name "$REF/tmp/sysinfo/board_name"
+    if [ -r /tmp/sysinfo/model ]; then
+        cp /tmp/sysinfo/model "$REF/tmp/sysinfo/model"
+    fi
+
+    # config_generate only tests whether IPv6 is available by checking this
+    # path. Mirror that boolean without exposing the live /proc filesystem.
+    if [ -d /proc/sys/net/ipv6 ]; then
+        mkdir -p "$REF/proc/sys/net/ipv6"
+    fi
 
     # Do not expose the live kernel or device interfaces to factory scripts.
     # The chroot is not a security sandbox: review device-specific scripts.
@@ -225,6 +258,15 @@ build_ref() {
         fi
         for f in /etc/uci-defaults/*; do
             [ -f "$f" ] || continue
+            case "$f" in
+                /etc/uci-defaults/12_network-generate-ula|/etc/uci-defaults/14_network-generate-duid)
+                    echo "SKIP: $f (random first-boot value cannot be reconstructed)"
+                    # First-boot defaults are consumed after execution. Keep
+                    # that factory state without executing the random generator.
+                    rm -f "$f"
+                    continue
+                    ;;
+            esac
             (
                 . "$f"
             )
@@ -267,7 +309,12 @@ else
 fi
 
 # Files OpenWrt itself treats as user configuration (kept by sysupgrade)
-sysupgrade -l 2>/dev/null | sort -u > "$T/keep"
+if ! sysupgrade -l > "$T/keep.raw" 2> "$OUT/sysupgrade.log"; then
+    echo "Required command failed: sysupgrade -l" >&2
+    echo "Review $OUT/sysupgrade.log" >&2
+    exit 1
+fi
+sort -u "$T/keep.raw" > "$T/keep"
 
 print_section() { printf '\n##### %s\n' "$1"; }
 
@@ -275,7 +322,17 @@ print_section() { printf '\n##### %s\n' "$1"; }
 print_section "1. UCI diff ('<' = factory, '>' = current)"
 uci -q -c "$REF/etc/config" show 2>/dev/null | sort > "$OUT/factory.show"
 uci -q show 2>/dev/null | sort > "$OUT/current.show"
-diff "$OUT/factory.show" "$OUT/current.show" > "$OUT/uci.diff"
+
+# These two values are generated randomly during first boot. Their original
+# factory values cannot be reconstructed later, so report the live values
+# separately and exclude them from the ordinary customization comparison.
+{
+    echo "Random first-boot values (original factory values are not recoverable):"
+    grep -E '^network\.globals\.(ula_prefix|dhcp_default_duid)=' "$OUT/current.show" || :
+} > "$OUT/factory-generated-values.txt"
+grep -Ev '^network\.globals\.(ula_prefix|dhcp_default_duid)=' "$OUT/factory.show" > "$T/factory.compare" || :
+grep -Ev '^network\.globals\.(ula_prefix|dhcp_default_duid)=' "$OUT/current.show" > "$T/current.compare" || :
+diff "$T/factory.compare" "$T/current.compare" > "$OUT/uci.diff"
 if [ -s "$OUT/uci.diff" ]; then
     # Keep raw evidence unchanged; redact hashes and credential-valued UCI
     # options only in the human-readable terminal summary.
@@ -283,6 +340,7 @@ if [ -s "$OUT/uci.diff" ]; then
 else
     echo "(no differences)"
 fi
+echo "Random first-boot values are excluded; see $OUT/factory-generated-values.txt."
 echo "Note: anonymous sections (@rule[3] etc.) are numbered; inserting one shifts"
 echo "all following indexes in the diff."
 
@@ -334,7 +392,7 @@ find "$UPPER" -type f | rel | sort | while IFS= read -r f; do
     esac
 
     # Does a package own the file? (check the output format of "apk info -W")
-    owner=$(apk info -W "/$f" 2>/dev/null | sed -n 's/.* is owned by //p')
+    owner=$(apk info --who-owns "/$f" 2>/dev/null | sed -n 's/.* is owned by //p')
     if [ -n "$owner" ]; then
         if grep -qxF "$f" "$T/apknew"; then
             echo "$f  [$owner]" >> "$T/pkgchanged"
@@ -417,14 +475,15 @@ print_section "6. Packages"
 # 6a: world = explicitly installed packages (this is the list for Ansible)
 WREF="$REF/etc/apk/world"
 [ -e "$WREF" ] || WREF=/rom/etc/apk/world
-: > "$T/wn_ref"; : > "$T/wn_now"
-if [ -e "$WREF" ] && [ -e /etc/apk/world ]; then
-    # Strip version constraints (foo>=1.2), compare names only
-    tr ' ' '\n' < "$WREF"        | sed -e '/^$/d' -e 's/[<>=~!].*//' | sort -u > "$T/wn_ref"
-    tr ' ' '\n' < /etc/apk/world | sed -e '/^$/d' -e 's/[<>=~!].*//' | sort -u > "$T/wn_now"
-else
-    echo "(world not found: check 'ls /rom/etc/apk /etc/apk')"
+if [ ! -f "$WREF" ] || [ ! -f /etc/apk/world ]; then
+    echo "Cannot compare explicitly installed packages: APK world file missing." >&2
+    echo "Factory: $WREF; current: /etc/apk/world" >&2
+    exit 1
 fi
+: > "$T/wn_ref"; : > "$T/wn_now"
+# Strip version constraints (foo>=1.2), compare names only
+tr ' ' '\n' < "$WREF"        | sed -e '/^$/d' -e 's/[<>=~!].*//' | sort -u > "$T/wn_ref"
+tr ' ' '\n' < /etc/apk/world | sed -e '/^$/d' -e 's/[<>=~!].*//' | sort -u > "$T/wn_now"
 comm -13 "$T/wn_ref" "$T/wn_now" > "$T/wadd"
 comm -23 "$T/wn_ref" "$T/wn_now" > "$T/wdel"
 
@@ -434,8 +493,23 @@ echo "-- Removed via world (-> Ansible: remove before installing):"
 if [ -s "$T/wdel" ]; then sed 's|^|   |' "$T/wdel"; else echo "   (none)"; fi
 
 # 6b: actually installed packages vs. factory (incl. dependencies, versions)
-apk list --installed 2>/dev/null | sed 's/ .*//' | sort > "$T/i_now"
-apk --root "$REF" list --installed 2>/dev/null | sed 's/ .*//' | sort > "$T/i_ref"
+if ! apk list --installed > "$T/i_now.raw" 2> "$OUT/apk-installed-now.log"; then
+    echo "Required command failed: apk list --installed" >&2
+    echo "Review $OUT/apk-installed-now.log" >&2
+    exit 1
+fi
+if ! apk --root "$REF" list --installed > "$T/i_ref.raw" 2> "$OUT/apk-installed-factory.log"; then
+    echo "Required command failed: apk --root $REF list --installed" >&2
+    echo "Review $OUT/apk-installed-factory.log" >&2
+    exit 1
+fi
+if [ ! -s "$T/i_now.raw" ] || [ ! -s "$T/i_ref.raw" ]; then
+    echo "Cannot compare installed packages: APK returned an empty package list." >&2
+    echo "Review $OUT/apk-installed-now.log and $OUT/apk-installed-factory.log" >&2
+    exit 1
+fi
+sed 's/ .*//' "$T/i_now.raw" | sort > "$T/i_now"
+sed 's/ .*//' "$T/i_ref.raw" | sort > "$T/i_ref"
 if [ -s "$T/i_now" ] && [ -s "$T/i_ref" ]; then
     cp "$T/i_now" "$OUT/installed.now"
     cp "$T/i_ref" "$OUT/installed.factory"
