@@ -1,0 +1,17 @@
+# roles/router_tailscale/defaults/main.yml
+---
+router_tailscale_enabled: false
+router_tailscale_port: 41641
+router_tailscale_state_file: /etc/tailscale/tailscaled.state
+router_tailscale_fw_mode: nftables
+router_tailscale_auth_key: ""
+router_tailscale_cli: tailscale
+
+router_tailscale_accept_dns: null
+router_tailscale_accept_routes: null
+router_tailscale_advertise_routes: null
+router_tailscale_advertise_exit_node: null
+router_tailscale_hostname: null
+router_tailscale_ssh: null
+router_tailscale_status_retries: 10
+router_tailscale_status_delay: 3

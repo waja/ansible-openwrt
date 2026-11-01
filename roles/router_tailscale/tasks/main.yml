@@ -1,0 +1,340 @@
+# roles/router_tailscale/tasks/main.yml
+---
+- name: Validate Tailscale daemon settings
+  ansible.builtin.assert:
+    that:
+      - router_tailscale_port | string is match('^[0-9]+$')
+      - router_tailscale_port | int >= 1
+      - router_tailscale_port | int <= 65535
+      - router_tailscale_state_file is string
+      - router_tailscale_state_file is match('^/\\S+$')
+      - router_tailscale_fw_mode in ['nftables', 'iptables']
+      - router_tailscale_auth_key is string
+      - router_tailscale_auth_key | trim == router_tailscale_auth_key
+      - "'\\n' not in router_tailscale_auth_key"
+      - "'\\r' not in router_tailscale_auth_key"
+      - >-
+        router_tailscale_accept_dns is none
+        or router_tailscale_accept_dns is boolean
+      - >-
+        router_tailscale_accept_routes is none
+        or router_tailscale_accept_routes is boolean
+      - >-
+        router_tailscale_advertise_exit_node is none
+        or router_tailscale_advertise_exit_node is boolean
+      - router_tailscale_advertise_routes is none or
+        (
+          router_tailscale_advertise_routes is sequence
+          and router_tailscale_advertise_routes is not string
+          and (
+            router_tailscale_advertise_routes
+            | select('string') | list | length
+          ) == router_tailscale_advertise_routes | length
+        )
+      - router_tailscale_hostname is none or
+        (
+          router_tailscale_hostname is string
+          and router_tailscale_hostname | length > 0
+          and router_tailscale_hostname | trim == router_tailscale_hostname
+        )
+      - router_tailscale_ssh is none or router_tailscale_ssh is boolean
+    fail_msg: >-
+      Tailscale settings must use a valid UDP port, an absolute state-file
+      path, nftables or iptables, and correctly typed optional preferences.
+
+# Drain notifications from earlier roles before notifying the
+# Tailscale-specific handler. This keeps the following flush scoped to
+# the daemon whose UCI configuration was just committed.
+- name: Apply pending handlers before Tailscale daemon configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Configure Tailscale daemon settings in one UCI transaction
+  community.openwrt.uci:
+    autocommit: true
+    operations:
+      - command: set
+        key: tailscale.settings.port
+        value: "{{ router_tailscale_port | string }}"
+      - command: set
+        key: tailscale.settings.state_file
+        value: "{{ router_tailscale_state_file }}"
+      - command: set
+        key: tailscale.settings.fw_mode
+        value: "{{ router_tailscale_fw_mode }}"
+  register: router_tailscale_uci_result
+  notify: Restart Tailscale daemon
+
+- name: Apply Tailscale daemon configuration before using its CLI
+  ansible.builtin.meta: flush_handlers
+
+
+- name: Build declarative Tailscale node preference arguments
+  ansible.builtin.set_fact:
+    router_tailscale_set_args: >-
+      {{
+        (
+          [
+            '--accept-dns='
+            ~ (router_tailscale_accept_dns | string | lower)
+          ]
+          if router_tailscale_accept_dns is not none else []
+        )
+        + (
+          [
+            '--accept-routes='
+            ~ (router_tailscale_accept_routes | string | lower)
+          ]
+          if router_tailscale_accept_routes is not none else []
+        )
+        + (
+          [
+            '--advertise-routes='
+            ~ (router_tailscale_advertise_routes | join(','))
+          ]
+          if router_tailscale_advertise_routes is not none else []
+        )
+        + (
+          [
+            '--advertise-exit-node='
+            ~ (router_tailscale_advertise_exit_node | string | lower)
+          ]
+          if router_tailscale_advertise_exit_node is not none else []
+        )
+        + (
+          ['--hostname=' ~ router_tailscale_hostname]
+          if router_tailscale_hostname is not none else []
+        )
+        + (
+          [
+            '--ssh='
+            ~ (router_tailscale_ssh | string | lower)
+          ]
+          if router_tailscale_ssh is not none else []
+        )
+      }}
+  changed_when: false
+
+- name: Read Tailscale backend status when authentication or preferences are set
+  when:
+    - router_tailscale_auth_key | length > 0
+      or router_tailscale_set_args | length > 0
+  block:
+    - name: Query Tailscale backend status
+      ansible.builtin.raw: "{{ router_tailscale_cli | quote }} status --json"
+      register: router_tailscale_status
+      changed_when: false
+      failed_when: false
+      retries: "{{ router_tailscale_status_retries }}"
+      delay: "{{ router_tailscale_status_delay }}"
+      until: router_tailscale_status.rc == 0
+  rescue:
+    - name: Report unavailable Tailscale status
+      ansible.builtin.fail:
+        msg: >-
+          Tailscale status is unavailable. Check that tailscaled is running
+          and inspect the Tailscale daemon logs before retrying.
+
+- name: Require the Tailscale daemon status command to succeed
+  ansible.builtin.assert:
+    that:
+      - router_tailscale_status.rc == 0
+    fail_msg: >-
+      Tailscale status is unavailable. Check that tailscaled is running and
+      inspect the Tailscale daemon logs before retrying.
+  when:
+    - router_tailscale_auth_key | length > 0
+      or router_tailscale_set_args | length > 0
+
+- name: Parse the initial Tailscale status response
+  when:
+    - router_tailscale_auth_key | length > 0
+      or router_tailscale_set_args | length > 0
+  block:
+    - name: Decode the Tailscale status JSON
+      ansible.builtin.set_fact:
+        router_tailscale_status_json: >-
+          {{ router_tailscale_status.stdout | from_json }}
+      changed_when: false
+  rescue:
+    - name: Reject invalid Tailscale status JSON
+      ansible.builtin.fail:
+        msg: >-
+          Tailscale status --json returned invalid JSON. Check the installed
+          Tailscale CLI version and daemon output; no configuration was applied.
+
+- name: Validate the Tailscale status response structure
+  ansible.builtin.assert:
+    that:
+      - router_tailscale_status_json is mapping
+      - "'BackendState' in router_tailscale_status_json"
+      - router_tailscale_status_json.BackendState is string
+    fail_msg: >-
+      Tailscale status --json did not contain a string BackendState field.
+      The CLI response is incompatible with the role's supported contract.
+  when:
+    - router_tailscale_auth_key | length > 0
+      or router_tailscale_set_args | length > 0
+
+- name: Store the initial Tailscale backend state
+  ansible.builtin.set_fact:
+    router_tailscale_backend_state: >-
+      {{ router_tailscale_status_json.BackendState }}
+  changed_when: false
+  when:
+    - router_tailscale_auth_key | length > 0
+      or router_tailscale_set_args | length > 0
+
+- name: Reject unsupported Tailscale backend states
+  ansible.builtin.assert:
+    that:
+      - router_tailscale_backend_state in
+        ['Running', 'NeedsLogin', 'NoState', 'NeedsMachineAuth']
+    fail_msg: >-
+      Tailscale reported unsupported backend state
+      '{{ router_tailscale_backend_state }}'. The role will not guess how to
+      recover an unknown or transitional state. Check daemon health and the
+      installed CLI version before retrying.
+  when:
+    - router_tailscale_auth_key | length > 0
+      or router_tailscale_set_args | length > 0
+
+- name: Reject pending Tailscale device approval before changes
+  ansible.builtin.assert:
+    that:
+      - router_tailscale_backend_state != 'NeedsMachineAuth'
+    fail_msg: >-
+      This Tailscale device is waiting for tailnet administrator approval.
+      Approve the device in the Tailscale admin console before provisioning.
+  when:
+    - router_tailscale_auth_key | length > 0
+      or router_tailscale_set_args | length > 0
+    - router_tailscale_backend_state == 'NeedsMachineAuth'
+
+- name: Authenticate Tailscale non-interactively when not already connected
+  when:
+    - router_tailscale_auth_key | length > 0
+    - router_tailscale_backend_state in ['NeedsLogin', 'NoState']
+  block:
+    - name: Stage the Tailscale auth key in a protected temporary file
+      community.openwrt.copy:
+        content: "{{ router_tailscale_auth_key }}"
+        dest: /tmp/ansible-tailscale-auth-key
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: Authenticate Tailscale using the protected auth key file
+      ansible.builtin.raw: >-
+        {{ router_tailscale_cli | quote }} up
+        --auth-key=file:/tmp/ansible-tailscale-auth-key --timeout=120s
+      no_log: true
+      changed_when: true
+
+    - name: Verify Tailscale authentication completed
+      block:
+        - name: Query Tailscale status after enrollment
+          ansible.builtin.raw: >-
+            {{ router_tailscale_cli | quote }} status --json
+          register: router_tailscale_authenticated_status
+          changed_when: false
+          failed_when: false
+          retries: "{{ router_tailscale_status_retries }}"
+          delay: "{{ router_tailscale_status_delay }}"
+          until: router_tailscale_authenticated_status.rc == 0
+      rescue:
+        - name: Report unavailable status after enrollment
+          ansible.builtin.fail:
+            msg: >-
+              Tailscale enrollment returned, but daemon status is unavailable.
+              Check the daemon logs and tailnet connectivity.
+
+    - name: Require the post-enrollment status command to succeed
+      ansible.builtin.assert:
+        that:
+          - router_tailscale_authenticated_status.rc == 0
+        fail_msg: >-
+          Tailscale enrollment returned, but the daemon status is unavailable.
+          Check the daemon logs and tailnet connectivity.
+
+    - name: Parse the post-enrollment Tailscale status response
+      block:
+        - name: Decode the post-enrollment status JSON
+          ansible.builtin.set_fact:
+            router_tailscale_authenticated_status_json: >-
+              {{ router_tailscale_authenticated_status.stdout | from_json }}
+          changed_when: false
+      rescue:
+        - name: Reject invalid post-enrollment status JSON
+          ansible.builtin.fail:
+            msg: >-
+              Tailscale returned invalid JSON after enrollment. Check the CLI
+              and daemon versions; the device state could not be verified.
+
+    - name: Validate the post-enrollment status response
+      ansible.builtin.assert:
+        that:
+          - router_tailscale_authenticated_status_json is mapping
+          - "'BackendState' in router_tailscale_authenticated_status_json"
+          - router_tailscale_authenticated_status_json.BackendState is string
+        fail_msg: >-
+          Tailscale returned an incompatible status response after enrollment;
+          the BackendState field is missing or invalid.
+
+    - name: Reject unsupported post-enrollment backend states
+      ansible.builtin.assert:
+        that:
+          - router_tailscale_authenticated_status_json.BackendState in
+            ['Running', 'NeedsLogin', 'NoState', 'NeedsMachineAuth']
+        fail_msg: >-
+          Tailscale reported unsupported backend state
+          '{{ router_tailscale_authenticated_status_json.BackendState }}'
+          after enrollment.
+
+    - name: Reject enrollment awaiting device approval
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_tailscale_authenticated_status_json.BackendState
+            != 'NeedsMachineAuth'
+        fail_msg: >-
+          This Tailscale device is waiting for tailnet administrator approval.
+          Approve the device in the Tailscale admin console before provisioning.
+
+    - name: Assert Tailscale authentication reached the running state
+      ansible.builtin.assert:
+        that:
+          - router_tailscale_authenticated_status_json.BackendState == 'Running'
+        fail_msg: >-
+          Tailscale authentication did not reach the Running state. Check the
+          auth key, tailnet device-approval policy, and daemon logs.
+  always:
+    - name: Remove the temporary Tailscale auth key file
+      community.openwrt.file:
+        path: /tmp/ansible-tailscale-auth-key
+        state: absent
+
+- name: Store the verified post-enrollment backend state
+  ansible.builtin.set_fact:
+    router_tailscale_backend_state: >-
+      {{ router_tailscale_authenticated_status_json.BackendState }}
+  changed_when: false
+  when:
+    - router_tailscale_auth_key | length > 0
+    - router_tailscale_backend_state in ['NeedsLogin', 'NoState']
+
+- name: Require an authenticated node before applying Tailscale preferences
+  ansible.builtin.assert:
+    that:
+      - router_tailscale_backend_state == 'Running'
+    fail_msg: >-
+      Tailscale node preferences can only be applied to an authenticated,
+      running node. Supply an auth key or complete enrollment manually.
+  when: router_tailscale_set_args | length > 0
+
+- name: Apply declarative Tailscale node preferences
+  ansible.builtin.raw: >-
+    {{ router_tailscale_cli | quote }} set
+    {{ router_tailscale_set_args | map('quote') | join(' ') }}
+  changed_when: false
+  when: router_tailscale_set_args | length > 0

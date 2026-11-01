@@ -17,7 +17,7 @@ inventory and customize variables there.
 
 - `playbooks/site.yml` runs the standard configuration:
   `community.openwrt.init`, `router_packages`, `router_base`, and
-  `router_network`, and the opt-in `router_snmpd` role.
+  `router_network`, and the opt-in SNMP, LibreNMS, and Tailscale roles.
 - `playbooks/audit_packages.yml` compares the installed packages on each
   router against a saved package-list baseline. It reports differences but
   does not install or remove packages to reconcile them.
@@ -35,6 +35,7 @@ to the individual [system](docs/roles/router_system.md),
 [base services](docs/roles/router_base.md),
 [SNMP](docs/roles/router_snmpd.md),
 [LibreNMS](docs/roles/router_librenms.md),
+[Tailscale](docs/roles/router_tailscale.md),
 [package audit](docs/roles/router_package_audit.md), and
 [storage](docs/roles/router_storage.md) guides.
 
@@ -221,6 +222,7 @@ See the [router configuration overview](docs/configuration.md) for playbook usag
 - `roles/router_network/` — IPv4 interface addressing and per-interface DHCP server settings
 - `roles/router_snmpd/` — optional SNMP community configuration
 - `roles/router_librenms/` — optional LibreNMS wireless sensor integration
+- `roles/router_tailscale/` — optional Tailscale daemon and tailnet setup
 - `roles/router_package_audit/` — package baseline comparison
 - `roles/router_storage/` — root storage detection and optional expansion
 - `requirements.yml` — pinned Ansible role and collection dependencies

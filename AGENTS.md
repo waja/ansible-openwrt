@@ -41,6 +41,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   while retaining the package's read-only access mappings
 - `roles/router_librenms/` – deploys pinned LibreNMS scripts and manages
   role-owned SNMP extend entries and sysupgrade persistence
+- `roles/router_tailscale/` – configures the Tailscale daemon and optional
+  non-interactive tailnet authentication
 - `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/router_storage/` – read-only root storage detection and opt-in expansion
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
