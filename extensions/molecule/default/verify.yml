@@ -1076,6 +1076,20 @@
         that:
           - not router_firewall_apply_result.changed
 
+    - name: Reapply the same declarative firewall rule configuration again
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            enabled: false
+
+    - name: Verify repeated declarative firewall rule application is idempotent
+      ansible.builtin.assert:
+        that:
+          - not router_firewall_apply_result.changed
+
     - name: Remove the declarative firewall rule
       ansible.builtin.include_role:
         name: router_firewall
@@ -1334,6 +1348,58 @@
             in router_firewall_omitted_name_show.result
           - >-
             router_firewall_omitted_name_show.result
+            is search("firewall\\.@rule\\[[0-9]+\\]\\.target='DROP'")
+
+    - name: Create a named firewall rule and a matching anonymous rule
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: section
+            config: firewall
+            type: rule
+            name: molecule_named_precedence
+            value:
+              name: molecule_named_precedence
+              src: guest_test
+              target: DROP
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_named_precedence
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Update the named firewall rule ahead of a matching anonymous rule
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_named_precedence:
+            name: molecule_named_precedence
+            target: ACCEPT
+
+    - name: Read named and anonymous firewall rule precedence results
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_named_precedence_show
+      changed_when: false
+
+    - name: Assert named firewall section takes precedence over anonymous match
+      ansible.builtin.assert:
+        that:
+          - >-
+            "firewall.molecule_named_precedence.target='ACCEPT'"
+            in router_firewall_named_precedence_show.result
+          - >-
+            router_firewall_named_precedence_show.result
             is search("firewall\\.@rule\\[[0-9]+\\]\\.target='DROP'")
 
     - name: Create firewall rules in a deliberately non-alphabetical order
