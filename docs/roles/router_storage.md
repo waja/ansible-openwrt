@@ -52,9 +52,9 @@ When enabled, the role:
 3. Installs the reviewed, repository-versioned resize scripts under
    `/etc/uci-defaults/` and persists both paths in `/etc/sysupgrade.conf`.
 4. Clears stale resize markers if the virtual disk has grown again.
-6. Starts the appropriate partition/filesystem expansion stage.
-7. Waits for SSH to return after the required reboots.
-8. Re-detects the storage layout and requires the final
+5. Starts the appropriate partition/filesystem expansion stage.
+6. Waits for SSH to return after the required reboots.
+7. Re-detects the storage layout and requires the final
    not_required state.
 
 Expansion does not depend on a runtime download from the OpenWrt Wiki.
