@@ -418,7 +418,7 @@ find "$UPPER" -type f | rel | sort | while IFS= read -r f; do
             echo "$f" >> "$T/ignored"; continue ;;
         etc/config/*)
             echo "$f" >> "$T/uci"; continue ;;
-        etc/shadow|etc/passwd|etc/group|etc/dropbear/*_host_key|\
+        etc/shadow|etc/passwd|etc/group|etc/gshadow|etc/dropbear/*_host_key|\
         etc/ssh/*_key|etc/ssh/*_key.*|etc/uhttpd.key|etc/uhttpd.*.key|\
         etc/ssl/private/*|etc/pki/private/*|etc/wireguard/*|\
         etc/openvpn/*.key|etc/ipsec.secrets|etc/swanctl/private/*|\
@@ -648,13 +648,16 @@ echo "-- Users/groups differing from factory (no hashes in passwd/group;"
 echo "   accounts created by installed packages show up here as well):"
 for f in etc/passwd etc/group; do
     if [ -e "$REF/$f" ]; then
-        if [ "$f" = etc/passwd ]; then
-            diff "$REF/$f" "/$f" |
-                sed -E 's/^([<>][^:]*:)[^:]*:/\1[REDACTED]:/' |
-                grep '^[<>]' | sed 's|^|   |'
-        else
-            diff "$REF/$f" "/$f" | grep '^[<>]' | sed 's|^|   |'
-        fi
+        case "$f" in
+            etc/passwd|etc/group|etc/gshadow)
+                diff "$REF/$f" "/$f" |
+                    sed -E 's/^([<>][^:]*:)[^:]*:/\1[REDACTED]:/' |
+                    grep '^[<>]' | sed 's|^|   |'
+                ;;
+            *)
+                diff "$REF/$f" "/$f" | grep '^[<>]' | sed 's|^|   |'
+                ;;
+        esac
     fi
 done > "$T/pg"
 if [ -s "$T/pg" ]; then cat "$T/pg"; else echo "   (identical)"; fi
