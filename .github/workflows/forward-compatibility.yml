@@ -125,6 +125,160 @@ jobs:
           MOLECULE_GLOB: >-
             ${{ github.workspace }}/extensions/molecule/*/molecule.yml
 
+      - name: Record matrix result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          CANDIDATE_AVAILABLE: ${{ steps.candidate.outputs.available }}
+          CORE_VERSION: ${{ steps.candidate.outputs.version }}
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          OPENWRT_VERSION: ${{ matrix.openwrt_version }}
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          mkdir -p matrix-results
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          job_status = os.environ["JOB_STATUS"]
+          candidate_available = os.environ.get("CANDIDATE_AVAILABLE", "")
+          if job_status == "success" and candidate_available == "false":
+              result = "SKIPPED"
+          elif job_status == "success":
+              result = "PASS"
+          elif job_status == "cancelled":
+              result = "CANCELLED"
+          else:
+              result = "FAIL"
+
+          data = {
+              "python": os.environ["PYTHON_VERSION"],
+              "openwrt": os.environ["OPENWRT_VERSION"],
+              "scenario": os.environ["SCENARIO"],
+              "ansible_core": os.environ.get("CORE_VERSION", ""),
+              "status": result,
+          }
+          filename = (
+              f"matrix-{data['python']}-{data['openwrt']}-"
+              f"{data['scenario']}.json"
+          )
+          Path("matrix-results", filename).write_text(
+              json.dumps(data) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Upload matrix result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ansible-core-matrix-${{ matrix.python-version }}-${{ matrix.openwrt_version }}-${{ matrix.scenario }}
+          path: matrix-results/*.json
+          if-no-files-found: error
+          retention-days: 1
+
+  molecule-prerelease-summary:
+    name: Ansible Core pre-release summary
+    needs:
+      - openwrt-versions
+      - molecule-prerelease
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download matrix results
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: ansible-core-matrix-*
+          path: matrix-results
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Publish matrix summary
+        if: always()
+        env:
+          MATRIX_RESULT: ${{ needs.molecule-prerelease.result }}
+          OPENWRT_VERSIONS: ${{ needs.openwrt-versions.outputs.versions }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          versions = json.loads(os.environ.get("OPENWRT_VERSIONS") or "[]")
+          results = {}
+          for path in Path("matrix-results").glob("*.json"):
+              data = json.loads(path.read_text(encoding="utf-8"))
+              key = (data["python"], data["openwrt"], data["scenario"])
+              results[key] = data
+
+          scenarios = ("default", "network-static", "network-dhcp")
+          rows = []
+          for python_version in ("3.14", "3.15"):
+              for openwrt_version in versions:
+                  for scenario in scenarios:
+                      data = results.get(
+                          (python_version, openwrt_version, scenario), {}
+                      )
+                      rows.append({
+                          "python": python_version,
+                          "openwrt": openwrt_version,
+                          "scenario": scenario,
+                          "ansible_core": data.get("ansible_core") or "—",
+                          "status": data.get("status", "NO RESULT"),
+                      })
+
+          failed = [
+              row for row in rows
+              if row["status"] not in ("PASS", "SKIPPED")
+          ]
+          matrix_result = os.environ.get("MATRIX_RESULT", "")
+          if not versions or matrix_result != "success" or failed:
+              overall = "FAIL"
+          elif rows and all(row["status"] == "SKIPPED" for row in rows):
+              overall = "SKIPPED"
+          else:
+              overall = "PASS"
+
+          lines = [
+              "## Ansible Core pre-release matrix",
+              "",
+              f"**Overall result: {overall}**",
+              "",
+              "| Python | OpenWrt | Scenario | Ansible Core | Result |",
+              "|---|---|---|---|---|",
+          ]
+          for row in rows:
+              lines.append(
+                  "| {python} | {openwrt} | {scenario} | {ansible_core} "
+                  "| {status} |".format(**row)
+              )
+          counts = {
+              status: sum(row["status"] == status for row in rows)
+              for status in ("PASS", "FAIL", "CANCELLED", "SKIPPED", "NO RESULT")
+          }
+          lines.extend([
+              "",
+              "**Totals:** " + ", ".join(
+                  f"{status}: {count}" for status, count in counts.items()
+                  if count
+              ),
+              "",
+              "A missing result is reported as NO RESULT; failed or "
+              "cancelled matrix jobs fail this summary.",
+              "",
+          ])
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("\n".join(lines))
+
+          print("\n".join(lines))
+          if overall == "FAIL":
+              raise SystemExit("One or more matrix jobs failed or have no result.")
+          PY
+
   ansible-lint-prerelease:
     name: ansible-lint pre-release
     runs-on: ubuntu-latest
