@@ -904,7 +904,7 @@
           guest_test:
             input: DROP
 
-    - name: Read firewall configuration after unrelated-section preservation test
+    - name: Read firewall configuration after unrelated-section test
       community.openwrt.uci:
         command: show
         config: firewall
