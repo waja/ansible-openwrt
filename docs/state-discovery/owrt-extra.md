@@ -306,8 +306,14 @@ names (including common password, passphrase, token, API-key, shared-secret,
 authentication and private-key variants), Authorization/Cookie headers,
 URL user-info, and PEM private-key blocks. Feed/repository diffs, APK audit
 findings, and matching shell-history lines use the same display filter.
-Sensitive file locations (for example account databases, SSH/Dropbear keys,
-TLS private keys, WireGuard keys and VPN secrets) are reported by path only.
+Sensitive file locations (for example account databases, SSH/Dropbear private
+keys, TLS private-key directories, WireGuard keys and VPN shared secrets) are
+reported by path only. Public SSH keys and ordinary public certificates are
+not classified as private-key material merely because they are key/certificate
+files. The path classifier is explicit and best-effort; it does not inspect
+file contents or identify arbitrary secrets stored under unexpected names.
+Use `sh /tmp/owrt-extra.sh --is-sensitive-path RELATIVE_PATH` to check the
+script's current path rules.
 
 The filter is deliberately heuristic: it cannot identify every secret,
 especially opaque values under innocuous names, arbitrary binary data,
