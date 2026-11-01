@@ -12,7 +12,7 @@ fail() {
     exit 1
 }
 reset_case() {
-    rm -rf /tmp/owrt-diff /tmp/owrt-extra.lock /tmp/ref
+    rm -rf /tmp/owrt-diff /tmp/owrt-extra.lock /tmp/ref /tmp/owrt-test-factory-failed
 }
 assert_no_run_state() {
     [ ! -e /tmp/owrt-extra.lock ] || fail "lock left behind"
@@ -96,7 +96,8 @@ EOF_MOUNT
 real_grep=$(command -v grep)
 cat > "$stub/grep" <<EOF_GREP
 #!/bin/sh
-if [ "\${1:-}" = -Fq ] &&
+if [ -f /tmp/owrt-test-factory-failed ] &&
+   [ "\${1:-}" = -Fq ] &&
    [ "\${2:-}" = " /tmp/ref/merged " ] &&
    [ "\${3:-}" = /proc/mounts ]; then
     exit 0
@@ -115,6 +116,7 @@ cat > "$stub/chroot" <<'EOF_CHROOT'
 #!/bin/sh
 case "${OWRT_TEST_FACTORY_FAIL:-}" in
     config-generate)
+        : > /tmp/owrt-test-factory-failed
         echo "FAIL: /bin/config_generate (exit 41)"
         exit 1
         ;;
