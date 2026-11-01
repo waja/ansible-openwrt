@@ -315,7 +315,6 @@ for release versions, image tags, container names, paths, and CI matrix values.
   unnecessary restart on the next run. Do not use `raw` as a general
   replacement for available modules.
 
-
 ### UCI identifiers and firewall zone names
 
 Keep UCI section identifiers separate from firewall object names:
@@ -332,6 +331,7 @@ When writing tests for validation unrelated to naming (for example, option
 types or values), use valid UCI section IDs and valid firewall zone names.
 Otherwise, an earlier naming check may reject the fixture before the test
 reaches the validation path it is intended to exercise.
+
 ### Input validation
 
 - Validate values when they have a defined set or range of allowed inputs and
