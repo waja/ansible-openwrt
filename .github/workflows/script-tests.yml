@@ -284,7 +284,8 @@ jobs:
               for secret in api-token-secret client-secret-value \
                 client-key-secret encryption-key-secret signing-key-secret \
                 shared-key-secret bearer-token-secret session-cookie-secret \
-                url-password-secret private-key-line-one private-key-line-two; do
+                url-password-secret private-key-line-one \
+                private-key-line-two; do
                 if grep -Fq "$secret" /tmp/sensitive-text.redacted; then
                   echo "Sensitive text leaked: $secret" >&2
                   exit 1
@@ -315,7 +316,8 @@ jobs:
                 usr/share/ca-certificates/root.pem.pub; do
                 if sh /tmp/owrt-extra-test.sh \
                   --is-sensitive-path "$sensitive_path"; then
-                  echo "Non-secret path classified as sensitive: $sensitive_path" >&2
+                  echo "Non-secret path classified as sensitive:" \
+                    "$sensitive_path" >&2
                   exit 1
                 fi
               done
