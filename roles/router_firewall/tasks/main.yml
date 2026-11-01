@@ -181,6 +181,7 @@
   loop: "{{ router_firewall_zones | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
+  when: item.value.state | default("present") == "present"
   changed_when: false
 
 - name: Validate desired firewall zone names are unique
@@ -466,6 +467,9 @@
     loop_var: router_firewall_zone
     index_var: router_firewall_zone_index
     label: "{{ router_firewall_zone.key }}"
+
+- name: Add declarative firewall rule operations
+  ansible.builtin.include_tasks: manage_rules.yml
 
 - name: Add optional additional Dropbear WAN firewall rule
   ansible.builtin.set_fact:

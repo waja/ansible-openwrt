@@ -7,6 +7,9 @@ router_firewall_output: ACCEPT
 # Declarative firewall zones keyed by their desired UCI section IDs.
 router_firewall_zones: {}
 
+# Declarative firewall rules keyed by their desired UCI section IDs.
+router_firewall_rules: {}
+
 router_firewall_dropbear_extra_ports: []
 router_firewall_dropbear_wan_zone: ""
 

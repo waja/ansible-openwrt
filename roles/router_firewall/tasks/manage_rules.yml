@@ -1,0 +1,337 @@
+# roles/router_firewall/tasks/manage_rules.yml
+---
+- name: Validate firewall rule configuration
+  ansible.builtin.assert:
+    that:
+      - router_firewall_rules is mapping
+    fail_msg: router_firewall_rules must be a mapping of UCI section IDs.
+
+- name: Validate firewall rule definitions
+  ansible.builtin.assert:
+    that:
+      - item.key is string
+      - item.key is match('^[A-Za-z0-9_]+$')
+      - item.value is mapping
+      - item.value.state | default('present') in ['present', 'absent']
+      - >-
+        item.value.state | default('present') != 'absent' or
+        item.value.keys() | difference(['state', 'name']) | length == 0
+      - >-
+        item.value.keys()
+        | difference([
+            'name', 'state', 'enabled', 'src', 'dest', 'src_ip',
+            'src_ip6', 'src_mac', 'src_port', 'dest_ip', 'dest_ip6',
+            'dest_port', 'proto', 'family', 'target', 'icmp_type',
+            'limit', 'limit_burst', 'log', 'log_limit', 'ipset',
+            'mark', 'set_mark', 'set_xmark', 'extra'
+          ])
+        | length == 0
+      - >-
+        (item.value.name | default(item.key)) is string and
+        (item.value.name | default(item.key)) | length > 0
+      - >-
+        item.value.enabled is not defined or item.value.enabled is none or
+        item.value.enabled is boolean
+      - >-
+        item.value.log is not defined or item.value.log is none or
+        item.value.log is boolean
+      - >-
+        item.value.limit_burst is not defined or
+        item.value.limit_burst is none or
+        (item.value.limit_burst is integer and
+         item.value.limit_burst is not boolean and
+         item.value.limit_burst > 0)
+      - >-
+        item.value.family is not defined or item.value.family is none or
+        item.value.family in ['ipv4', 'ipv6', 'any']
+      - >-
+        item.value.target is not defined or item.value.target is none or
+        item.value.target in ['ACCEPT', 'REJECT', 'DROP', 'NOTRACK']
+      - >-
+        item.value.proto is not defined or item.value.proto is none or
+        (item.value.proto is string and item.value.proto | length > 0) or
+        (item.value.proto is sequence and item.value.proto is not string
+         and item.value.proto is not mapping
+         and item.value.proto | length > 0
+         and item.value.proto | select('string') | list | length
+             == item.value.proto | length)
+      - >-
+        item.value.icmp_type is not defined or item.value.icmp_type is none or
+        (item.value.icmp_type is sequence and
+         item.value.icmp_type is not string and
+         item.value.icmp_type is not mapping and
+         item.value.icmp_type | length > 0 and
+         item.value.icmp_type | select('string') | list | length
+           == item.value.icmp_type | length)
+      - >-
+        item.value.keys()
+        | difference([
+            'name', 'state', 'enabled', 'log', 'limit_burst',
+            'family', 'target', 'proto', 'icmp_type'
+          ])
+        | map('extract', item.value)
+        | reject('equalto', none)
+        | select('string')
+        | list
+        | length
+        ==
+        item.value.keys()
+        | difference([
+            'name', 'state', 'enabled', 'log', 'limit_burst',
+            'family', 'target', 'proto', 'icmp_type'
+          ])
+        | map('extract', item.value)
+        | reject('equalto', none)
+        | list
+        | length
+    fail_msg: >-
+      Invalid firewall rule '{{ item.key }}'. Use documented rule options,
+      scalar strings, non-empty lists for proto/icmp_type, booleans for
+      enabled/log, a positive integer limit_burst, and supported family
+      and target values. Empty lists are invalid; use null to remove an
+      option. state: absent accepts only name and state.
+  loop: "{{ router_firewall_rules | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Initialize desired firewall rule names
+  ansible.builtin.set_fact:
+    router_firewall_desired_rule_names: []
+  changed_when: false
+
+- name: Collect desired firewall rule names
+  ansible.builtin.set_fact:
+    router_firewall_desired_rule_names: >-
+      {{
+        router_firewall_desired_rule_names
+        + [item.value.name | default(item.key)]
+      }}
+  loop: "{{ router_firewall_rules | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.value.state | default('present') == 'present'
+  changed_when: false
+
+- name: Validate desired firewall rule names are unique
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_desired_rule_names | unique | list | length
+        == router_firewall_desired_rule_names | length
+    fail_msg: Firewall rule names must be unique.
+
+- name: Initialize firewall zone names declared for removal
+  ansible.builtin.set_fact:
+    router_firewall_zone_names_to_remove: []
+  changed_when: false
+
+- name: Collect firewall zone names declared for removal
+  ansible.builtin.set_fact:
+    router_firewall_zone_names_to_remove: >-
+      {{
+        router_firewall_zone_names_to_remove
+        + [item.value.name | default(item.key)]
+      }}
+  loop: "{{ router_firewall_zones | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.value.state | default('present') == 'absent'
+  changed_when: false
+
+- name: Collect existing firewall zone names
+  ansible.builtin.set_fact:
+    router_firewall_existing_zone_names: >-
+      {{
+        router_firewall_uci_show.result
+        | regex_findall(
+            "(?ms)^firewall\\.[^.]+=zone\\n"
+            ~ "(?:(?!^firewall\\.[^.]+=).)*?"
+            ~ "^firewall\\.[^.]+\\.name='([^']+)'$"
+          )
+      }}
+  changed_when: false
+
+- name: Validate firewall rule zone references
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.value.src is not defined or item.value.src is none or
+        item.value.src in (router_firewall_existing_zone_names | difference(router_firewall_zone_names_to_remove)) or
+        item.value.src in router_firewall_desired_zone_names
+      - >-
+        item.value.dest is not defined or item.value.dest is none or
+        item.value.dest in (router_firewall_existing_zone_names | difference(router_firewall_zone_names_to_remove)) or
+        item.value.dest in router_firewall_desired_zone_names
+    fail_msg: >-
+      Firewall rule '{{ item.key }}' references an unknown zone. Define the
+      zone in router_firewall_zones or reference an existing zone.
+  loop: "{{ router_firewall_rules | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.value.state | default('present') == 'present'
+
+- name: Check for firewall rules with the desired section ID
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ item.key }}"
+  loop: "{{ router_firewall_rules | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: router_firewall_named_rules
+  changed_when: false
+  failed_when: false
+
+- name: Validate existing named firewall rule sections
+  ansible.builtin.assert:
+    that:
+      - item.result | default('') in ['', 'rule']
+    fail_msg: >-
+      UCI section '{{ item.item.key }}' exists but is not a firewall rule.
+      Choose another section ID or resolve the conflicting section.
+  loop: "{{ router_firewall_named_rules.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+
+- name: Reject rules already assigned to a different named section
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.1.result != '' or
+        (
+          router_firewall_uci_show.result
+          | regex_findall(
+              "(?ms)^firewall\\.([A-Za-z0-9_]+)=rule\\n.*?"
+              ~ "^firewall\\.\\1\\.name='"
+              ~ (item.0.value.name | default(item.0.key))
+              ~ "'$"
+            )
+          | reject('equalto', item.0.key)
+          | list
+          | length == 0
+        )
+    fail_msg: >-
+      Firewall rule '{{ item.0.value.name | default(item.0.key) }}' already
+      exists under a different named UCI section ID. Use its existing
+      section ID rather than creating a duplicate.
+  loop: >-
+    {{
+      router_firewall_rules
+      | dict2items
+      | zip(router_firewall_named_rules.results)
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.key }}"
+
+- name: Find firewall rules with matching names
+  community.openwrt.uci:
+    command: find_all
+    config: firewall
+    type: rule
+    option: name
+    find: "{{ item.value.name | default(item.key) }}"
+  loop: "{{ router_firewall_rules | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: router_firewall_matching_rules
+  changed_when: false
+
+- name: Reject ambiguous anonymous firewall rule matches
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.1.result != '' or
+        (item.2.result_list | default([]) | length <= 1)
+    fail_msg: >-
+      More than one firewall rule matches the name
+      '{{ item.0.value.name | default(item.0.key) }}'. Refusing to adopt
+      an ambiguous anonymous rule; resolve the duplicate sections first.
+  loop: >-
+    {{
+      router_firewall_rules
+      | dict2items
+      | zip(router_firewall_named_rules.results)
+      | zip(router_firewall_matching_rules.results)
+      | map('flatten')
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.key }}"
+
+- name: Add operations for declarative firewall rules
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + (
+          [{
+            'command': 'absent',
+            'key': 'firewall.' ~ item.0.key
+          }]
+          if item.0.value.state | default('present') == 'absent' and
+             item.1.result == 'rule'
+          else (
+            [{
+              'command': 'absent',
+              'config': 'firewall',
+              'type': 'rule',
+              'find': {
+                'name': item.0.value.name | default(item.0.key)
+              }
+            }]
+            if item.0.value.state | default('present') == 'absent' and
+               item.1.result == '' and
+               (item.2.result_list | default([]) | length == 1)
+            else (
+              [{
+                'command': 'section',
+                'config': 'firewall',
+                'type': 'rule',
+                'name': item.0.key,
+                'value': (
+                  item.0.value
+                  | dict2items
+                  | rejectattr('key', 'equalto', 'state')
+                  | rejectattr('value', 'none')
+                  | items2dict
+                  | combine({
+                      'name': item.0.value.name | default(item.0.key)
+                    })
+                )
+              } | combine(
+                (
+                  {
+                    'find': {
+                      'name': item.0.value.name | default(item.0.key)
+                    }
+                  }
+                  if item.1.result == '' and
+                     (item.2.result_list | default([]) | length == 1)
+                  else {}
+                )
+              )]
+              if item.0.value.state | default('present') != 'absent'
+              else []
+            )
+          )
+        )
+      }}
+  loop: >-
+    {{
+      router_firewall_rules
+      | dict2items
+      | zip(router_firewall_named_rules.results)
+      | zip(router_firewall_matching_rules.results)
+      | map('flatten')
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.key }}"
+  changed_when: false
+
+- name: Add operations to remove explicitly null firewall rule options
+  ansible.builtin.include_tasks: add_rule_null_option_operations.yml
+  loop: "{{ router_firewall_rules | dict2items }}"
+  loop_control:
+    loop_var: router_firewall_rule
+    index_var: router_firewall_rule_index
+    label: "{{ router_firewall_rule.key }}"

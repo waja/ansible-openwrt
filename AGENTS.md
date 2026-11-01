@@ -31,8 +31,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `roles/router_system/` – manages hostname, timezone, NTP, logging, ASU
   settings, and optional additional Dropbear listeners
 - `roles/router_firewall/` – manages firewall default policies, declarative
-  zones (including safe adoption and reference-safe removal), and opt-in WAN
-  access for additional Dropbear ports
+  zones and rules (including safe anonymous adoption and reference
+  validation), and opt-in WAN access for additional Dropbear ports
 - `roles/router_packages/` – dynamically installs the default package list
 - `roles/router_base/` – enables core services and removes obsolete config
 - `roles/router_network/` – manages explicitly configured IPv4 interface
