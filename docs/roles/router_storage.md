@@ -51,7 +51,7 @@ When enabled, the role:
    package manager.
 3. Installs the reviewed, repository-versioned resize scripts under
    `/etc/uci-defaults/` and persists both paths in `/etc/sysupgrade.conf`.
-5. Clears stale resize markers if the virtual disk has grown again.
+4. Clears stale resize markers if the virtual disk has grown again.
 6. Starts the appropriate partition/filesystem expansion stage.
 7. Waits for SSH to return after the required reboots.
 8. Re-detects the storage layout and requires the final
