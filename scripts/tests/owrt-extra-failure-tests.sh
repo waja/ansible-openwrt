@@ -216,7 +216,7 @@ else
     cat /tmp/positive-comparisons.log >&2
     fail "positive comparison run failed"
 fi
-grep -Fq "/usr/share/test-package.conf  [test-package-1.0]" \
+grep -Fq "usr/share/test-package.conf  [test-package-1.0]" \
     /tmp/positive-comparisons.log ||
     { cat /tmp/positive-comparisons.log >&2; fail "modified package-owned file not reported"; }
 grep -Fq "enable   testservice" /tmp/positive-comparisons.log ||
