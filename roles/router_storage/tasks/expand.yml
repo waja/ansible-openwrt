@@ -1,5 +1,28 @@
 # roles/router_storage/tasks/expand.yml
 ---
+- name: Download and validate the official OpenWrt root expansion script
+  ansible.builtin.raw: |
+    set -eu
+    if [ ! -s /etc/uci-defaults/70-rootpt-resize ] ||
+      [ ! -s /etc/uci-defaults/80-rootfs-resize ]; then
+      cd /tmp
+      url='https://openwrt.org/_export/code/docs/guide-user/advanced/'
+      url="$url"expand_root?codeblock=3
+      wget -U "" -O router-storage-expand-root.sh "$url"
+      test -s /tmp/router-storage-expand-root.sh
+      if grep -qiE '<!doctype[[:space:]]+html|<html|access denied|anubis' \
+        /tmp/router-storage-expand-root.sh; then
+        echo "ERROR: OpenWrt Wiki returned an HTML access-denied page, not the expansion script." >&2
+        exit 1
+      fi
+      if ! grep -q '70-rootpt-resize' /tmp/router-storage-expand-root.sh ||
+        ! grep -q '80-rootfs-resize' /tmp/router-storage-expand-root.sh; then
+        echo "ERROR: Downloaded content is not the expected official OpenWrt expansion script." >&2
+        exit 1
+      fi
+    fi
+  changed_when: false
+
 - name: Install OpenWrt root expansion prerequisites
   action: "community.openwrt.{{ openwrt_package_manager }}"
   args:
@@ -13,13 +36,6 @@
     changed=0
     if [ ! -s /etc/uci-defaults/70-rootpt-resize ] ||
       [ ! -s /etc/uci-defaults/80-rootfs-resize ]; then
-      cd /tmp
-      url='https://openwrt.org/_export/code/docs/guide-user/advanced/'
-      url="$url"expand_root?codeblock=3
-      wget -U "" -O router-storage-expand-root.sh "$url"
-      test -s /tmp/router-storage-expand-root.sh
-      grep -q '70-rootpt-resize' /tmp/router-storage-expand-root.sh
-      grep -q '80-rootfs-resize' /tmp/router-storage-expand-root.sh
       . /tmp/router-storage-expand-root.sh
       changed=1
     fi
