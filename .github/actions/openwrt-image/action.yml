@@ -1,0 +1,48 @@
+# .github/actions/openwrt-image/action.yml
+---
+name: Configure OpenWrt image
+description: Select, pull, and identify the OpenWrt image for a release version.
+inputs:
+  version:
+    description: OpenWrt release version (for example, 25.12).
+    required: true
+  snapshot:
+    description: Whether to use the moving snapshot image tag.
+    required: false
+    default: 'false'
+outputs:
+  image:
+    description: Full OpenWrt image reference.
+    value: ${{ steps.image.outputs.image }}
+runs:
+  using: composite
+  steps:
+    - name: Select OpenWrt image
+      id: image
+      shell: bash
+      env:
+        OPENWRT_VERSION: ${{ inputs.version }}
+        OPENWRT_SNAPSHOT: ${{ inputs.snapshot }}
+      run: |
+        set -euo pipefail
+        if [[ "$OPENWRT_SNAPSHOT" == "true" ]]; then
+          image="openwrt/rootfs:x86_64-$OPENWRT_VERSION-SNAPSHOT"
+        else
+          image="openwrt/rootfs:x86_64-openwrt-$OPENWRT_VERSION"
+        fi
+        echo "OPENWRT_VERSION=$OPENWRT_VERSION" >> "$GITHUB_ENV"
+        echo "OPENWRT_IMAGE=$image" >> "$GITHUB_ENV"
+        echo "image=$image" >> "$GITHUB_OUTPUT"
+
+    - name: Pull and identify OpenWrt image
+      shell: bash
+      env:
+        OPENWRT_IMAGE: ${{ steps.image.outputs.image }}
+      run: |
+        set -euo pipefail
+        echo "Selected image: $OPENWRT_IMAGE"
+        docker pull "$OPENWRT_IMAGE"
+        docker image inspect "$OPENWRT_IMAGE" \
+          --format 'Image ID: {{.Id}}'
+        docker image inspect "$OPENWRT_IMAGE" \
+          --format 'Repo digests: {{json .RepoDigests}}'

@@ -11,6 +11,24 @@ name: State discovery script tests
       - master
 
 jobs:
+  openwrt-versions:
+    name: Read OpenWrt version matrix
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.versions.outputs.versions }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Read configured OpenWrt versions
+        id: versions
+        run: |
+          set -euo pipefail
+          versions="$(jq -ce \
+            '.versions | select(type == "array" and length > 0)' \
+            .github/openwrt-versions.json)"
+          printf 'versions=%s\n' "$versions" >> "$GITHUB_OUTPUT"
+
   changes:
     name: Detect script changes
     runs-on: ubuntu-latest
@@ -68,7 +86,10 @@ jobs:
           relevant=false
           while IFS= read -r path; do
             case "$path" in
-              scripts/*|.github/workflows/script-tests.yml)
+              scripts/*|\
+                .github/openwrt-versions.json|\
+                .github/actions/openwrt-image/action.yml|\
+                .github/workflows/script-tests.yml)
                 relevant=true
                 break
                 ;;
@@ -78,12 +99,14 @@ jobs:
           echo "script=$relevant" >> "$GITHUB_OUTPUT"
 
   script-tests:
-    name: >-
-      State discovery script smoke test
-      (OpenWrt ${{ matrix.openwrt_version }})
-    needs: changes
+    name: State discovery script smoke test (${{ matrix.openwrt_version }})
+    needs:
+      - changes
+      - openwrt-versions
     if: >-
-      !cancelled() && (
+      !cancelled()
+      && needs['openwrt-versions'].result == 'success'
+      && (
         github.event_name == 'workflow_dispatch'
         || needs.changes.result == 'failure'
         || (
@@ -95,13 +118,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        openwrt_version:
-          - '25.12'
+        openwrt_version: >-
+          ${{ fromJSON(needs['openwrt-versions'].outputs.versions) }}
     steps:
       - name: Check out code
         # v7
         uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Configure and pull OpenWrt image
+        uses: ./.github/actions/openwrt-image
+        with:
+          version: ${{ matrix.openwrt_version }}
+          snapshot: 'false'
 
       - name: Check shell syntax and command-line behavior
         run: |
@@ -110,7 +139,7 @@ jobs:
           docker run --rm \
             -v "$RUNNER_TEMP/owrt-test:/opt/owrt-test:ro" \
             --entrypoint /bin/sh \
-            "openwrt/rootfs:x86_64-openwrt-${{ matrix.openwrt_version }}" \
+            "$OPENWRT_IMAGE" \
             -c '
               set -eu
               cp /opt/owrt-test/owrt-extra.sh /tmp/owrt-extra-test.sh
