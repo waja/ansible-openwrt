@@ -18,6 +18,7 @@
 #        to /tmp/owrt-diff/secrets/ (plaintext!)
 #   -c   Remove the previous report in /tmp/owrt-diff, then exit
 #   --redact-uci-diff FILE  Print a redacted copy of an existing UCI diff
+#   --redact-text FILE      Print a redacted copy of an existing text file
 #   -h   Show this help
 #
 # Runs are serialized with /tmp/owrt-extra.lock. A new run refuses to
@@ -26,56 +27,91 @@
 # inspect local scripts for other side effects. Raw data can contain plaintext
 # secrets. Keep it private and delete it when you are done.
 
-# Redact the display copy only. Raw snapshots and uci.diff remain intact.
-redact_uci_diff() {
+# Redact presentation output only. Source files and collected evidence stay raw.
+redact_text() {
     sed -E 's/\$[0-9A-Za-z]+\$[^ "'"'"';]*/[REDACTED PASSWORD HASH]/g' "$1" |
         awk '
+            function is_secret_name(name, n) {
+                n = tolower(name)
+                gsub(/["\047]/, "", n)
+                if (n == "key" || n == "wep_key" || n == "psk" ||
+                    n == "password" || n == "passwd" || n == "pass" ||
+                    n == "pwd" || n == "secret" || n == "token" ||
+                    n == "privatekey" || n == "private_key" ||
+                    n == "private-key" || n == "privkey" ||
+                    n == "presharedkey" || n == "preshared_key" ||
+                    n == "preshared-key" || n == "shared_secret" ||
+                    n == "client_secret" || n == "client-secret" ||
+                    n == "api_key" || n == "api-key" ||
+                    n == "access_token" || n == "access-token" ||
+                    n == "auth_key" || n == "auth-key" ||
+                    n == "authorization" || n == "credential" ||
+                    n == "credentials" || n == "passphrase")
+                    return 1
+                return n ~ /(^|[-_])(password|passwd|passphrase|secret|token|credential|credentials|private[-_]?key|client[-_]?secret|api[-_]?key|access[-_]?token|auth[-_]?key|shared[-_]?secret)([-_]|$)/
+            }
             {
-                eq = index($0, "=")
-                if (!eq) {
-                    print
+                line = $0
+                if (pem) {
+                    if (line ~ /-----END ([A-Z0-9 ]* )?PRIVATE KEY-----/) {
+                        print "-----END PRIVATE KEY-----"
+                        pem = 0
+                    }
                     next
                 }
-                option = substr($0, 1, eq - 1)
-                sub(/^.*\./, "", option)
-                option = tolower(option)
-                suffix = "password|passwd|passphrase|secret|psk|" \
-                    "preshared[-_]key|presharedkey|private[-_]key|" \
-                    "privatekey|privkey|secret[-_]key|client[-_]key|" \
-                    "encryption[-_]key|signing[-_]key|shared[-_]key|" \
-                    "auth[-_]key|api[-_]key|access[-_]token|token"
-                if (option == "key" || option == "wep_key" ||
-                    option == "psk" || option == "preshared_key" ||
-                    option == "preshared-key" || option == "presharedkey" ||
-                    option == "private_key" || option == "private-key" ||
-                    option == "privatekey" || option == "privkey" || \
-                    option == "secret_key" || option == "secret-key" || \
-                    option == "client_key" || option == "client-key" || \
-                    option == "encryption_key" || option == "encryption-key" || \
-                    option == "signing_key" || option == "signing-key" || \
-                    option == "shared_key" || option == "shared-key" || \
-                    option == "password" || option == "passwd" ||
-                    option == "passphrase" || option == "secret" ||
-                    option == "shared_secret" || option == "auth_key" ||
-                    option == "api_key" || option == "access_token" ||
-                    option == "token" || option ~ ("[-_](" suffix ")$")) {
-                    print substr($0, 1, eq) "\047[REDACTED]\047"
-                } else {
-                    print
+                if (line ~ /-----BEGIN ([A-Z0-9 ]* )?PRIVATE KEY-----/) {
+                    print "[REDACTED PRIVATE KEY]"
+                    pem = 1
+                    next
                 }
+                if (line ~ /^[[:space:]]*(Authorization|Proxy-Authorization):[[:space:]]*/ ||
+                    line ~ /^[[:space:]]*(Cookie|Set-Cookie):[[:space:]]*/) {
+                    sub(/:.*/, ": [REDACTED]", line)
+                    print line
+                    next
+                }
+                if (line ~ /:\/\/[^\/@[:space:]]+:[^\/@[:space:]]+@/) {
+                    sub(/:\/\/[^\/@[:space:]]+:[^\/@[:space:]]+@/, "://[REDACTED]@", line)
+                }
+                eq = index(line, "=")
+                colon = index(line, ":")
+                sep = eq
+                if (!sep || (colon && colon < sep)) sep = colon
+                if (sep) {
+                    name = substr(line, 1, sep - 1)
+                    sub(/^.*[.\/]/, "", name)
+                    sub(/^[[:space:]]*[-<>+ ]*/, "", name)
+                    sub(/[[:space:]]*["\047]*$/, "", name)
+                    if (is_secret_name(name)) {
+                        print substr(line, 1, sep) "[REDACTED]"
+                        next
+                    }
+                }
+                print line
+            }
+            END {
+                if (pem) print "[REDACTED PRIVATE KEY: unterminated PEM block]"
             }
         '
 }
 
-# This read-only mode is also useful for safely reviewing an existing raw diff.
-if [ "${1:-}" = "--redact-uci-diff" ]; then
-    [ "$#" = 2 ] || {
-        echo "Usage: $0 --redact-uci-diff FILE" >&2
-        exit 1
-    }
-    redact_uci_diff "$2"
-    exit $?
-fi
+redact_uci_diff() {
+    redact_text "$1"
+}
+
+# Read-only helper for reviewing existing raw evidence. Neither mode modifies
+# the input file; the output is suitable only for human-readable inspection.
+case "\${1:-}" in
+    --redact-uci-diff|--redact-text)
+        mode=$1
+        [ "$#" = 2 ] || {
+            echo "Usage: $0 $mode FILE" >&2
+            exit 1
+        }
+        redact_text "$2"
+        exit $?
+        ;;
+esac
 
 KEEP=0
 FORCE=0
@@ -382,7 +418,11 @@ find "$UPPER" -type f | rel | sort | while IFS= read -r f; do
             echo "$f" >> "$T/ignored"; continue ;;
         etc/config/*)
             echo "$f" >> "$T/uci"; continue ;;
-        etc/shadow|etc/passwd|etc/group)
+        etc/shadow|etc/passwd|etc/group|etc/dropbear/*_host_key|\
+        etc/ssh/*_key|etc/ssh/*_key.*|etc/uhttpd.key|etc/uhttpd.*.key|\
+        etc/ssl/private/*|etc/pki/private/*|etc/wireguard/*|\
+        etc/openvpn/*.key|etc/ipsec.secrets|etc/swanctl/private/*|\
+        etc/racoon/psk.txt)
             echo "$f" >> "$T/secret"; continue ;;
         etc/apk/world|etc/apk/repositories|etc/apk/repositories.d/*|etc/apk/keys/*)
             continue ;;   # handled separately in section 6
@@ -567,7 +607,7 @@ while IFS= read -r f; do
         esac
     fi
 done < "$T/feedfiles" > "$T/feedout"
-if [ -s "$T/feedout" ]; then cat "$T/feedout"; else echo "   (identical to factory)"; fi
+if [ -s "$T/feedout" ]; then redact_text "$T/feedout"; else echo "   (identical to factory)"; fi
 
 # --- APK system audit ------------------------------------------------------
 print_section "3a. APK system audit findings"
@@ -578,7 +618,7 @@ if command -v apk >/dev/null 2>&1; then
             if [ -s "$APK_AUDIT" ]; then
                 findings=$(wc -l < "$APK_AUDIT" | tr -d ' ')
                 echo "$findings APK system audit finding(s):"
-                cat "$APK_AUDIT"
+                redact_text "$APK_AUDIT"
             else
                 echo "(no differences reported)"
             fi
@@ -586,7 +626,7 @@ if command -v apk >/dev/null 2>&1; then
         else
             rc=$?
             echo "WARNING: 'apk audit --system' exited with status $rc." >&2
-            if [ -s "$APK_AUDIT" ]; then cat "$APK_AUDIT"; fi
+            if [ -s "$APK_AUDIT" ]; then redact_text "$APK_AUDIT"; fi
             echo "Raw output: $APK_AUDIT"
         fi
     else
@@ -602,7 +642,7 @@ fi
 print_section "7. Info only"
 echo "-- UCI files (covered by the UCI diff in section 1):"
 if [ -s "$T/uci" ]; then sed 's|^|   /|' "$T/uci"; else echo "   (none)"; fi
-echo "-- Secrets (paths only, content is NOT printed; keep out of the repo, use a vault):"
+echo "-- Sensitive files (paths only; file contents are not printed):"
 if [ -s "$T/secret" ]; then sed 's|^|   /|' "$T/secret"; else echo "   (none)"; fi
 echo "-- Users/groups differing from factory (no hashes in passwd/group;"
 echo "   accounts created by installed packages show up here as well):"
@@ -651,7 +691,8 @@ fi
 if [ -r /root/.ash_history ]; then
     if grep -q 'fw_setenv' /root/.ash_history; then
         echo "/root/.ash_history contains fw_setenv calls:"
-        grep 'fw_setenv' /root/.ash_history | sed 's|^|   |'
+        grep 'fw_setenv' /root/.ash_history > "$T/fw-history" || :
+        redact_text "$T/fw-history" | sed 's|^|   |'
     else
         echo "No fw_setenv in /root/.ash_history."
     fi
@@ -679,4 +720,4 @@ if [ "$HOSTKEYS" = 1 ]; then
 fi
 
 echo
-echo "Raw data: $OUT/ (factory.show, current.show, uci.diff, packages.yml, ...)"
+echo "Raw data: $OUT/ (contains unredacted sensitive evidence; protect it accordingly)."
