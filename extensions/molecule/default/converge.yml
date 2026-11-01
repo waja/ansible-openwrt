@@ -237,6 +237,7 @@
         router_packages_managed_services:
           - snmpd
           - xinetd
+          - tailscale
         router_packages_list:
           - busybox
           - openwrt-keyring
@@ -246,7 +247,7 @@
         that:
           - >-
             router_packages_install_list ==
-            ['busybox', 'openwrt-keyring', 'snmpd', 'xinetd']
+            ['busybox', 'openwrt-keyring', 'snmpd', 'xinetd', 'tailscale']
 
     - name: Create obsolete SNMP configuration for the cleanup test
       community.openwrt.file:
@@ -405,15 +406,110 @@
             'unrelated=preserved'
             in router_librenms_verification.stdout
 
-    - name: Apply router base role
-      ansible.builtin.include_role:
-        name: router_base
-      vars:
-        router_base_services:
-          - snmpd
-          - xinetd
+    - name: Test Tailscale service integration without starting daemon
+      tags:
+        - molecule-idempotence-notest
+      block:
+        - name: Back up the Tailscale init script
+          ansible.builtin.raw: |
+            cp -p /etc/init.d/tailscale /tmp/ansible-molecule-tailscale-init
+          changed_when: false
 
-    - name: Verify required services are enabled and running
+        - name: Clear previous Tailscale restart test results
+          ansible.builtin.raw: |
+            rm -f /tmp/ansible-molecule-tailscale-restarts
+          changed_when: false
+
+        - name: Prevent the Tailscale daemon from starting in Molecule
+          ansible.builtin.raw: |
+            cat > /etc/init.d/tailscale <<'EOF'
+            #!/bin/sh
+            case "$1" in
+              start)
+                exit 0
+                ;;
+              restart)
+                echo restart >> /tmp/ansible-molecule-tailscale-restarts
+                exit 0
+                ;;
+              *)
+                exec /tmp/ansible-molecule-tailscale-init "$@"
+                ;;
+            esac
+            EOF
+            chmod 0755 /etc/init.d/tailscale
+          changed_when: true
+
+        - name: Apply router base role including Tailscale service
+          ansible.builtin.include_role:
+            name: router_base
+          vars:
+            router_base_services:
+              - snmpd
+              - xinetd
+            router_base_additional_services:
+              - tailscale
+
+        - name: Verify Tailscale service is enabled without a running daemon
+          ansible.builtin.raw: |
+            /etc/init.d/tailscale enabled || exit 1
+            if pidof tailscaled >/dev/null; then
+              echo "Tailscale daemon unexpectedly runs in Molecule"
+              exit 1
+            fi
+          changed_when: false
+
+        - name: Apply Tailscale role without authentication
+          ansible.builtin.include_role:
+            name: router_tailscale
+
+        - name: Verify the Tailscale restart handler ran
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-restarts)" = restart
+          changed_when: false
+
+        - name: Verify Tailscale UCI configuration is effective and persistent
+          ansible.builtin.raw: |
+            test "$(uci -q get tailscale.settings.port)" = 41641 || exit 1
+            test "$(uci -q get tailscale.settings.state_file)" = \
+              /etc/tailscale/tailscaled.state || exit 1
+            test "$(uci -q get tailscale.settings.fw_mode)" = nftables || exit 1
+            test -z "$(uci changes tailscale)" || {
+              echo "Uncommitted changes remain in Tailscale UCI configuration"
+              exit 1
+            }
+            grep -F "option port '41641'" /etc/config/tailscale || exit 1
+            grep -F "option state_file '/etc/tailscale/tailscaled.state'" \
+              /etc/config/tailscale || exit 1
+            grep -F "option fw_mode 'nftables'" /etc/config/tailscale || exit 1
+          changed_when: false
+      always:
+        - name: Restore the original Tailscale init script
+          ansible.builtin.raw: |
+            if [ -f /tmp/ansible-molecule-tailscale-init ]; then
+              cp -p /tmp/ansible-molecule-tailscale-init /etc/init.d/tailscale
+            fi
+          changed_when: false
+
+        - name: Remove the Tailscale init script backup
+          community.openwrt.file:
+            path: /tmp/ansible-molecule-tailscale-init
+            state: absent
+
+        - name: Remove Tailscale restart test results
+          community.openwrt.file:
+            path: /tmp/ansible-molecule-tailscale-restarts
+            state: absent
+    # The unprivileged Docker image has no /dev/net/tun, so it cannot
+    # run tailscaled. Verify the installed package files instead.
+    - name: Verify Tailscale package files are installed
+      ansible.builtin.raw: |
+        test -x /etc/init.d/tailscale || exit 1
+        command -v tailscaled >/dev/null || exit 1
+        command -v tailscale >/dev/null || exit 1
+      changed_when: false
+
+    - name: Verify required base services are enabled and running
       ansible.builtin.raw: |
         for service in snmpd xinetd; do
           /etc/init.d/"$service" enabled || exit 1
@@ -421,6 +517,426 @@
         done
       changed_when: false
 
+    - name: Test Tailscale enrollment with a mocked CLI
+      vars:
+        router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+      tags:
+        - molecule-idempotence-notest
+      block:
+        - name: Create a directory for the mocked Tailscale CLI
+          community.openwrt.file:
+            path: /tmp/ansible-molecule-bin
+            state: directory
+            owner: root
+            group: root
+            mode: '0700'
+
+        - name: Install the mocked Tailscale CLI
+          community.openwrt.copy:
+            content: |
+              #!/bin/sh
+              state=/tmp/ansible-molecule-tailscale-state.json
+              mode=/tmp/ansible-molecule-tailscale-mode
+              count=/tmp/ansible-molecule-tailscale-up-count
+              validation=/tmp/ansible-molecule-tailscale-validation
+              case "$1" in
+                status)
+                  case "$(cat "$mode")" in
+                    invalid-json)
+                      echo 'not-json'
+                      ;;
+                    missing-state)
+                      echo '{}'
+                      ;;
+                    unknown-state)
+                      echo '{"BackendState":"UnexpectedState"}'
+                      ;;
+                    unavailable)
+                      exit 1
+                      ;;
+                    *)
+                      cat "$state"
+                      ;;
+                  esac
+                  ;;
+                set)
+                  printf '%s\n' "$@" > \
+                    /tmp/ansible-molecule-tailscale-preferences
+                  ;;
+                up)
+                  if [ "$#" -eq 1 ]; then
+                    echo up >> /tmp/ansible-molecule-tailscale-up-refresh
+                    exit 0
+                  fi
+                  current=0
+                  if [ -f "$count" ]; then
+                    current="$(cat "$count")"
+                  fi
+                  echo "$((current + 1))" > "$count"
+                  : > "$validation"
+                  if [ "$2" = \
+                    "--auth-key=file:/tmp/ansible-tailscale-auth-key" ]; then
+                    echo args-ok >> "$validation"
+                  else
+                    echo args-failed >> "$validation"
+                  fi
+                  if [ -f /tmp/ansible-tailscale-auth-key ]; then
+                    echo key-present >> "$validation"
+                  else
+                    echo key-missing >> "$validation"
+                  fi
+                  if [ "$(ls -ld /tmp/ansible-tailscale-auth-key \
+                    2>/dev/null | cut -c1-10)" = "-rw-------" ]; then
+                    echo permissions-ok >> "$validation"
+                  else
+                    echo permissions-failed >> "$validation"
+                  fi
+                  if [ "$(cat /tmp/ansible-tailscale-auth-key \
+                    2>/dev/null)" = molecule-test-auth-key ]; then
+                    echo content-ok >> "$validation"
+                  else
+                    echo content-failed >> "$validation"
+                  fi
+                  case "$(cat "$mode")" in
+                    success)
+                      echo '{"BackendState":"Running"}' > "$state"
+                      exit 0
+                      ;;
+                    pending)
+                      echo '{"BackendState":"NeedsMachineAuth"}' > "$state"
+                      exit 0
+                      ;;
+                    fail)
+                      exit 1
+                      ;;
+                  esac
+                  exit 94
+                  ;;
+                *)
+                  exit 0
+                  ;;
+              esac
+            dest: /tmp/ansible-molecule-bin/tailscale
+            owner: root
+            group: root
+            mode: '0755'
+
+        - name: Initialize mocked Tailscale backend state
+          community.openwrt.copy:
+            content: '{"BackendState":"NeedsLogin"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Select successful mocked enrollment
+          community.openwrt.copy:
+            content: success
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Enroll a Tailscale node non-interactively
+          ansible.builtin.include_role:
+            name: router_tailscale
+          vars:
+            router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+            router_tailscale_auth_key: molecule-test-auth-key
+            router_tailscale_accept_dns: false
+            router_tailscale_accept_routes: true
+            router_tailscale_advertise_routes: []
+            router_tailscale_advertise_exit_node: false
+            router_tailscale_hostname: molecule-test-node
+            router_tailscale_ssh: false
+
+        - name: Verify Tailscale preference arguments
+          ansible.builtin.raw: |
+            p=/tmp/ansible-molecule-tailscale-preferences
+            grep -Fqx 'set' "$p" || exit 1
+            grep -Fqx -- '--accept-dns=false' "$p" || exit 1
+            grep -Fqx -- '--accept-routes=true' "$p" || exit 1
+            grep -Fqx -- '--advertise-routes=' "$p" || exit 1
+            grep -Fqx -- '--advertise-exit-node=false' "$p" || exit 1
+            grep -Fqx -- '--hostname=molecule-test-node' "$p" || exit 1
+            grep -Fqx -- '--ssh=false' "$p" || exit 1
+          changed_when: false
+
+        - name: Verify successful enrollment and auth-key cleanup
+          ansible.builtin.raw: |
+            v=/tmp/ansible-molecule-tailscale-validation
+            grep -qx args-ok "$v" || exit 11
+            grep -qx key-present "$v" || exit 12
+            grep -qx permissions-ok "$v" || exit 13
+            grep -qx content-ok "$v" || exit 14
+            test "$(cat /tmp/ansible-molecule-tailscale-state.json)" = \
+              '{"BackendState":"Running"}' || exit 1
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 1 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+
+        - name: Set backend state to already authenticated
+          community.openwrt.copy:
+            content: '{"BackendState":"Running"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Skip enrollment when the node is already authenticated
+          ansible.builtin.include_role:
+            name: router_tailscale
+          vars:
+            router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+            router_tailscale_auth_key: molecule-test-auth-key
+
+        - name: Verify authenticated nodes do not submit the key again
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 1 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+
+        - name: Apply only explicitly configured Tailscale preferences
+          ansible.builtin.include_role:
+            name: router_tailscale
+          vars:
+            router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+            router_tailscale_accept_dns: true
+            router_tailscale_advertise_exit_node: true
+
+        - name: Verify unset preferences are omitted
+          ansible.builtin.raw: |
+            p=/tmp/ansible-molecule-tailscale-preferences
+            test "$(wc -l < "$p")" -eq 3 || exit 1
+            grep -Fqx 'set' "$p" || exit 1
+            grep -Fqx -- '--accept-dns=true' "$p" || exit 1
+            grep -Fqx -- '--advertise-exit-node=true' "$p" || exit 1
+            test ! -e /tmp/ansible-molecule-tailscale-up-refresh || exit 1
+          changed_when: false
+
+        - name: Reset backend state before testing enrollment failure
+          community.openwrt.copy:
+            content: '{"BackendState":"NeedsLogin"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Select a failing mocked enrollment
+          community.openwrt.copy:
+            content: fail
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Verify failed enrollment still removes the auth key
+          block:
+            - name: Run enrollment that is expected to fail
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+          rescue:
+            - name: Record the expected enrollment failure
+              ansible.builtin.set_fact:
+                router_tailscale_mock_failure_seen: true
+
+        - name: Assert failed enrollment was handled
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_mock_failure_seen | default(false) | bool
+
+        - name: Assert failed enrollment increments the mock and removes the key
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 2 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+
+        - name: Reset backend state before testing pending approval
+          community.openwrt.copy:
+            content: '{"BackendState":"NeedsLogin"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Select mocked enrollment awaiting device approval
+          community.openwrt.copy:
+            content: pending
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Verify enrollment reports pending device approval
+          block:
+            - name: Run enrollment that requires administrator approval
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+          rescue:
+            - name: Record the expected pending-approval failure
+              ansible.builtin.set_fact:
+                router_tailscale_mock_pending_seen: >-
+                  {{ 'waiting for tailnet administrator approval'
+                     in ansible_failed_result.msg }}
+
+        - name: Assert pending approval is reported
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_mock_pending_seen | default(false) | bool
+
+        - name: Verify pending enrollment count and key cleanup
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 3 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+
+        - name: Set backend state to pending approval before enrollment
+          community.openwrt.copy:
+            content: '{"BackendState":"NeedsMachineAuth"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Verify an already-pending device is not enrolled again
+          block:
+            - name: Run role for a device awaiting administrator approval
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+          rescue:
+            - name: Record the existing pending-approval state
+              ansible.builtin.set_fact:
+                router_tailscale_existing_pending_seen: >-
+                  {{ 'waiting for tailnet administrator approval'
+                     in ansible_failed_result.msg }}
+
+        - name: Verify existing pending approval was reported
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_existing_pending_seen | default(false)
+
+        - name: Verify pending approval did not submit a key
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 3 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+        - name: Select invalid JSON status output
+          community.openwrt.copy:
+            content: invalid-json
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Reject invalid Tailscale status JSON
+          block:
+            - name: Run role with invalid status JSON
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+                router_tailscale_status_retries: 1
+                router_tailscale_status_delay: 0
+          rescue:
+            - name: Record invalid JSON rejection
+              ansible.builtin.set_fact:
+                router_tailscale_invalid_json_seen: >-
+                  {{ 'returned invalid JSON' in ansible_failed_result.msg }}
+        - name: Assert invalid status JSON was rejected
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_invalid_json_seen | default(false) | bool
+
+        - name: Select status output without BackendState
+          community.openwrt.copy:
+            content: missing-state
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Reject a status response without BackendState
+          block:
+            - name: Run role with a missing BackendState field
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+                router_tailscale_status_retries: 1
+                router_tailscale_status_delay: 0
+          rescue:
+            - name: Record missing BackendState rejection
+              ansible.builtin.set_fact:
+                router_tailscale_missing_state_seen: >-
+                  {{
+                    'did not contain a string BackendState'
+                    in ansible_failed_result.msg
+                  }}
+        - name: Assert missing BackendState was rejected
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_missing_state_seen | default(false) | bool
+
+        - name: Select an unknown backend state
+          community.openwrt.copy:
+            content: unknown-state
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Reject an unknown Tailscale backend state
+          block:
+            - name: Run role with an unknown BackendState
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+                router_tailscale_status_retries: 1
+                router_tailscale_status_delay: 0
+          rescue:
+            - name: Record unknown backend state rejection
+              ansible.builtin.set_fact:
+                router_tailscale_unknown_state_seen: >-
+                  {{ 'unsupported backend state' in ansible_failed_result.msg }}
+        - name: Assert unknown backend state was rejected
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_unknown_state_seen | default(false) | bool
+
+        - name: Select an unavailable daemon status response
+          community.openwrt.copy:
+            content: unavailable
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Reject an unavailable Tailscale daemon
+          block:
+            - name: Run role while the mocked daemon is unavailable
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+                router_tailscale_status_retries: 1
+                router_tailscale_status_delay: 0
+          rescue:
+            - name: Record unavailable daemon rejection
+              ansible.builtin.set_fact:
+                router_tailscale_unavailable_seen: >-
+                  {{
+                    'Tailscale status is unavailable'
+                    in ansible_failed_result.msg
+                  }}
+        - name: Assert unavailable daemon was rejected
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_unavailable_seen | default(false) | bool
+
+      always:
+        - name: Remove mocked Tailscale test files
+          community.openwrt.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /tmp/ansible-molecule-bin
+            - /tmp/ansible-molecule-tailscale-state.json
+            - /tmp/ansible-molecule-tailscale-mode
+            - /tmp/ansible-molecule-tailscale-up-count
+            - /tmp/ansible-molecule-tailscale-validation
+            - /tmp/ansible-molecule-tailscale-preferences
+            - /tmp/ansible-molecule-tailscale-up-refresh
+            - /tmp/ansible-tailscale-auth-key
     - name: Check for obsolete SNMP configuration
       community.openwrt.stat:
         path: /etc/config/snmpd-opkg
