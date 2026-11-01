@@ -47,15 +47,20 @@ Enable it explicitly for a selected host or invocation:
 When enabled, the role:
 
 1. Requires an unambiguous supported SquashFS layout with unused space.
-2. Installs the official expansion prerequisites using the detected
-   OpenWrt package manager.
-3. Downloads and prepares the expansion scripts from the official
-   OpenWrt documentation.
-4. Clears stale resize markers if the virtual disk has grown again.
-5. Starts the appropriate partition/filesystem expansion stage.
-6. Waits for SSH to return after the required reboots.
-7. Re-detects the storage layout and requires the final
+2. Downloads and validates the official expansion script before making
+   any changes. HTML error pages and unexpected content are rejected.
+3. Installs the expansion prerequisites using the detected OpenWrt
+   package manager.
+4. Sources the official script to prepare its two UCI-default scripts.
+5. Clears stale resize markers if the virtual disk has grown again.
+6. Starts the appropriate partition/filesystem expansion stage.
+7. Waits for SSH to return after the required reboots.
+8. Re-detects the storage layout and requires the final
    not_required state.
+
+If the OpenWrt Wiki blocks the script download, expansion stops before
+installing prerequisites or changing resize markers, partitions, or
+filesystems. Detection remains available independently.
 
 Do not run expansion against a production router without a verified
 backup and a maintenance window. The first implementation is intended
