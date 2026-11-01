@@ -323,9 +323,10 @@ Keep UCI section identifiers separate from firewall object names:
   managed dictionary and in UCI operations. It may contain only letters,
   digits, and underscores. Validate it before using it in UCI operations.
 - A firewall zone's **zone name** is the human-readable value of its
-  `option name`; it is not the UCI section ID. It must not start with a
-  digit and must not exceed fw4's documented maximum working length of
-  11 characters. Validate it before making any UCI changes.
+  `option name`; it is not the UCI section ID. Digits are allowed after
+  the first character, but the name must not start with a digit. It must
+  not exceed fw4's documented maximum working length of 11 characters.
+  Validate it before making any UCI changes.
 
 When writing tests for validation unrelated to naming (for example, option
 types or values), use valid UCI section IDs and valid firewall zone names.
