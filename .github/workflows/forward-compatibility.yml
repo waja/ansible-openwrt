@@ -172,7 +172,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ansible-core-matrix-${{ matrix.python-version }}-${{ matrix.openwrt_version }}-${{ matrix.scenario }}
+          name: >-
+            ansible-core-matrix-${{ matrix.python-version }}-
+            ${{ matrix.openwrt_version }}-${{ matrix.scenario }}
           path: matrix-results/*.json
           if-no-files-found: error
           retention-days: 1
@@ -258,7 +260,9 @@ jobs:
               )
           counts = {
               status: sum(row["status"] == status for row in rows)
-              for status in ("PASS", "FAIL", "CANCELLED", "SKIPPED", "NO RESULT")
+              for status in (
+                  "PASS", "FAIL", "CANCELLED", "SKIPPED", "NO RESULT"
+              )
           }
           lines.extend([
               "",
@@ -271,7 +275,8 @@ jobs:
               "cancelled matrix jobs fail this summary.",
               "",
           ])
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+          summary_path = os.environ["GITHUB_STEP_SUMMARY"]
+          with open(summary_path, "a", encoding="utf-8") as summary:
               summary.write("\n".join(lines))
 
           print("\n".join(lines))
