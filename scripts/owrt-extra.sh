@@ -447,18 +447,16 @@ find "$UPPER" -type f | rel | sort | while IFS= read -r f; do
             echo "$f" >> "$T/ignored"; continue ;;
         etc/config/*)
             echo "$f" >> "$T/uci"; continue ;;
-        *)
-            if is_sensitive_path "$f"; then
-                echo "$f" >> "$T/secret"
-                continue
-            fi
-            ;;
         etc/apk/world|etc/apk/repositories|etc/apk/repositories.d/*|etc/apk/keys/*)
             continue ;;   # handled separately in section 6
-        lib/apk/*|usr/lib/opkg/*|etc/backup/*|etc/urandom.seed|\
-        etc/uhttpd.crt)
+        lib/apk/*|usr/lib/opkg/*|etc/backup/*|etc/urandom.seed|etc/uhttpd.crt)
             echo "$f" >> "$T/ignored"; continue ;;
     esac
+
+    if is_sensitive_path "$f"; then
+        echo "$f" >> "$T/secret"
+        continue
+    fi
 
     # Does a package own the file? (check the output format of "apk info -W")
     owner=$(apk info --who-owns "/$f" 2>/dev/null | sed -n 's/.* is owned by //p')
