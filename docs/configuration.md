@@ -11,7 +11,7 @@ router before managing it with Ansible, see the
 
 The `playbooks/site.yml` playbook applies the configured network settings
 first, initializes OpenWrt, and then runs the system, firewall, package,
-base-service, and optional SNMP roles.
+base-service, and optional SNMP, LibreNMS, and Tailscale roles.
 
 Run the playbook against all routers in the `openwrt` inventory group:
 
@@ -41,9 +41,9 @@ ansible-playbook -i inventory.ini playbooks/site.yml \
 
 Available tags are `router_network`, `router_system`,
 `router_firewall`, `router_packages`, `router_base`,
-`router_snmpd`, and `router_librenms`. The SNMP and LibreNMS roles are
-skipped unless `router_snmpd_enabled: true` and
-`router_librenms_enabled: true` are set. OpenWrt initialization runs
+`router_snmpd`, `router_librenms`, and `router_tailscale`. The SNMP,
+LibreNMS, and Tailscale roles are skipped unless their corresponding
+`*_enabled: true` variables are set. OpenWrt initialization runs
 automatically. Selecting one role does not automatically run other project
 roles that may be prerequisites; review the selected tasks before execution.
 
@@ -57,6 +57,7 @@ roles that may be prerequisites; review the selected tasks before execution.
 | `router_packages` | Requested packages and packages required by managed services | [Packages](roles/router_packages.md) |
 | `router_base` | Core service enablement and obsolete configuration cleanup | [Base services](roles/router_base.md) |
 | `router_snmpd` | Optional SNMP community replacement | [SNMP daemon](roles/router_snmpd.md) |
+| `router_tailscale` | Optional Tailscale daemon and tailnet configuration | [Tailscale](roles/router_tailscale.md) |
 | `router_package_audit` | Compare installed packages with a saved baseline | [Package audit](roles/router_package_audit.md) |
 | `router_storage` | Detect and optionally expand root storage | [Storage](roles/router_storage.md) |
 

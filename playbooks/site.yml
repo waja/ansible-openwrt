@@ -25,10 +25,25 @@
       tags:
         - router_packages
       vars:
-        router_packages_managed_services: "{{ router_base_services }}"
+        router_packages_managed_services: >-
+          {{
+            router_base_services
+            + (
+                ['tailscale']
+                if router_tailscale_enabled | default(false) | bool
+                else []
+              )
+          }}
     - role: router_base
       tags:
         - router_base
+      vars:
+        router_base_additional_services: >-
+          {{
+            ['tailscale']
+            if router_tailscale_enabled | default(false) | bool
+            else []
+          }}
     - role: router_snmpd
       tags:
         - router_snmpd
@@ -37,3 +52,7 @@
       tags:
         - router_librenms
       when: router_librenms_enabled | bool
+    - role: router_tailscale
+      tags:
+        - router_tailscale
+      when: router_tailscale_enabled | default(false) | bool

@@ -18,3 +18,5 @@ router_packages_service_package_map:
     - snmpd
   xinetd:
     - xinetd
+  tailscale:
+    - tailscale

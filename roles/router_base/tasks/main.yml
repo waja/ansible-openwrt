@@ -25,7 +25,7 @@
 
     - name: Enable and start or restart required services
       ansible.builtin.include_tasks: restart_service.yml
-      loop: "{{ router_base_services }}"
+      loop: "{{ router_base_services + router_base_additional_services }}"
 
     - name: Clear pending service restart marker
       community.openwrt.file:

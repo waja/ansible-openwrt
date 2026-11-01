@@ -1,0 +1,6 @@
+# roles/router_tailscale/handlers/main.yml
+---
+- name: Restart Tailscale daemon
+  community.openwrt.service:
+    name: tailscale
+    state: restarted
