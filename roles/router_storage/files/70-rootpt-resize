@@ -21,8 +21,7 @@ then
 
     if [ -e /boot/cmdline.txt ]
     then
-        NEW_UUID=$(blkid "${ROOT_PART_DEV}" | \
-            sed -n 's/.*PARTUUID="\\([^"]*\\)".*/\\1/p')
+        NEW_UUID=$(blkid "${ROOT_PART_DEV}" | awk -F 'PARTUUID="' '{split($2, part, "\""); print part[1]}')
         [ -n "${NEW_UUID}" ] || exit 1
         sed -i "s/PARTUUID=[^ ]*/PARTUUID=${NEW_UUID}/" /boot/cmdline.txt
     fi
