@@ -101,7 +101,7 @@ redact_uci_diff() {
 
 # Read-only helper for reviewing existing raw evidence. Neither mode modifies
 # the input file; the output is suitable only for human-readable inspection.
-case "\${1:-}" in
+case "${1:-}" in
     --redact-uci-diff|--redact-text)
         mode=$1
         [ "$#" = 2 ] || {
@@ -427,7 +427,7 @@ find "$UPPER" -type f | rel | sort | while IFS= read -r f; do
         etc/apk/world|etc/apk/repositories|etc/apk/repositories.d/*|etc/apk/keys/*)
             continue ;;   # handled separately in section 6
         lib/apk/*|usr/lib/opkg/*|etc/backup/*|etc/urandom.seed|\
-        etc/dropbear/dropbear_*_host_key|etc/uhttpd.crt|etc/uhttpd.key)
+        etc/uhttpd.crt)
             echo "$f" >> "$T/ignored"; continue ;;
     esac
 
