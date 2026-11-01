@@ -1276,3 +1276,97 @@
           - >-
             router_firewall_empty_proto_failure
             == 'Validate firewall rule definitions'
+
+    - name: Create an anonymous firewall rule matching a mapping key
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_key_without_explicit_name
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Create a named rule without adopting an anonymous match when name is omitted
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_key_without_explicit_name:
+            target: ACCEPT
+
+    - name: Read named and anonymous rules after omitted-name handling
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_omitted_name_show
+      changed_when: false
+
+    - name: Find the anonymous rule retained alongside the named rule
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_key_without_explicit_name
+      register: router_firewall_omitted_name_matches
+      changed_when: false
+
+    - name: Assert anonymous rules are not adopted without explicit name
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_key_without_explicit_name=rule'
+            in router_firewall_omitted_name_show.result
+          - router_firewall_omitted_name_matches.result_list | length == 2
+          - >-
+            "firewall.molecule_key_without_explicit_name.target='ACCEPT'"
+            in router_firewall_omitted_name_show.result
+          - >-
+            router_firewall_omitted_name_show.result
+            is search("firewall\\.@rule\\[[0-9]+\\]\\.target='DROP'")
+
+    - name: Create firewall rules in a deliberately non-alphabetical order
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_order_second:
+            name: Molecule order second
+            src: guest_test
+            target: ACCEPT
+          molecule_order_first:
+            name: Molecule order first
+            src: guest_test
+            target: ACCEPT
+
+    - name: Read firewall rules after ordered creation
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_order_show
+      changed_when: false
+
+    - name: Assert newly created rules preserve declaration order
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_order_show.result.find(
+              'firewall.molecule_order_second=rule'
+            ) >= 0
+          - >-
+            router_firewall_order_show.result.find(
+              'firewall.molecule_order_first=rule'
+            ) >
+            router_firewall_order_show.result.find(
+              'firewall.molecule_order_second=rule'
+            )
