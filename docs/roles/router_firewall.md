@@ -65,10 +65,12 @@ router_firewall_rules:
 ```
 
 The mapping key is the stable UCI section ID and may contain only letters,
-digits, and underscores. The optional `name` is the human-readable rule
-label and defaults to the mapping key. It is also used to adopt a matching
-anonymous UCI rule; adoption is refused if more than one candidate exists.
-An existing named section with the requested ID takes precedence.
+digits, and underscores. The optional `name` is the human-readable rule label and defaults
+to the mapping key for newly created named sections. Anonymous UCI rules
+are adopted only when `name` is explicitly supplied; the mapping key is
+not an implicit adoption identity. Adoption is refused if more than one
+candidate exists. An existing named section with the requested ID takes
+precedence.
 
 Use `state: absent` to remove a rule. Use `enabled: false` to disable it
 without removing its section. Omitted options remain unchanged and explicit
