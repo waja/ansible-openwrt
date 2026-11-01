@@ -113,6 +113,7 @@ jobs:
             "openwrt/rootfs:x86_64-openwrt-${{ matrix.openwrt_version }}" \
             -c '
               set -eu
+
               cp /opt/owrt-test/owrt-extra.sh /tmp/owrt-extra-test.sh
               sh -n /tmp/owrt-extra-test.sh
 
