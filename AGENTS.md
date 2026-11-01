@@ -632,9 +632,13 @@ Workflow: `.github/workflows/forward-compatibility.yml`.
 - Does not use or modify the hash-locked CI requirement inputs or lockfiles.
   It discovers published, non-yanked PEP 440 pre-release/development versions
   from the PyPI JSON API and reports an explicit notice when none exist.
-- The Ansible Core lane installs the selected pre-release with the current
-  Molecule Docker toolchain and runs all three existing scenarios:
-  `default`, `network-static`, and `network-dhcp`.
+- The Ansible Core lane tests Python 3.14 and 3.15 independently; its
+  Python-version matrix is combined with the OpenWrt-version and scenario
+  matrices. It installs the selected pre-release with the current Molecule
+  Docker toolchain and runs all three existing scenarios: `default`,
+  `network-static`, and `network-dhcp`.
+- The separate ansible-lint lane continues to use the shared Python version
+  from `.python-version`; Python 3.15 is not added to that lane.
 - The Ansible Core lane expands the same OpenWrt-version matrix and uses the
   shared image action with `snapshot: 'false'`; it never selects the snapshot
   image.
@@ -644,6 +648,10 @@ Workflow: `.github/workflows/forward-compatibility.yml`.
 - If a tool has no published pre-release, its test is explicitly skipped;
   a latest-stable installation is never reported as a forward-compatibility
   test. Each executed lane reports the installed tool versions.
+- Every Ansible Core matrix job uploads its result, including explicit skips.
+  The aggregate summary job publishes the complete Python/OpenWrt/scenario
+  matrix and its status to the workflow run summary. Failed, cancelled, or
+  missing matrix results fail the aggregate summary.
 - Keep this workflow independent of the weekly snapshot schedule in
   `.github/workflows/molecule.yml`, which continues to use the pinned
   stable Ansible baseline.
