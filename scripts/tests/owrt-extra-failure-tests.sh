@@ -96,12 +96,12 @@ EOF_MOUNT
 real_grep=$(command -v grep)
 cat > "$stub/grep" <<EOF_GREP
 #!/bin/sh
-if [ "${1:-}" = -Fq ] &&
-   [ "${2:-}" = " /tmp/ref/merged " ] &&
-   [ "${3:-}" = /proc/mounts ]; then
+if [ "\${1:-}" = -Fq ] &&
+   [ "\${2:-}" = " /tmp/ref/merged " ] &&
+   [ "\${3:-}" = /proc/mounts ]; then
     exit 0
 fi
-exec "$real_grep" "$@"
+exec "$real_grep" "\$@"
 EOF_GREP
 cat > "$stub/umount" <<'EOF_UMOUNT'
 #!/bin/sh
