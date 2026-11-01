@@ -92,6 +92,20 @@ exit 0
 EOF_MOUNT
 cat > "$stub/chroot" <<'EOF_CHROOT'
 #!/bin/sh
+case "${OWRT_TEST_FACTORY_FAIL:-}" in
+    config-generate)
+        echo "FAIL: /bin/config_generate (exit 41)"
+        exit 1
+        ;;
+    uci-defaults)
+        echo "FAIL: /etc/uci-defaults/99-test-failure (exit 42)"
+        exit 1
+        ;;
+    uci-commit)
+        echo "FAIL: uci commit (exit 43)"
+        exit 1
+        ;;
+esac
 exit 0
 EOF_CHROOT
 cat > "$stub/uci" <<'EOF_UCI'
@@ -177,6 +191,39 @@ OWRT_TEST_APK_FACTORY=fail
 export OWRT_TEST_APK_FACTORY
 run_failure_case apk-factory-failure "Required command failed: apk --root"
 unset OWRT_TEST_APK_FACTORY
+
+# Factory reconstruction failures must abort the comparison and preserve
+# the chroot diagnostic log, while releasing the lock and removing mounts.
+run_factory_failure_case() {
+    name=$1
+    failure=$2
+    expected=$3
+    reset_case
+    OWRT_TEST_FACTORY_FAIL=$failure
+    export OWRT_TEST_FACTORY_FAIL
+    if /bin/sh "$SCRIPT" > "/tmp/$name.log" 2>&1; then
+        cat "/tmp/$name.log" >&2
+        fail "$name unexpectedly succeeded"
+    fi
+    grep -Fq "factory generation was incomplete" "/tmp/$name.log" ||
+        { cat "/tmp/$name.log" >&2; fail "$name did not report incomplete factory generation"; }
+    [ -f /tmp/owrt-diff/chroot.log ] ||
+        fail "$name did not preserve the chroot diagnostic log"
+    grep -Fq "$expected" /tmp/owrt-diff/chroot.log ||
+        { cat /tmp/owrt-diff/chroot.log >&2; fail "$name failure detail missing"; }
+    ! grep -Fq "##### 1. UCI diff" "/tmp/$name.log" ||
+        fail "$name continued into comparison reporting"
+    assert_no_run_state
+    [ -d /tmp/owrt-diff ] || fail "$name did not preserve its diagnostic report"
+    unset OWRT_TEST_FACTORY_FAIL
+}
+
+run_factory_failure_case config-generate-failure config-generate \
+    "FAIL: /bin/config_generate (exit 41)"
+run_factory_failure_case uci-defaults-failure uci-defaults \
+    "FAIL: /etc/uci-defaults/99-test-failure (exit 42)"
+run_factory_failure_case uci-commit-failure uci-commit \
+    "FAIL: uci commit (exit 43)"
 
 OWRT_TEST_APK_NOW=empty
 export OWRT_TEST_APK_NOW
