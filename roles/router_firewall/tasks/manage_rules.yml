@@ -138,41 +138,88 @@
   when: item.value.state | default('present') == 'absent'
   changed_when: false
 
-- name: Collect existing firewall zone names
+- name: Initialize firewall rule zone reference queries
   ansible.builtin.set_fact:
-    router_firewall_existing_zone_names: >-
+    router_firewall_rule_zone_reference_queries: []
+  changed_when: false
+
+- name: Collect source and destination zone references
+  ansible.builtin.set_fact:
+    router_firewall_rule_zone_reference_queries: >-
       {{
-        router_firewall_uci_show.result
-        | regex_findall(
-            "(?ms)^firewall\\.[^.]+=zone\\n"
-            ~ "(?:(?!^firewall\\.[^.]+=).)*?"
-            ~ "^firewall\\.[^.]+\\.name='([^']+)'$"
-          )
+        router_firewall_rule_zone_reference_queries
+        + [{
+            'rule_id': item.0.key,
+            'option': item.1,
+            'zone_name': item.0.value[item.1]
+          }]
       }}
+  loop: >-
+    {{
+      router_firewall_rules
+      | dict2items
+      | product(['src', 'dest'])
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.key }}.{{ item.1 }}"
+  when:
+    - item.0.value.state | default('present') == 'present'
+    - item.0.value[item.1] is defined
+    - item.0.value[item.1] is not none
+  changed_when: false
+
+- name: Check named firewall sections referenced by rules
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ item.zone_name }}"
+  loop: "{{ router_firewall_rule_zone_reference_queries }}"
+  loop_control:
+    label: "{{ item.zone_name }}"
+  register: router_firewall_rule_named_zone_references
+  changed_when: false
+  failed_when: false
+
+- name: Find anonymous firewall zones referenced by rules
+  community.openwrt.uci:
+    command: find_all
+    config: firewall
+    type: zone
+    option: name
+    find: "{{ item.zone_name }}"
+  loop: "{{ router_firewall_rule_zone_reference_queries }}"
+  loop_control:
+    label: "{{ item.zone_name }}"
+  register: router_firewall_rule_anonymous_zone_references
   changed_when: false
 
 - name: Validate firewall rule zone references
   ansible.builtin.assert:
     that:
       - >-
-        item.value.src is not defined or item.value.src is none or
-        item.value.src in
-        (router_firewall_existing_zone_names
-         | difference(router_firewall_zone_names_to_remove)) or
-        item.value.src in router_firewall_desired_zone_names
-      - >-
-        item.value.dest is not defined or item.value.dest is none or
-        item.value.dest in
-        (router_firewall_existing_zone_names
-         | difference(router_firewall_zone_names_to_remove)) or
-        item.value.dest in router_firewall_desired_zone_names
+        item.0.zone_name in router_firewall_desired_zone_names or
+        (
+          item.1.result == 'zone' and
+          item.0.zone_name not in router_firewall_zone_names_to_remove
+        ) or
+        (
+          item.2.result_list | default([]) | length > 0 and
+          item.0.zone_name not in router_firewall_zone_names_to_remove
+        )
     fail_msg: >-
-      Firewall rule '{{ item.key }}' references an unknown zone. Define the
-      zone in router_firewall_zones or reference an existing zone.
-  loop: "{{ router_firewall_rules | dict2items }}"
+      Firewall rule '{{ item.0.rule_id }}' references an unknown zone
+      '{{ item.0.zone_name }}'. Define the zone in router_firewall_zones
+      or reference an existing zone.
+  loop: >-
+    {{
+      router_firewall_rule_zone_reference_queries
+      | zip(router_firewall_rule_named_zone_references.results)
+      | zip(router_firewall_rule_anonymous_zone_references.results)
+      | map('flatten')
+      | list
+    }}
   loop_control:
-    label: "{{ item.key }}"
-  when: item.value.state | default('present') == 'present'
+    label: "{{ item.0.rule_id }}.{{ item.0.option }}"
 
 - name: Check for firewall rules with the desired section ID
   community.openwrt.uci:
