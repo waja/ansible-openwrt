@@ -298,18 +298,27 @@ device before any recovery operation.
 ## Security and cleanup
 
 Treat the entire report as sensitive until you have reviewed it.
-UCI values and raw diffs can contain Wi-Fi passwords, password hashes,
-and other plaintext credentials. The terminal summary redacts common
-crypt(3) password hashes and values of credential-named UCI options,
-including wireless keys/PSKs, WireGuard private keys, secret/client/
-encryption/signing/shared keys, passwords, passphrases, secrets, and
-tokens. This is a best-effort display filter,
-not a complete secret scanner. The same filter is available for an
-existing diff, for example
+UCI values, command output and raw diffs can contain Wi-Fi passwords,
+password hashes, API tokens, authentication headers, embedded credentials
+in URLs, and private-key material. The human-readable presentation applies
+best-effort masking to crypt(3) password hashes, credential-like key/value
+names (including common password, passphrase, token, API-key, shared-secret,
+authentication and private-key variants), Authorization/Cookie headers,
+URL user-info, and PEM private-key blocks. Feed/repository diffs, APK audit
+findings, and matching shell-history lines use the same display filter.
+Sensitive file locations (for example account databases, SSH/Dropbear keys,
+TLS private keys, WireGuard keys and VPN secrets) are reported by path only.
+
+The filter is deliberately heuristic: it cannot identify every secret,
+especially opaque values under innocuous names, arbitrary binary data,
+unusual encodings, or secrets split across lines/formats it does not know.
+Review the report before sharing it. For an existing raw text file, use
+`sh /tmp/owrt-extra.sh --redact-text FILE`; for a UCI diff,
 `sh /tmp/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
-The password field in `/etc/passwd` comparisons is also masked. Raw
-files such as `factory.show`, `current.show`, and `uci.diff` are
-deliberately not redacted and remain sensitive.
+Both commands write only to stdout and leave the input byte-for-byte
+unchanged. Raw files such as `factory.show`, `current.show`, `uci.diff`,
+`apk-audit-system.txt`, `uboot.env`, and optional host-key exports are
+not automatically rewritten and remain sensitive.
 Do not commit raw discovery output, attach it to public issues, or store
 it in an unprotected shared location.
 
