@@ -260,7 +260,7 @@ jobs:
 
               # General text redaction: key/value names, auth headers, URL
               # credentials and multi-line PEM private keys. Input stays raw.
-              printf "%s\\n" \\
+              printf "%s\\n" \
                 "api_token=api-token-secret" \
                 "oauth.client_secret: client-secret-value" \
                 "client_key=client-key-secret" \
