@@ -871,3 +871,122 @@
       ansible.builtin.assert:
         that:
           - router_firewall_pending_changes.stdout | length == 0
+
+    - name: Create unrelated firewall sections with sentinel options
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: section
+            config: firewall
+            type: zone
+            name: unmanaged_test
+            value:
+              name: unmanaged_test
+              network:
+                - lan
+              test_sentinel: keep-zone-value
+          - command: section
+            config: firewall
+            type: rule
+            name: unmanaged_rule_test
+            value:
+              name: unmanaged_rule_test
+              src: lan
+              target: ACCEPT
+              test_sentinel: keep-rule-value
+
+    - name: Update a managed firewall zone while unrelated sections exist
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          guest_test:
+            input: DROP
+
+    - name: Read firewall configuration after unrelated-section test
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_unrelated_preservation
+      changed_when: false
+
+    - name: Verify unrelated firewall sections and options remain unchanged
+      ansible.builtin.assert:
+        that:
+          - >-
+            "firewall.unmanaged_test.test_sentinel='keep-zone-value'"
+            in router_firewall_unrelated_preservation.result
+          - >-
+            "firewall.unmanaged_test.network='lan'"
+            in router_firewall_unrelated_preservation.result
+          - >-
+            "firewall.unmanaged_rule_test.test_sentinel='keep-rule-value'"
+            in router_firewall_unrelated_preservation.result
+          - >-
+            "firewall.unmanaged_rule_test.target='ACCEPT'"
+            in router_firewall_unrelated_preservation.result
+
+    - name: Capture scalar input for a list-valued firewall zone option
+      block:
+        - name: Attempt to configure network as a scalar
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              bad_scalar:
+                network: lan
+      rescue:
+        - name: Record scalar-as-list validation failure
+          ansible.builtin.set_fact:
+            router_firewall_scalar_list_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify scalar values are rejected for list-valued zone options
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_scalar_list_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Capture list input for a scalar firewall zone option
+      block:
+        - name: Attempt to configure log as a list
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              bad_log:
+                log:
+                  - 1
+      rescue:
+        - name: Record list-as-scalar validation failure
+          ansible.builtin.set_fact:
+            router_firewall_list_scalar_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify list values are rejected for scalar zone options
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_list_scalar_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Verify cross-type validation made no firewall changes
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_cross_type_validation
+      changed_when: false
+
+    - name: Assert invalid cross-type input did not create firewall sections
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_cross_type_validation.result
+            is not search('firewall\\.bad_scalar=')
+          - >-
+            router_firewall_cross_type_validation.result
+            is not search('firewall\\.bad_log=')

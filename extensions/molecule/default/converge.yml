@@ -229,6 +229,10 @@
         }
       changed_when: false
 
+    - name: Validate generated firewall rules with fw4
+      ansible.builtin.raw: fw4 print >/dev/null
+      changed_when: false
+
     - name: Apply router packages role
       ansible.builtin.include_role:
         name: router_packages
