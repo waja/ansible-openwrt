@@ -269,6 +269,8 @@ for release versions, image tags, container names, paths, and CI matrix values.
 - Wrap long strings with `>-` (folded) at YAML level only. Never use
   YAML scalars inside embedded JavaScript or shell.
 
+### Ansible
+
 ### UCI identifiers and firewall zone names
 
 Keep UCI section identifiers separate from firewall object names:
@@ -286,8 +288,6 @@ types or values), use valid UCI section IDs and valid firewall zone names.
 Otherwise, an earlier naming check may reject the fixture before the test
 reaches the validation path it is intended to exercise.
 
-
-### Ansible
 
 - Always use FQCN:
   - `ansible.builtin.include_role`, `ansible.builtin.raw`,
