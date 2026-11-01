@@ -207,6 +207,7 @@ mkdir -p /rom/etc/apk /etc/apk /overlay/upper/usr/share \
 : > /etc/apk/world
 printf 'locally modified package file\n' > \
     /overlay/upper/usr/share/test-package.conf
+: > /overlay/upper/usr/share/test-package.conf.apk-new
 ln -s /etc/init.d/testservice \
     /overlay/upper/etc/rc.d/S50testservice
 if /bin/sh "$SCRIPT" > /tmp/positive-comparisons.log 2>&1; then
