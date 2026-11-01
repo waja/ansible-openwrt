@@ -111,7 +111,7 @@ is_sensitive_path() {
         etc/ssl/private/*|etc/pki/private/*|etc/keys/*|\
         etc/wireguard/*|etc/openvpn/*.key|etc/openvpn/*.pem|\
         etc/openvpn/*.p12|etc/openvpn/*.pfx|etc/ipsec.secrets|\
-        etc/swanctl/private/*|etc/racoon/psk.txt|\
+        etc/swanctl/private/*|\
         root/.ssh/id_rsa|root/.ssh/id_ed25519|root/.ssh/id_ecdsa|\
         root/.ssh/id_dsa|*.key|*.pem|*.p12|*.pfx|*.pkcs12)
             return 0 ;;
