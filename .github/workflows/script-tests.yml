@@ -132,6 +132,62 @@ jobs:
           version: ${{ matrix.openwrt_version }}
           snapshot: 'false'
 
+      - name: Verify APK system audit behavior on OpenWrt
+        run: |
+          docker run --rm \
+            --entrypoint /bin/sh \
+            "$OPENWRT_IMAGE" \
+            -c '
+              set -eu
+
+              # A clean rootfs must produce no findings and exit successfully.
+              apk audit --system > /tmp/apk-audit-clean.txt
+              test ! -s /tmp/apk-audit-clean.txt
+
+              # Change a package-owned executable in place. This deliberately
+              # exercises a case that .apk-new/.apk-old cannot detect.
+              # Use a package-owned executable rather than BusyBox itself:
+              # /bin/sh runs from BusyBox, so the binary is text-busy.
+              audit_file=/sbin/uci
+              test -f "$audit_file"
+              test ! -L "$audit_file"
+              owner=$(apk info --who-owns "$audit_file")
+              package=${owner##* is owned by }
+              test -n "$package"
+              cp -p "$audit_file" /tmp/audit-file.original
+              restore_audit_file() {
+                cp -p /tmp/audit-file.original "$audit_file"
+              }
+              trap restore_audit_file EXIT HUP INT TERM
+              printf x >> "$audit_file"
+
+              if apk audit --system > /tmp/apk-audit-modified.txt; then
+                audit_status=0
+              else
+                audit_status=$?
+              fi
+              test "$audit_status" -eq 0
+              grep -Fx "U sbin/uci" /tmp/apk-audit-modified.txt
+
+              if apk audit --system --packages \
+                > /tmp/apk-audit-packages.txt; then
+                packages_status=0
+              else
+                packages_status=$?
+              fi
+              test "$packages_status" -eq 0
+              grep -F "$package" /tmp/apk-audit-packages.txt
+
+              # Differences are findings, not command failures.
+              test -s /tmp/apk-audit-modified.txt
+              test -s /tmp/apk-audit-packages.txt
+              restore_audit_file
+              trap - EXIT HUP INT TERM
+
+              apk audit --system > /tmp/apk-audit-restored.txt
+              test ! -s /tmp/apk-audit-restored.txt
+            '
+
       - name: Check shell syntax and command-line behavior
         run: |
           mkdir -p "$RUNNER_TEMP/owrt-test"

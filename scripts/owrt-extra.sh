@@ -502,6 +502,8 @@ if command -v apk >/dev/null 2>&1; then
     if apk audit --help 2>&1 | grep -q -- '--system'; then
         if apk audit --system > "$APK_AUDIT" 2>&1; then
             if [ -s "$APK_AUDIT" ]; then
+                findings=$(wc -l < "$APK_AUDIT" | tr -d ' ')
+                echo "$findings APK system audit finding(s):"
                 cat "$APK_AUDIT"
             else
                 echo "(no differences reported)"
