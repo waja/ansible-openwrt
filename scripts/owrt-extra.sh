@@ -646,7 +646,7 @@ echo "-- Sensitive files (paths only; file contents are not printed):"
 if [ -s "$T/secret" ]; then sed 's|^|   /|' "$T/secret"; else echo "   (none)"; fi
 echo "-- Users/groups differing from factory (no hashes in passwd/group;"
 echo "   accounts created by installed packages show up here as well):"
-for f in etc/passwd etc/group; do
+for f in etc/passwd etc/group etc/gshadow; do
     if [ -e "$REF/$f" ]; then
         case "$f" in
             etc/passwd|etc/group|etc/gshadow)
