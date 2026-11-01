@@ -292,6 +292,7 @@
     that:
       - >-
         item.1.result != '' or
+        item.0.value.name is not defined or
         (item.2.result_list | default([]) | length <= 1)
     fail_msg: >-
       More than one firewall rule matches the name
@@ -331,7 +332,8 @@
             }]
             if item.0.value.state | default('present') == 'absent' and
                item.1.result == '' and
-               (item.2.result_list | default([]) | length == 1)
+               item.0.value.name is defined and
+             (item.2.result_list | default([]) | length == 1)
             else (
               [{
                 'command': 'section',
@@ -356,6 +358,7 @@
                     }
                   }
                   if item.1.result == '' and
+                     item.0.value.name is defined and
                      (item.2.result_list | default([]) | length == 1)
                   else {}
                 )
