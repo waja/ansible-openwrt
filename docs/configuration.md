@@ -60,6 +60,12 @@ roles that may be prerequisites; review the selected tasks before execution.
 | `router_package_audit` | Compare installed packages with a saved baseline | [Package audit](roles/router_package_audit.md) |
 | `router_storage` | Detect and optionally expand root storage | [Storage](roles/router_storage.md) |
 
+## Reference projects
+
+When researching OpenWrt implementation patterns, see the
+[curated external reference projects](reference-projects.md). These are
+examples for investigation, not dependencies or authoritative specifications.
+
 ## Organize inventory variables
 
 Use `group_vars/openwrt.yml` for settings shared by all routers and
