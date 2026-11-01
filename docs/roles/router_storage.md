@@ -76,6 +76,5 @@ are documented at
 - The reboot wait checks the target's SSH port from the Ansible control
   node. Environments where SSH is reachable only through a jump host
   may need a different wait strategy.
-- The role has not yet been validated against a physical or virtual
-  system that has completed the full two-stage expansion. Use a
-  disposable clone of an unexpanded Proxmox template for that test.
+- Full expansion has been validated on a disposable OpenWrt 25.12.5
+  x86/64 VM clone. The original Proxmox template was not modified.
