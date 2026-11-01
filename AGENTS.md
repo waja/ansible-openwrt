@@ -630,9 +630,13 @@ Workflow: `.github/workflows/forward-compatibility.yml`.
 - Does not use or modify the hash-locked CI requirement inputs or lockfiles.
   It discovers published, non-yanked PEP 440 pre-release/development versions
   from the PyPI JSON API and reports an explicit notice when none exist.
-- The Ansible Core lane installs the selected pre-release with the current
-  Molecule Docker toolchain and runs all three existing scenarios:
-  `default`, `network-static`, and `network-dhcp`.
+- The Ansible Core lane tests Python 3.14 and 3.15 independently; its
+  Python-version matrix is combined with the OpenWrt-version and scenario
+  matrices. It installs the selected pre-release with the current Molecule
+  Docker toolchain and runs all three existing scenarios: `default`,
+  `network-static`, and `network-dhcp`.
+- The separate ansible-lint lane continues to use the shared Python version
+  from `.python-version`; Python 3.15 is not added to that lane.
 - The Ansible Core lane expands the same OpenWrt-version matrix and uses the
   shared image action with `snapshot: 'false'`; it never selects the snapshot
   image.
