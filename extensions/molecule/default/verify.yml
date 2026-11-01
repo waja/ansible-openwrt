@@ -989,7 +989,7 @@
             is not search('firewall\\.bad_scalar=')
           - >-
             router_firewall_cross_type_validation.result
-            is not search('firewall\\.bad_log=')    
+            is not search('firewall\\.bad_log=')
     - name: Create a declarative firewall rule
       ansible.builtin.include_role:
         name: router_firewall
