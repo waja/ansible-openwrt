@@ -935,7 +935,7 @@
           vars:
             router_firewall_apply_runtime_changes: false
             router_firewall_zones:
-              bad_scalar_list:
+              bad_scalar:
                 network: lan
       rescue:
         - name: Record scalar-as-list validation failure
@@ -958,7 +958,7 @@
           vars:
             router_firewall_apply_runtime_changes: false
             router_firewall_zones:
-              bad_list_scalar:
+              bad_log:
                 log:
                   - 1
       rescue:
@@ -986,7 +986,7 @@
         that:
           - >-
             router_firewall_cross_type_validation.result
-            is not search('firewall\\.bad_scalar_list=')
+            is not search('firewall\\.bad_scalar=')
           - >-
             router_firewall_cross_type_validation.result
-            is not search('firewall\\.bad_list_scalar=')
+            is not search('firewall\\.bad_log=')
