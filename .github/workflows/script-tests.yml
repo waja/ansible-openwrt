@@ -296,20 +296,26 @@ jobs:
 
               # Sensitive file classification is path-based; public keys and
               # ordinary public certificates are not treated as private keys.
-              for path in etc/passwd etc/shadow etc/dropbear/dropbear_ed25519_host_key \
+              for sensitive_path in \
+                etc/passwd etc/shadow \
+                etc/dropbear/dropbear_ed25519_host_key \
                 etc/ssh/ssh_host_ed25519_key etc/uhttpd.key \
                 etc/ssl/private/server.key etc/wireguard/wg0.conf \
                 etc/openvpn/client.key etc/ipsec.secrets \
                 etc/swanctl/private/key.pem root/.ssh/id_ed25519; do
-                if ! sh /tmp/owrt-extra-test.sh --is-sensitive-path "$path"; then
-                  echo "Sensitive path was not classified: $path" >&2
+                if ! sh /tmp/owrt-extra-test.sh \
+                  --is-sensitive-path "$sensitive_path"; then
+                  echo "Sensitive path not classified: $sensitive_path" >&2
                   exit 1
                 fi
               done
-              for path in etc/ssh/ssh_host_ed25519_key.pub \
-                etc/openvpn/ca.crt etc/config/network usr/share/ca-certificates/root.pem.pub; do
-                if sh /tmp/owrt-extra-test.sh --is-sensitive-path "$path"; then
-                  echo "Non-secret path was classified as sensitive: $path" >&2
+              for sensitive_path in \
+                etc/ssh/ssh_host_ed25519_key.pub etc/openvpn/ca.crt \
+                etc/config/network \
+                usr/share/ca-certificates/root.pem.pub; do
+                if sh /tmp/owrt-extra-test.sh \
+                  --is-sensitive-path "$sensitive_path"; then
+                  echo "Non-secret path classified as sensitive: $sensitive_path" >&2
                   exit 1
                 fi
               done
