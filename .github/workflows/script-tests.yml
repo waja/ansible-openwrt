@@ -263,6 +263,10 @@ jobs:
               cat > /tmp/sensitive-text.txt <<EOF_SENSITIVE
               api_token=api-token-secret
               oauth.client_secret: client-secret-value
+              client_key=client-key-secret
+              encryption_key=encryption-key-secret
+              signing_key=signing-key-secret
+              shared_key=shared-key-secret
               Authorization: Bearer bearer-token-secret
               Cookie: session=session-cookie-secret
               repository=https://user:url-password-secret@example.invalid/feed
@@ -278,9 +282,9 @@ jobs:
                 /tmp/sensitive-text.txt > /tmp/sensitive-text.redacted
               cmp -s /tmp/sensitive-text.txt /tmp/sensitive-text.original
               for secret in api-token-secret client-secret-value \
-                bearer-token-secret session-cookie-secret \
-                url-password-secret private-key-line-one \
-                private-key-line-two; do
+                client-key-secret encryption-key-secret signing-key-secret \
+                shared-key-secret bearer-token-secret session-cookie-secret \
+                url-password-secret private-key-line-one private-key-line-two; do
                 if grep -Fq "$secret" /tmp/sensitive-text.redacted; then
                   echo "Sensitive text leaked: $secret" >&2
                   exit 1
