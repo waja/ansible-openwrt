@@ -149,6 +149,23 @@ or issue rather than relying on an external link alone.
   verify those settings independently and keep this document aligned
   with the repository's actual merge policy. Do not claim that a rule is
   technically enforced by GitHub unless that enforcement has been verified.
+- Before rebasing a PR branch, inspect GitHub's current mergeability state
+  and determine whether GitHub can merge it without rewriting branch history.
+  Do not rebase solely to eliminate a non-zero behind count or make the branch
+  appear up to date when GitHub can already merge the PR.
+- Rebase only when GitHub cannot merge because the branch must be updated,
+  or another concrete repository requirement makes it necessary. Prefer
+  resolving the actual merge blocker with the least disruptive approach.
+- Before every merge, inspect the complete PR commit list and history.
+  Verify the intended commit count and order, meaningful messages, coherent
+  scope, and absence of exploratory, debugging, accidental, or redundant
+  commits.
+- Consolidate or rewrite history only when needed to meet the intended
+  merge-history quality and when rewriting the PR branch is safe. Preserve
+  unrelated and shared commits; prefer a non-rewriting alternative when
+  history is already shared or in use.
+- Choose the merge method deliberately and verify that the resulting history
+  matches the repository's intended policy.
 
 ## Development workflow
 
