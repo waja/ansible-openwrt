@@ -646,6 +646,10 @@ Workflow: `.github/workflows/forward-compatibility.yml`.
 - If a tool has no published pre-release, its test is explicitly skipped;
   a latest-stable installation is never reported as a forward-compatibility
   test. Each executed lane reports the installed tool versions.
+- Every Ansible Core matrix job uploads its result, including explicit skips.
+  The aggregate summary job publishes the complete Python/OpenWrt/scenario
+  matrix and its status to the workflow run summary. Failed, cancelled, or
+  missing matrix results fail the aggregate summary.
 - Keep this workflow independent of the weekly snapshot schedule in
   `.github/workflows/molecule.yml`, which continues to use the pinned
   stable Ansible baseline.
