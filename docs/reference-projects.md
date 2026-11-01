@@ -81,6 +81,41 @@ without understanding their assumptions.
 - **Caution:** its bridge/VLAN design and stated hardware limitations are
   specific to the author's device and OpenWrt environment.
 
+
+### [DigitecGalaxus/ansible-openwrt-framework][digitec-openwrt]
+
+- **Focus:** a full OpenWrt fleet framework with a Tailscale/Headscale mesh.
+- **Useful entry points:** its network and firewall UCI templates and the
+  Tailscale configuration tasks.
+- **Ideas to examine:** model `tailscale0` as an unmanaged network
+  interface, give it an explicit firewall zone, and keep route advertisement
+  and Tailscale preferences declarative.
+- **Caution:** this is an opinionated, end-to-end router framework. Its broad
+  firewall policy, route derivation, SNAT choices, full-package UCI templates,
+  and init-script patching are not drop-in patterns for this repository.
+  Reuse the concepts, not its complete configuration.
+
+### [GuNanOvO/openwrt-tailscale][gunanovo-tailscale]
+
+- **Focus:** Tailscale packages and installation/update workflows for
+  OpenWrt, including APK packages for OpenWrt 25.12.
+- **Ideas to examine:** package format, architecture coverage, official init
+  integration, and storage/install constraints.
+- **Caution:** this is a packaging/installer project, not an Ansible
+  configuration role. Prefer the official OpenWrt package where available;
+  do not add a third-party feed or installer dependency without a verified
+  compatibility need.
+
+### [fl0w1nd/openwrt-tailscale][flowind-tailscale]
+
+- **Focus:** script-based Tailscale installation and management on OpenWrt,
+  including subnet-routing and firewall setup.
+- **Ideas to examine:** operational edge cases around persistent storage,
+  firewall integration, and subnet-router setup.
+- **Caution:** it is not an Ansible role. Its script-driven configuration
+  and device assumptions need independent review before any pattern is
+  adopted.
+
 ## How to use these references
 
 - Use them to discover options, edge cases, implementation patterns and
