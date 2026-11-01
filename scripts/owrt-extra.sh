@@ -49,7 +49,7 @@ redact_text() {
                     n == "authorization" || n == "credential" ||
                     n == "credentials" || n == "passphrase")
                     return 1
-                return n ~ /(^|[-_])(password|passwd|passphrase|secret|token|credential|credentials|private[-_]?key|client[-_]?secret|api[-_]?key|access[-_]?token|auth[-_]?key|shared[-_]?secret)([-_]|$)/
+                return n ~ /(^|[-_])(password|passwd|passphrase|secret|token|credential|credentials|private[-_]?key|client[-_]?(secret|key)|api[-_]?key|access[-_]?token|auth[-_]?key|shared[-_]?secret)([-_]|$)/
             }
             {
                 line = $0
