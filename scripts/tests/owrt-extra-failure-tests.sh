@@ -109,7 +109,17 @@ EOF_SYSUPGRADE
 cat > "$stub/apk" <<'EOF_APK'
 #!/bin/sh
 case "$1" in
-    info) exit 1 ;;
+    info)
+        if [ "${2:-}" = "--who-owns" ]; then
+            case "${3:-}" in
+                /usr/share/test-package.conf)
+                    echo "/usr/share/test-package.conf is owned by test-package-1.0"
+                    exit 0
+                    ;;
+            esac
+        fi
+        exit 1
+        ;;
     list)
         case "${OWRT_TEST_APK_NOW:-ok}" in
             fail) echo "simulated current package query failure" >&2; exit 43 ;;
@@ -188,4 +198,29 @@ grep -Fq "Cannot compare explicitly installed packages: APK world file missing" 
     fail "missing APK world diagnostic not found"
 assert_no_run_state
 
-echo "All owrt-extra.sh failure-path tests passed."
+# Positive comparison coverage: a modified package-owned file and a
+# newly enabled service must both appear in the report.
+reset_case
+mkdir -p /rom/etc/apk /etc/apk /overlay/upper/usr/share \
+    /overlay/upper/etc/rc.d
+: > /rom/etc/apk/world
+: > /etc/apk/world
+printf 'locally modified package file\n' > \
+    /overlay/upper/usr/share/test-package.conf
+ln -s /etc/init.d/testservice \
+    /overlay/upper/etc/rc.d/S50testservice
+if /bin/sh "$SCRIPT" > /tmp/positive-comparisons.log 2>&1; then
+    :
+else
+    cat /tmp/positive-comparisons.log >&2
+    fail "positive comparison run failed"
+fi
+grep -Fq "/usr/share/test-package.conf  [test-package-1.0]" \
+    /tmp/positive-comparisons.log ||
+    { cat /tmp/positive-comparisons.log >&2; fail "modified package-owned file not reported"; }
+grep -Fq "enable   testservice" /tmp/positive-comparisons.log ||
+    { cat /tmp/positive-comparisons.log >&2; fail "service enablement not reported"; }
+assert_no_run_state
+[ -d /tmp/owrt-diff ] || fail "successful run did not create its report"
+
+echo "All owrt-extra.sh failure and positive-comparison tests passed."
