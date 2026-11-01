@@ -240,3 +240,16 @@ jobs:
                 exit 1
               fi
             '
+
+      - name: Test discovery failure handling
+        run: |
+          mkdir -p "$RUNNER_TEMP/owrt-test"
+          cp scripts/owrt-extra.sh "$RUNNER_TEMP/owrt-test/owrt-extra.sh"
+          cp scripts/tests/owrt-extra-failure-tests.sh \
+            "$RUNNER_TEMP/owrt-test/failure-tests.sh"
+          docker run --rm \
+            -v "$RUNNER_TEMP/owrt-test:/opt/owrt-test:ro" \
+            --entrypoint /bin/sh \
+            "$OPENWRT_IMAGE" \
+            -c 'sh -n /opt/owrt-test/failure-tests.sh && \
+              sh /opt/owrt-test/failure-tests.sh'
