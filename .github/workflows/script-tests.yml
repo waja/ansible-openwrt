@@ -269,7 +269,7 @@ jobs:
                 "shared_key=shared-key-secret" \
                 "Authorization: Bearer bearer-token-secret" \
                 "Cookie: session=session-cookie-secret" \
-                "repository=https://user:url-password-secret@example.invalid/feed" \
+                "repository=https://u:url-password-secret@e.invalid/feed" \
                 "-----BEGIN PRIVATE KEY-----" \
                 "private-key-line-one" \
                 "private-key-line-two" \
