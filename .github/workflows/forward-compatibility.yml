@@ -281,7 +281,9 @@ jobs:
 
           print("\n".join(lines))
           if overall == "FAIL":
-              raise SystemExit("One or more matrix jobs failed or have no result.")
+              raise SystemExit(
+                  "One or more matrix jobs failed or have no result."
+              )
           PY
 
   ansible-lint-prerelease:
