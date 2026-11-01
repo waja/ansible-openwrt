@@ -225,6 +225,7 @@ jobs:
               grep -Eq -- "^[[:space:]#]*-H([[:space:]]|$)" /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-c([[:space:]]|$)" /tmp/help.txt
               grep -Fq -- "--redact-uci-diff FILE" /tmp/help.txt
+              grep -Fq -- "--redact-text FILE" /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-h([[:space:]]|$)" /tmp/help.txt
 
               # Exercise redaction using representative UCI output.
@@ -256,6 +257,38 @@ jobs:
               grep -Fq "[REDACTED]" /tmp/uci-redacted.txt
               grep -Fq "public-value" /tmp/uci-redacted.txt
               grep -Fq "router-name" /tmp/uci-redacted.txt
+
+              # General text redaction: key/value names, auth headers, URL
+              # credentials and multi-line PEM private keys. Input stays raw.
+              cat > /tmp/sensitive-text.txt <<'EOF_SENSITIVE'
+api_token=api-token-secret
+oauth.client_secret: client-secret-value
+Authorization: Bearer bearer-token-secret
+Cookie: session=session-cookie-secret
+repository=https://user:url-password-secret@example.invalid/feed
+-----BEGIN PRIVATE KEY-----
+private-key-line-one
+private-key-line-two
+-----END PRIVATE KEY-----
+public_key=public-value
+hostname=router-name
+EOF_SENSITIVE
+              cp /tmp/sensitive-text.txt /tmp/sensitive-text.original
+              sh /tmp/owrt-extra-test.sh --redact-text \
+                /tmp/sensitive-text.txt > /tmp/sensitive-text.redacted
+              cmp -s /tmp/sensitive-text.txt /tmp/sensitive-text.original
+              for secret in api-token-secret client-secret-value \
+                bearer-token-secret session-cookie-secret \
+                url-password-secret private-key-line-one \
+                private-key-line-two; do
+                if grep -Fq "$secret" /tmp/sensitive-text.redacted; then
+                  echo "Sensitive text leaked: $secret" >&2
+                  exit 1
+                fi
+              done
+              grep -Fq "public-value" /tmp/sensitive-text.redacted
+              grep -Fq "router-name" /tmp/sensitive-text.redacted
+              grep -Fq "[REDACTED PRIVATE KEY]" /tmp/sensitive-text.redacted
 
               # Existing reports must survive a new run attempt.
               mkdir -m 700 /tmp/owrt-diff
