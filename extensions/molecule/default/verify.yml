@@ -1121,6 +1121,7 @@
         router_firewall_apply_runtime_changes: false
         router_firewall_rules:
           molecule_anonymous_rule:
+            name: molecule_anonymous_rule
             target: ACCEPT
 
     - name: Find the adopted anonymous firewall rule
@@ -1178,6 +1179,7 @@
             router_firewall_apply_runtime_changes: false
             router_firewall_rules:
               molecule_ambiguous_rule:
+                name: molecule_ambiguous_rule
                 target: ACCEPT
       rescue:
         - name: Record the ambiguous rule validation failure
