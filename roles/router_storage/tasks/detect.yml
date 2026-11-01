@@ -1,0 +1,25 @@
+# roles/router_storage/tasks/detect.yml
+---
+- name: Inspect root, factory, overlay, and block-device layout
+  ansible.builtin.raw: >-
+    {{ lookup('ansible.builtin.file', role_path ~ '/files/detect.sh') }}
+  register: router_storage_probe
+  changed_when: false
+
+- name: Store detected root storage state
+  ansible.builtin.set_fact:
+    router_storage_detection: "{{ router_storage_probe.stdout | from_json }}"
+
+- name: Report detected root storage state
+  ansible.builtin.debug:
+    msg:
+      state: "{{ router_storage_detection.state }}"
+      target: "{{ router_storage_detection.target }}"
+      release: "{{ router_storage_detection.release }}"
+      factory_filesystem: "{{ router_storage_detection.rom_fstype }}"
+      root_filesystem: "{{ router_storage_detection.root_fstype }}"
+      root_partition: "{{ router_storage_detection.root_partition }}"
+      root_disk: "{{ router_storage_detection.root_disk }}"
+      disk_sectors: "{{ router_storage_detection.disk_sectors }}"
+      partition_sectors: "{{ router_storage_detection.partition_sectors }}"
+      overlay_total_kb: "{{ router_storage_detection.overlay_total_kb }}"

@@ -97,4 +97,6 @@ jobs:
               ansible-playbook -i /tmp/inventory.ini --syntax-check \
                 playbooks/site.yml &&
               ansible-playbook -i /tmp/inventory.ini --syntax-check \
-                playbooks/audit_packages.yml'
+                playbooks/audit_packages.yml &&
+              ansible-playbook -i /tmp/inventory.ini --syntax-check \
+                playbooks/storage.yml'

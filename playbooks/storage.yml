@@ -1,0 +1,13 @@
+# playbooks/storage.yml
+---
+- name: Inspect and optionally expand OpenWrt root storage
+  hosts: openwrt
+  gather_facts: false
+
+  roles:
+    - role: community.openwrt.init
+      tags:
+        - always
+    - role: router_storage
+      tags:
+        - router_storage

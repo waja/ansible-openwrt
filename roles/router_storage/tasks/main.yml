@@ -1,0 +1,22 @@
+# roles/router_storage/tasks/main.yml
+---
+- name: Detect OpenWrt root storage layout
+  ansible.builtin.include_tasks: detect.yml
+
+- name: Reject unsupported layouts when root expansion is requested
+  ansible.builtin.fail:
+    msg: >-
+      Root storage expansion was requested, but the detected layout is
+      {{ router_storage_detection.state }}. No storage changes were made.
+      Detected details: {{ router_storage_detection }}
+  when:
+    - router_storage_expand_root | bool
+    - router_storage_detection.state not in [
+        'required', 'partial', 'not_required'
+      ]
+
+- name: Expand supported OpenWrt root storage
+  ansible.builtin.include_tasks: expand.yml
+  when:
+    - router_storage_expand_root | bool
+    - router_storage_detection.state in ['required', 'partial']

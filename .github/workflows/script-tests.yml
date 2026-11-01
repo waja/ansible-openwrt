@@ -87,6 +87,7 @@ jobs:
           while IFS= read -r path; do
             case "$path" in
               scripts/*|\
+                roles/router_storage/files/*|\
                 .github/openwrt-versions.json|\
                 .github/actions/openwrt-image/action.yml|\
                 .github/workflows/script-tests.yml)
@@ -136,6 +137,10 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/owrt-test"
           cp scripts/owrt-extra.sh "$RUNNER_TEMP/owrt-test/owrt-extra.sh"
+          cp roles/router_storage/files/detect.sh \
+            "$RUNNER_TEMP/owrt-test/detect.sh"
+          cp scripts/test-router-storage-detect.sh \
+            "$RUNNER_TEMP/owrt-test/test.sh"
           docker run --rm \
             -v "$RUNNER_TEMP/owrt-test:/opt/owrt-test:ro" \
             --entrypoint /bin/sh \
@@ -144,6 +149,10 @@ jobs:
               set -eu
               cp /opt/owrt-test/owrt-extra.sh /tmp/owrt-extra-test.sh
               sh -n /tmp/owrt-extra-test.sh
+              sh -n /opt/owrt-test/detect.sh
+              sh -n /opt/owrt-test/test.sh
+              sh /opt/owrt-test/test.sh \
+                /opt/owrt-test/detect.sh
 
               sh /tmp/owrt-extra-test.sh -h > /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-k([[:space:]]|$)" /tmp/help.txt
