@@ -271,24 +271,6 @@ for release versions, image tags, container names, paths, and CI matrix values.
 
 ### Ansible
 
-### UCI identifiers and firewall zone names
-
-Keep UCI section identifiers separate from firewall object names:
-
-- A **UCI section ID** is the section identifier used as the key in a
-  managed dictionary and in UCI operations. It may contain only letters,
-  digits, and underscores. Validate it before using it in UCI operations.
-- A firewall zone's **zone name** is the human-readable value of its
-  `option name`; it is not the UCI section ID. It must not start with a
-  digit and must not exceed fw4's documented maximum working length of
-  11 characters. Validate it before making any UCI changes.
-
-When writing tests for validation unrelated to naming (for example, option
-types or values), use valid UCI section IDs and valid firewall zone names.
-Otherwise, an earlier naming check may reject the fixture before the test
-reaches the validation path it is intended to exercise.
-
-
 - Always use FQCN:
   - `ansible.builtin.include_role`, `ansible.builtin.raw`,
     `ansible.builtin.command` for generic tasks
@@ -333,6 +315,23 @@ reaches the validation path it is intended to exercise.
   unnecessary restart on the next run. Do not use `raw` as a general
   replacement for available modules.
 
+
+### UCI identifiers and firewall zone names
+
+Keep UCI section identifiers separate from firewall object names:
+
+- A **UCI section ID** is the section identifier used as the key in a
+  managed dictionary and in UCI operations. It may contain only letters,
+  digits, and underscores. Validate it before using it in UCI operations.
+- A firewall zone's **zone name** is the human-readable value of its
+  `option name`; it is not the UCI section ID. It must not start with a
+  digit and must not exceed fw4's documented maximum working length of
+  11 characters. Validate it before making any UCI changes.
+
+When writing tests for validation unrelated to naming (for example, option
+types or values), use valid UCI section IDs and valid firewall zone names.
+Otherwise, an earlier naming check may reject the fixture before the test
+reaches the validation path it is intended to exercise.
 ### Input validation
 
 - Validate values when they have a defined set or range of allowed inputs and
