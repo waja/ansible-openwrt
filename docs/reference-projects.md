@@ -81,40 +81,57 @@ without understanding their assumptions.
 - **Caution:** its bridge/VLAN design and stated hardware limitations are
   specific to the author's device and OpenWrt environment.
 
-
 ### [DigitecGalaxus/ansible-openwrt-framework][digitec-openwrt]
 
-- **Focus:** a full OpenWrt fleet framework with a Tailscale/Headscale mesh.
-- **Useful entry points:** its network and firewall UCI templates and the
-  Tailscale configuration tasks.
-- **Ideas to examine:** model `tailscale0` as an unmanaged network
-  interface, give it an explicit firewall zone, and keep route advertisement
-  and Tailscale preferences declarative.
-- **Caution:** this is an opinionated, end-to-end router framework. Its broad
-  firewall policy, route derivation, SNAT choices, full-package UCI templates,
-  and init-script patching are not drop-in patterns for this repository.
-  Reuse the concepts, not its complete configuration.
+- **Focus:** an Ansible framework for managing OpenWrt gateways as a fleet,
+  using Tailscale clients and a Headscale control plane for its mesh.
+- **Useful entry points:** [network template][digitec-network],
+  [firewall template][digitec-firewall],
+  [Tailscale settings template][digitec-tailscale], and the
+  [configuration tasks][digitec-config-tasks].
+- **Ideas to examine:** the unmanaged `tailscale0` interface, a dedicated
+  firewall zone, explicit inter-zone forwarding, and declarative route
+  advertisement derived from network definitions.
+- **Caution:** its templates render and import complete UCI package files,
+  rather than managing isolated sections. Its firewall grants broad access
+  within the Tailscale zone, forwards Tailscale traffic to WAN, and adds a
+  project-specific SNAT rule. Its route calculation assumes particular
+  network data. A `uci-defaults` script also patches the package init script
+  with a public-IP ping delay. These are framework-specific choices, not
+  safe defaults or drop-in patterns for this repository.
 
 ### [GuNanOvO/openwrt-tailscale][gunanovo-tailscale]
 
-- **Focus:** Tailscale packages and installation/update workflows for
-  OpenWrt, including APK packages for OpenWrt 25.12.
-- **Ideas to examine:** package format, architecture coverage, official init
-  integration, and storage/install constraints.
-- **Caution:** this is a packaging/installer project, not an Ansible
-  configuration role. Prefer the official OpenWrt package where available;
-  do not add a third-party feed or installer dependency without a verified
-  compatibility need.
+- **Focus:** builds smaller Tailscale IPK/APK packages and provides install,
+  update, and package-feed workflows for OpenWrt devices.
+- **Useful entry points:** [APK feed setup][gunanovo-apk],
+  [installer modes and behavior][gunanovo-installer], and
+  [post-install configuration][gunanovo-postinstall].
+- **Ideas to examine:** architecture-specific packaging, persistent versus
+  temporary/binary installation, storage and memory constraints, and how
+  package installation integrates with the OpenWrt init service.
+- **Caution:** this is a third-party package and installer project, not an
+  Ansible configuration role. Its OpenWrt 25.12 APK feed requires adding a
+  third-party signing key and repository. Do not make that feed a dependency
+  when the official OpenWrt package meets our requirements. The project also
+  notes that most architectures/devices are not tested.
 
 ### [fl0w1nd/openwrt-tailscale][flowind-tailscale]
 
-- **Focus:** script-based Tailscale installation and management on OpenWrt,
-  including subnet-routing and firewall setup.
-- **Ideas to examine:** operational edge cases around persistent storage,
-  firewall integration, and subnet-router setup.
-- **Caution:** it is not an Ansible role. Its script-driven configuration
-  and device assumptions need independent review before any pattern is
-  adopted.
+- **Focus:** a script-based Tailscale manager aimed at devices constrained by
+  flash storage or official package availability.
+- **Useful entry points:** [subnet-routing guide][flowind-subnet],
+  [storage modes][flowind-storage], and the
+  [project README][flowind-readme].
+- **Ideas to examine:** separating the unmanaged interface from optional
+  firewall integration, persistent binaries on external storage, RAM mode,
+  and the distinction between kernel-TUN and userspace operation.
+- **Caution:** its subnet-routing helper creates OpenWrt UCI objects and its
+  example firewall policy uses permissive zone policies. Its compressed
+  binaries, installer, cron updater, and optional LuCI integration are a
+  separate distribution/management model, not a pattern to import into this
+  Ansible role. In userspace mode there is no `tailscale0` interface to
+  configure.
 
 ## How to use these references
 
@@ -146,6 +163,16 @@ without understanding their assumptions.
 [digitec-openwrt]: https://github.com/DigitecGalaxus/ansible-openwrt-framework
 [gunanovo-tailscale]: https://github.com/GuNanOvO/openwrt-tailscale
 [flowind-tailscale]: https://github.com/fl0w1nd/openwrt-tailscale
+[digitec-network]: https://github.com/DigitecGalaxus/ansible-openwrt-framework/blob/master/roles/openwrt/config/templates/network_config.j2
+[digitec-firewall]: https://github.com/DigitecGalaxus/ansible-openwrt-framework/blob/master/roles/openwrt/config/templates/firewall_config.j2
+[digitec-tailscale]: https://github.com/DigitecGalaxus/ansible-openwrt-framework/blob/master/roles/openwrt/config/templates/tailscale_config.j2
+[digitec-config-tasks]: https://github.com/DigitecGalaxus/ansible-openwrt-framework/blob/master/roles/openwrt/config/tasks/main.yaml
+[gunanovo-apk]: https://github.com/GuNanOvO/openwrt-tailscale/blob/main/docs/en/guide/apk-setup.md
+[gunanovo-installer]: https://github.com/GuNanOvO/openwrt-tailscale/blob/main/docs/en/guide/install-script.md
+[gunanovo-postinstall]: https://github.com/GuNanOvO/openwrt-tailscale/blob/main/docs/en/guide/post-install.md
+[flowind-subnet]: https://github.com/fl0w1nd/openwrt-tailscale/blob/main/docs/en/guide/subnet-routing.md
+[flowind-storage]: https://github.com/fl0w1nd/openwrt-tailscale/blob/main/docs/en/guide/storage-modes.md
+[flowind-readme]: https://github.com/fl0w1nd/openwrt-tailscale/blob/main/README.md
 [openwrt-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/index.html
 [setup-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/setup_module.html
 [uci-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/uci_module.html
