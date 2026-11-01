@@ -1,28 +1,5 @@
 # roles/router_storage/tasks/expand.yml
 ---
-- name: Download and validate the official OpenWrt root expansion script (temporary legacy step)
-  ansible.builtin.raw: |
-    set -eu
-    if [ ! -s /etc/uci-defaults/70-rootpt-resize ] ||
-      [ ! -s /etc/uci-defaults/80-rootfs-resize ]; then
-      cd /tmp
-      url='https://openwrt.org/_export/code/docs/guide-user/advanced/'
-      url="$url"expand_root?codeblock=3
-      wget -U "" -O router-storage-expand-root.sh "$url"
-      test -s /tmp/router-storage-expand-root.sh
-      if grep -qiE '<!doctype[[:space:]]+html|<html|access denied|anubis' \
-        /tmp/router-storage-expand-root.sh; then
-        echo "ERROR: OpenWrt Wiki returned an HTML access-denied page, not the expansion script." >&2
-        exit 1
-      fi
-      if ! grep -q '70-rootpt-resize' /tmp/router-storage-expand-root.sh ||
-        ! grep -q '80-rootfs-resize' /tmp/router-storage-expand-root.sh; then
-        echo "ERROR: Downloaded content is not the expected official OpenWrt expansion script." >&2
-        exit 1
-      fi
-    fi
-  changed_when: false
-
 - name: Install OpenWrt root expansion prerequisites
   action: "community.openwrt.{{ openwrt_package_manager }}"
   args:
@@ -30,32 +7,44 @@
     state: present
     update_cache: true
 
-- name: Prepare the official OpenWrt root expansion scripts
+- name: Install and persist the OpenWrt root expansion scripts
   ansible.builtin.raw: |
     set -eu
     changed=0
-    if [ ! -s /etc/uci-defaults/70-rootpt-resize ] ||
-      [ ! -s /etc/uci-defaults/80-rootfs-resize ]; then
-      . /tmp/router-storage-expand-root.sh
-      changed=1
-    fi
-    test -s /etc/uci-defaults/70-rootpt-resize
-    test -s /etc/uci-defaults/80-rootfs-resize
-    if ! grep -Fxq \
-      '/etc/uci-defaults/70-rootpt-resize' /etc/sysupgrade.conf; then
-      echo '/etc/uci-defaults/70-rootpt-resize' >> /etc/sysupgrade.conf
-      changed=1
-    fi
-    if ! grep -Fxq \
-      '/etc/uci-defaults/80-rootfs-resize' /etc/sysupgrade.conf; then
-      echo '/etc/uci-defaults/80-rootfs-resize' >> /etc/sysupgrade.conf
-      changed=1
-    fi
+    mkdir -p /etc/uci-defaults
+    for script in 70-rootpt-resize 80-rootfs-resize; do
+      case "$script" in
+        70-rootpt-resize)
+          source=/tmp/router-storage-70-rootpt-resize
+          cat > "$source" <<'ROUTER_STORAGE_70'
+    {{ lookup('ansible.builtin.file', role_path ~ '/files/70-rootpt-resize') }}
+    ROUTER_STORAGE_70
+          ;;
+        80-rootfs-resize)
+          source=/tmp/router-storage-80-rootfs-resize
+          cat > "$source" <<'ROUTER_STORAGE_80'
+    {{ lookup('ansible.builtin.file', role_path ~ '/files/80-rootfs-resize') }}
+    ROUTER_STORAGE_80
+          ;;
+      esac
+      chmod 0755 "$source"
+      target="/etc/uci-defaults/$script"
+      if ! cmp -s "$source" "$target"; then
+        mv "$source" "$target"
+        changed=1
+      else
+        rm -f "$source"
+      fi
+      if ! grep -Fxq "$target" /etc/sysupgrade.conf 2>/dev/null; then
+        echo "$target" >> /etc/sysupgrade.conf
+        changed=1
+      fi
+    done
     echo "changed=$changed"
   register: router_storage_prepare_result
   changed_when: "'changed=1' in router_storage_prepare_result.stdout"
 
-- name: Clear previous resize markers when additional disk space exists
+- name: Clear stale resize markers when additional disk space exists
   community.openwrt.file:
     path: "{{ item }}"
     state: absent
@@ -88,7 +77,7 @@
     timeout: 180
   delegate_to: localhost
 
-- name: Wait for SSH after the OpenWrt resize reboots
+- name: Wait for SSH after the OpenWrt resize reboot
   ansible.builtin.wait_for:
     host: "{{ ansible_host | default(inventory_hostname) }}"
     port: "{{ ansible_port | default(22) }}"
