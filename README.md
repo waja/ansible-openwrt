@@ -21,8 +21,10 @@ inventory and customize variables there.
 - `playbooks/audit_packages.yml` compares the installed packages on each
   router against a saved package-list baseline. It reports differences but
   does not install or remove packages to reconcile them.
+- `playbooks/storage.yml` inspects supported x86/64 SquashFS storage and
+  can optionally expand the root partition and writable overlay.
 
-Both playbooks target the `openwrt` inventory group.
+All playbooks target the `openwrt` inventory group.
 
 For role-specific settings and examples, start with the
 [router configuration overview](docs/configuration.md) and follow its links
@@ -32,8 +34,9 @@ to the individual [system](docs/roles/router_system.md),
 [packages](docs/roles/router_packages.md),
 [base services](docs/roles/router_base.md),
 [SNMP](docs/roles/router_snmpd.md),
-[LibreNMS](docs/roles/router_librenms.md), and
-[package audit](docs/roles/router_package_audit.md) guides.
+[LibreNMS](docs/roles/router_librenms.md),
+[package audit](docs/roles/router_package_audit.md), and
+[storage](docs/roles/router_storage.md) guides.
 
 ## Requirements
 
@@ -219,6 +222,7 @@ See the [router configuration overview](docs/configuration.md) for playbook usag
 - `roles/router_snmpd/` — optional SNMP community configuration
 - `roles/router_librenms/` — optional LibreNMS wireless sensor integration
 - `roles/router_package_audit/` — package baseline comparison
+- `roles/router_storage/` — root storage detection and optional expansion
 - `requirements.yml` — pinned Ansible role and collection dependencies
 - `extensions/molecule/default/` — Molecule test scenario
 - `extensions/molecule/network-static/` — static network configuration tests
@@ -282,6 +286,7 @@ yamllint .
 ansible-lint --exclude collections/ansible_collections/community/openwrt/
 ansible-playbook -i inventory.ini --syntax-check playbooks/site.yml
 ansible-playbook -i inventory.ini --syntax-check playbooks/audit_packages.yml
+ansible-playbook -i inventory.ini --syntax-check playbooks/storage.yml
 ```
 
 The syntax checks use the inventory so Ansible can resolve the `openwrt`

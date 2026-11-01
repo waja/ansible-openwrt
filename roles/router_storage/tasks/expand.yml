@@ -1,0 +1,79 @@
+# roles/router_storage/tasks/expand.yml
+---
+- name: Install OpenWrt root expansion prerequisites
+  action: "community.openwrt.{{ openwrt_package_manager }}"
+  args:
+    name: parted,losetup,resize2fs,blkid
+    state: present
+    update_cache: true
+
+- name: Install and persist the OpenWrt root expansion scripts
+  ansible.builtin.raw: |
+    set -eu
+    changed=0
+    mkdir -p /etc/uci-defaults
+    for script in 70-rootpt-resize 80-rootfs-resize; do
+      case "$script" in
+        70-rootpt-resize)
+          source=/tmp/router-storage-70-rootpt-resize
+          cat > "$source" <<'ROUTER_STORAGE_70'
+    {{ lookup('ansible.builtin.file', role_path ~ '/files/70-rootpt-resize') }}
+    ROUTER_STORAGE_70
+          ;;
+        80-rootfs-resize)
+          source=/tmp/router-storage-80-rootfs-resize
+          cat > "$source" <<'ROUTER_STORAGE_80'
+    {{ lookup('ansible.builtin.file', role_path ~ '/files/80-rootfs-resize') }}
+    ROUTER_STORAGE_80
+          ;;
+      esac
+      chmod 0755 "$source"
+      target="/etc/uci-defaults/$script"
+      if ! cmp -s "$source" "$target"; then
+        mv "$source" "$target"
+        changed=1
+      else
+        rm -f "$source"
+      fi
+      if ! grep -Fxq "$target" /etc/sysupgrade.conf 2>/dev/null; then
+        echo "$target" >> /etc/sysupgrade.conf
+        changed=1
+      fi
+    done
+    echo "changed=$changed"
+  register: router_storage_prepare_result
+  changed_when: "'changed=1' in router_storage_prepare_result.stdout"
+
+- name: Clear stale resize markers when additional disk space exists
+  community.openwrt.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/rootpt-resize
+    - /etc/rootfs-resize
+  when: router_storage_detection.state == 'required'
+
+- name: Run the remaining OpenWrt root expansion stages
+  ansible.builtin.include_tasks: resize_stage.yml
+  loop:
+    - partition
+    - filesystem
+  loop_control:
+    loop_var: router_storage_resize_stage
+    label: "{{ router_storage_resize_stage }}"
+  when:
+    - >-
+      (router_storage_resize_stage == 'partition'
+      and router_storage_detection.state == 'required')
+      or
+      (router_storage_resize_stage == 'filesystem'
+      and router_storage_detection.state == 'partial')
+
+- name: Require a fully expanded root filesystem
+  ansible.builtin.assert:
+    that:
+      - router_storage_detection.state == 'not_required'
+    fail_msg: >-
+      OpenWrt root expansion did not reach the expected final state.
+      Detected state: {{ router_storage_detection.state }}.
+      Review /tmp/router-storage-resize.log on the target.

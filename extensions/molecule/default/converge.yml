@@ -8,6 +8,37 @@
       ansible.builtin.include_role:
         name: community.openwrt.init
 
+    - name: Inspect storage without enabling expansion
+      ansible.builtin.include_role:
+        name: router_storage
+      vars:
+        router_storage_expand_root: false
+
+    - name: Verify container storage is not treated as expandable SquashFS
+      ansible.builtin.assert:
+        that:
+          - router_storage_detection.state in ['unsupported', 'unknown']
+
+    - name: Capture rejected expansion for unsupported container storage
+      block:
+        - name: Attempt to expand unsupported container storage
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_expand_root: true
+      rescue:
+        - name: Record unsupported expansion rejection
+          ansible.builtin.set_fact:
+            router_storage_unsupported_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify unsupported storage is rejected before changes
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_storage_unsupported_failure
+            == 'Reject unsupported layouts when root expansion is requested'
+
     - name: Apply router system role
       ansible.builtin.include_role:
         name: router_system

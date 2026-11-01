@@ -58,6 +58,7 @@ roles that may be prerequisites; review the selected tasks before execution.
 | `router_base` | Core service enablement and obsolete configuration cleanup | [Base services](roles/router_base.md) |
 | `router_snmpd` | Optional SNMP community replacement | [SNMP daemon](roles/router_snmpd.md) |
 | `router_package_audit` | Compare installed packages with a saved baseline | [Package audit](roles/router_package_audit.md) |
+| `router_storage` | Detect and optionally expand root storage | [Storage](roles/router_storage.md) |
 
 ## Organize inventory variables
 

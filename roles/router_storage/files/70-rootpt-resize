@@ -1,0 +1,31 @@
+#!/bin/sh
+# OpenWrt root partition expansion, adapted from the documented procedure:
+# https://openwrt.org/docs/guide-user/advanced/expand_root
+
+if [ ! -e /etc/rootpt-resize ] \
+&& type parted > /dev/null \
+&& lock -n /var/lock/root-resize
+then
+    ROOT_BLK="$(readlink -f /sys/dev/block/"$(awk -e \
+        '$9=="/dev/root"{print $3}' /proc/self/mountinfo)")"
+    ROOT_DISK="/dev/$(basename "${ROOT_BLK%/*}")"
+    ROOT_PART="${ROOT_BLK##*[^0-9]}"
+    ROOT_PART_DEV="/dev/$(basename "${ROOT_BLK}")"
+    [ -b "${ROOT_DISK}" ] || exit 1
+    [ -b "${ROOT_PART_DEV}" ] || exit 1
+    [ -n "${ROOT_PART}" ] || exit 1
+
+    parted -f -s "${ROOT_DISK}" resizepart "${ROOT_PART}" 100%
+    mount_root done
+    touch /etc/rootpt-resize
+
+    if [ -e /boot/cmdline.txt ]
+    then
+        NEW_UUID=$(blkid "${ROOT_PART_DEV}" | awk -F 'PARTUUID="' '{split($2, part, "\""); print part[1]}')
+        [ -n "${NEW_UUID}" ] || exit 1
+        sed -i "s/PARTUUID=[^ ]*/PARTUUID=${NEW_UUID}/" /boot/cmdline.txt
+    fi
+
+    reboot
+fi
+exit 1

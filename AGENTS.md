@@ -13,6 +13,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 
 - `playbooks/site.yml` – standard configuration for all OpenWrt routers
 - `playbooks/audit_packages.yml` – optional installed-package comparison
+- `playbooks/storage.yml` – optional root storage inspection and expansion
 - `docs/configuration.md` – router configuration overview, playbook usage,
   inventory organization, and links to role-specific guides
 - `docs/roles/<role_name>.md` – detailed configuration guide for each
@@ -41,6 +42,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `roles/router_librenms/` – deploys pinned LibreNMS scripts and manages
   role-owned SNMP extend entries and sysupgrade persistence
 - `roles/router_package_audit/` – optional comparison with a saved baseline
+- `roles/router_storage/` – read-only root storage detection and opt-in expansion
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
   `defaults/main.yml`
 - `./collections/` – installed dependencies, **never edit**, must be
@@ -661,8 +663,9 @@ Workflow: `.github/workflows/forward-compatibility.yml`.
   collection was installed.
 - Uses the same mounted Ansible home in a separate container to verify
   that dependencies remain available across container runs.
-- Syntax-checks both playbooks with a temporary local inventory; it does
-  not connect to routers and requires no secrets.
+- Syntax-checks the site, package-audit, and storage playbooks with a
+  temporary local inventory; it does not connect to routers and requires
+  no secrets.
 - This workflow checks the Will Hall Online image's dependency behavior
   and playbook syntax. It does not replace the lint and Molecule checks in
   `.github/workflows/molecule.yml`.
