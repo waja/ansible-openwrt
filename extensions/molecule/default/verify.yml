@@ -1294,7 +1294,7 @@
             key: firewall.@rule[-1].target
             value: DROP
 
-    - name: Create a named rule without adopting an anonymous match when name is omitted
+    - name: Create a named rule when no explicit name is supplied
       ansible.builtin.include_role:
         name: router_firewall
       vars:
