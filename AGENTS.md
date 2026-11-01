@@ -134,10 +134,12 @@ or issue rather than relying on an external link alone.
   Mark it ready for review only after the full diff has been reviewed, all
   checks required for that PR by the applicable workflows and repository
   policy have reached successful conclusions, and the PR is ready for
-  reviewer feedback. For a specific PR, applicable checks are all checks
-  required by repository policy or triggered by the GitHub Actions workflows
-  for that PR, including jobs selected by path filters, conditions, and test
-  matrices. Workflows or jobs that are not triggered because their documented
+  reviewer feedback, and only after explicit approval from the user.
+  Passing CI and a complete self-review do not by themselves authorize
+  changing a PR from Draft to Ready for review. For a specific PR, applicable
+  checks are all checks required by repository policy or triggered by the
+  GitHub Actions workflows for that PR, including jobs selected by path
+  filters, conditions, and test matrices. Workflows or jobs that are not triggered because their documented
   conditions are not met are not required. Do not assume every workflow or
   test suite must run for every PR. If further implementation changes are
   needed, convert the PR back to draft until they are complete.
