@@ -150,6 +150,8 @@ jobs:
               cp /opt/owrt-test/owrt-extra.sh /tmp/owrt-extra-test.sh
               sh -n /tmp/owrt-extra-test.sh
               sh -n /opt/owrt-test/detect.sh
+              sh -n /opt/owrt-test/70-rootpt-resize
+              sh -n /opt/owrt-test/80-rootfs-resize
               sh -n /opt/owrt-test/test.sh
               sh /opt/owrt-test/test.sh \
                 /opt/owrt-test/detect.sh
