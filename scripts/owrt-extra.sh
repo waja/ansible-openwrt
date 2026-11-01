@@ -496,7 +496,7 @@ done < "$T/feedfiles" > "$T/feedout"
 if [ -s "$T/feedout" ]; then cat "$T/feedout"; else echo "   (identical to factory)"; fi
 
 # --- APK system audit ------------------------------------------------------
-print_section "3a. APK system audit (modified package-owned system files)"
+print_section "3a. APK system audit findings"
 APK_AUDIT="$OUT/apk-audit-system.txt"
 if command -v apk >/dev/null 2>&1; then
     if apk audit --help 2>&1 | grep -q -- '--system'; then
