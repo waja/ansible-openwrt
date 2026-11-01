@@ -224,6 +224,26 @@ See the [router configuration overview](docs/configuration.md) for playbook usag
 - `extensions/molecule/network-static/` — static network configuration tests
 - `extensions/molecule/network-dhcp/` — DHCP configuration tests
 - `.github/workflows/molecule.yml` — lint and Molecule CI workflow
+- `.github/openwrt-versions.json` — shared OpenWrt release-version matrix for CI
+- `.github/actions/openwrt-image/` — shared OpenWrt image selection and pull action
+- `.github/workflows/forward-compatibility.yml` — scheduled Ansible
+  pre-release compatibility tests
+
+## OpenWrt versions used by CI
+
+The OpenWrt release versions tested by Molecule, forward-compatibility, and
+script smoke tests are listed in `.github/openwrt-versions.json`. To test
+multiple releases, add them to the `versions` array, for example:
+
+```json
+{
+  "versions": ["24.10", "25.12"]
+}
+```
+
+Keep this file as valid JSON (without comments). The workflows expand the
+array into their OpenWrt-version matrix. The shared
+`.github/actions/openwrt-image` action handles release and snapshot image tags.
 
 ## Script and documentation checks
 

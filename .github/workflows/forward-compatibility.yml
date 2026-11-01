@@ -1,0 +1,175 @@
+# .github/workflows/forward-compatibility.yml
+---
+name: Ansible Forward Compatibility
+
+"on":
+  pull_request:
+    paths:
+      - '.github/workflows/forward-compatibility.yml'
+      - '.github/openwrt-versions.json'
+      - '.github/scripts/find-prerelease.py'
+  workflow_dispatch:
+  schedule:
+    - cron: '17 8 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  openwrt-versions:
+    name: Read OpenWrt version matrix
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.versions.outputs.versions }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Read configured OpenWrt versions
+        id: versions
+        run: |
+          set -euo pipefail
+          versions="$(jq -ce \
+            '.versions | select(type == "array" and length > 0)' \
+            .github/openwrt-versions.json)"
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
+
+  molecule-prerelease:
+    needs: openwrt-versions
+    name: >-
+      Ansible Core pre-release
+      (${{ matrix.openwrt_version }}, ${{ matrix.scenario }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        openwrt_version: >-
+          ${{ fromJSON(needs['openwrt-versions'].outputs.versions) }}
+        scenario:
+          - default
+          - network-static
+          - network-dhcp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version-file: .python-version
+
+      - name: Install packaging for pre-release discovery
+        run: python -m pip install --disable-pip-version-check packaging
+
+      - name: Discover latest Ansible Core pre-release
+        id: candidate
+        run: python .github/scripts/find-prerelease.py ansible-core
+
+      - name: Install pre-release Ansible and Molecule tools
+        if: steps.candidate.outputs.available == 'true'
+        env:
+          CORE_VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          python -m pip install --upgrade \
+            "ansible-core==${CORE_VERSION}" \
+            molecule "molecule-plugins[docker]" netaddr
+          python -m pip check
+
+      - name: Install project dependencies
+        if: steps.candidate.outputs.available == 'true'
+        run: |
+          ansible-galaxy role install -r requirements.yml \
+            --roles-path ~/.ansible/roles
+          ansible-galaxy collection install -r requirements.yml \
+            --collections-path ~/.ansible/collections
+
+      - name: Report exact tool versions
+        if: steps.candidate.outputs.available == 'true'
+        run: |
+          ansible --version
+          molecule --version
+          python -m pip list | grep -iE 'molecule|ansible|docker'
+
+      - name: Configure role search path
+        if: steps.candidate.outputs.available == 'true'
+        run: |
+          roles_path="$GITHUB_WORKSPACE/roles:$HOME/.ansible/roles:"
+          roles_path+="/usr/share/ansible/roles"
+          echo "ANSIBLE_ROLES_PATH=$roles_path" >> "$GITHUB_ENV"
+
+      - name: Configure and pull regular OpenWrt image
+        if: steps.candidate.outputs.available == 'true'
+        uses: ./.github/actions/openwrt-image
+        with:
+          version: ${{ matrix.openwrt_version }}
+          snapshot: 'false'
+
+      - name: Run ${{ matrix.scenario }} scenario
+        if: steps.candidate.outputs.available == 'true'
+        run: |
+          molecule test -s "${{ matrix.scenario }}" --destroy=never
+        env:
+          MOLECULE_GLOB: >-
+            ${{ github.workspace }}/extensions/molecule/*/molecule.yml
+          PY_COLORS: '1'
+          ANSIBLE_FORCE_COLOR: '1'
+
+      - name: Destroy scenario
+        if: always() && steps.candidate.outputs.available == 'true'
+        run: molecule destroy -s "${{ matrix.scenario }}"
+        env:
+          MOLECULE_GLOB: >-
+            ${{ github.workspace }}/extensions/molecule/*/molecule.yml
+
+  ansible-lint-prerelease:
+    name: ansible-lint pre-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version-file: .python-version
+
+      - name: Install packaging for pre-release discovery
+        run: python -m pip install --disable-pip-version-check packaging
+
+      - name: Discover latest ansible-lint pre-release
+        id: candidate
+        run: python .github/scripts/find-prerelease.py ansible-lint
+
+      - name: Install compatible ansible-lint pre-release
+        if: steps.candidate.outputs.available == 'true'
+        env:
+          LINT_VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          if ! python -m pip install --pre --upgrade \
+            "ansible-lint==${LINT_VERSION}"; then
+            echo "::error::The latest ansible-lint pre-release could not be"
+            echo "::error::resolved with a compatible dependency set."
+            exit 1
+          fi
+          python -m pip check
+
+      - name: Install project dependencies
+        if: steps.candidate.outputs.available == 'true'
+        run: |
+          ansible-galaxy role install -r requirements.yml \
+            --roles-path ~/.ansible/roles
+          ansible-galaxy collection install -r requirements.yml \
+            --collections-path ~/.ansible/collections
+
+      - name: Report exact tool versions
+        if: steps.candidate.outputs.available == 'true'
+        run: |
+          ansible --version
+          ansible-lint --version
+          python -m pip list | grep -iE 'ansible|yamllint'
+
+      - name: Lint Ansible
+        if: steps.candidate.outputs.available == 'true'
+        run: |
+          ansible-lint \
+            --exclude collections/ansible_collections/community/openwrt/

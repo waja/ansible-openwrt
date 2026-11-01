@@ -14,6 +14,24 @@ name: Molecule CI
       - master
 
 jobs:
+  openwrt-versions:
+    name: Read OpenWrt version matrix
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.versions.outputs.versions }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Read configured OpenWrt versions
+        id: versions
+        run: |
+          set -euo pipefail
+          versions="$(jq -ce \
+            '.versions | select(type == "array" and length > 0)' \
+            .github/openwrt-versions.json)"
+          printf 'versions=%s\n' "$versions" >> "$GITHUB_OUTPUT"
+
   changes:
     name: Detect relevant changes
     if: github.event_name == 'pull_request' || github.event_name == 'push'
@@ -199,9 +217,10 @@ jobs:
             --python ${{ steps.python.outputs.python-version }}
 
   molecule:
-    name: Molecule tests
+    name: Molecule tests (${{ matrix.openwrt_version }}, ${{ matrix.scenario }})
     needs:
       - changes
+      - openwrt-versions
       - check-structure
       - lint
       - sanity
@@ -209,6 +228,7 @@ jobs:
     if: >-
       ${{
         !cancelled()
+        && needs['openwrt-versions'].result == 'success'
         && needs.check-structure.result == 'success'
         && needs.lint.result == 'success'
         && contains(fromJSON('["success","skipped"]'), needs.sanity.result)
@@ -232,19 +252,13 @@ jobs:
     env:
       MOLECULE_GLOB: >-
         ${{ github.workspace }}/extensions/molecule/*/molecule.yml
-      OPENWRT_VERSION: ${{ matrix.openwrt_version }}
       OPENWRT_SNAPSHOT: ${{ github.event.schedule == '17 7 * * 0' }}
-      OPENWRT_IMAGE: >-
-        ${{ github.event.schedule == '17 7 * * 0'
-            && format('openwrt/rootfs:x86_64-{0}-SNAPSHOT',
-                      matrix.openwrt_version)
-            || format('openwrt/rootfs:x86_64-openwrt-{0}',
-                      matrix.openwrt_version) }}
+      OPENWRT_VERSION: ${{ matrix.openwrt_version }}
     strategy:
       fail-fast: false
       matrix:
-        openwrt_version:
-          - '25.12'
+        openwrt_version: >-
+          ${{ fromJSON(needs['openwrt-versions'].outputs.versions) }}
         scenario:
           - default
           - network-static
@@ -287,15 +301,11 @@ jobs:
           echo "ANSIBLE_ROLES_PATH=$GITHUB_WORKSPACE/roles:"\
           "$HOME/.ansible/roles:/usr/share/ansible/roles" >> "$GITHUB_ENV"
 
-      - name: Pull and identify OpenWrt image
-        run: |
-          set -euo pipefail
-          echo "Selected image: $OPENWRT_IMAGE"
-          docker pull "$OPENWRT_IMAGE"
-          docker image inspect "$OPENWRT_IMAGE" \
-            --format 'Image ID: {{.Id}}'
-          docker image inspect "$OPENWRT_IMAGE" \
-            --format 'Repo digests: {{json .RepoDigests}}'
+      - name: Configure and pull OpenWrt image
+        uses: ./.github/actions/openwrt-image
+        with:
+          version: ${{ matrix.openwrt_version }}
+          snapshot: ${{ env.OPENWRT_SNAPSHOT }}
 
       - name: Test ${{ matrix.scenario }} scenario
         run: molecule test -s "${{ matrix.scenario }}" --destroy=never

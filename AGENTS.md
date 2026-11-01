@@ -3,8 +3,8 @@
 ## Project context
 
 Ansible project `waja.ansible_openwrt` for configuring OpenWrt routers.
-Molecule tests run in Docker against the OpenWrt release selected by the CI
-matrix. CI runs on GitHub Actions.
+Molecule tests run in Docker against the OpenWrt releases listed in
+`.github/openwrt-versions.json`. CI runs on GitHub Actions.
 
 Pull requests target `development`, not `master`. A dedicated workflow
 warns on PRs that target `master` and adds the `needs-rebase` label.
@@ -19,7 +19,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   role with documented user-facing options, including `router_librenms`
 - `docs/state-discovery/` – discovery workflow, bundle format and schema,
   evidence handling, and Ansible assessment design
-- `scripts/owrt-extra.sh` – read-only OpenWrt state discovery for Ansible migration
+- `scripts/owrt-extra.sh` – read-only OpenWrt state discovery for Ansible
+  migration
 - `extensions/molecule/default/` – Molecule scenario for hostname,
   firewall zones, packages, and base services
 - `extensions/molecule/network-static/` – isolated configuration-only
@@ -47,6 +48,10 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `requirements.yml` – authoritative, version-pinned source for
   Ansible role and collection dependencies used locally and in CI.
 - `.python-version` – shared Python version for CI workflows
+- `.github/openwrt-versions.json` – shared OpenWrt release-version matrix
+  for CI images
+- `.github/actions/openwrt-image/action.yml` – shared image selection
+  and pull step
 - `requirements/ci/*.in` and `requirements/ci/*.txt` – direct Python
   dependency inputs and generated hash-locked CI toolchains
 - `requirements/ci/pip-tools.in` – pinned lockfile generator version
@@ -54,6 +59,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `.github/workflows/update-ci-lockfiles.yml` – lockfile freshness validation
 - `.github/workflows/refresh-ci-lockfiles.yml` – weekly lockfile refresh PR
 - `.github/workflows/molecule.yml` – main Ansible/Molecule CI pipeline
+- `.github/workflows/forward-compatibility.yml` – scheduled Ansible and
+  ansible-lint pre-release tests
 - `.github/workflows/script-tests.yml` – state-discovery script smoke tests
 - `.github/workflows/pr-base-check.yml` – warns on PRs targeting `master`
 
@@ -98,6 +105,14 @@ or CI workflows.
 - Keep scheduled smoke tests and manual `workflow_dispatch` available.
 - Do not add workflow-level path filters that can leave required checks
   pending.
+
+Use `docs/reference-projects.md` as a curated set of external
+Ansible/OpenWrt examples when researching relevant design questions,
+implementation patterns, or test cases. Treat those repositories as
+unverified examples, not project requirements: check official module
+documentation and verify compatibility, safety, and behavior before adopting
+an approach. Record lasting decisions in the relevant project documentation
+or issue rather than relying on an external link alone.
 
 ## Issue and PR workflow
 
@@ -154,12 +169,6 @@ use commits on the PR branch as a scratchpad for intermediate experiments.
    static inspection from executed tests. If a check cannot run locally, say
    why and rely on CI where appropriate; do not imply it passed.
 
-For implementation PRs, include reference-project research in the planning
-and self-review: check whether relevant examples revealed missing
-requirements, edge cases, operational risks, or tests. Mention material
-findings in the issue or PR; a forced list of unrelated projects is not
-required.
-
 If a mistake has already been pushed, fix and verify the complete change before
 adding more commits. Consolidate noisy commits only when they are your own and
 rewriting the branch is safe; never rewrite unrelated commits or shared work.
@@ -167,11 +176,6 @@ Prefer a clean follow-up commit over history rewriting when the branch has
 other contributors or its history is already in use.
 
 ## Change scope and technical decisions
-
-Prefer the smallest focused change that solves the problem reliably and fits
-the repository's existing conventions, runtime environment, and security
-model. Avoid unrelated refactoring and unnecessary changes to permissions,
-dependencies, infrastructure, or test setup.
 
 ### Reference project research
 
@@ -203,6 +207,11 @@ the implementation direction is settled.
   and tests.
 - Record relevant findings and lasting design decisions in the issue or
   project documentation; do not rely on an external link alone.
+
+Prefer the smallest focused change that solves the problem reliably and fits
+the repository's existing conventions, runtime environment, and security
+model. Avoid unrelated refactoring and unnecessary changes to permissions,
+dependencies, infrastructure, or test setup.
 
 Before introducing a significant deviation from the existing approach, first
 check whether a simpler solution can work. If multiple viable options remain,
@@ -390,11 +399,18 @@ Always select dynamically via the fact set by
 - Each scenario defines one platform using Molecule environment
   interpolation: `OPENWRT_VERSION` selects the image tag and
   `MOLECULE_SCENARIO_NAME` selects the instance name.
-- The CI matrix is the single source of truth for tested OpenWrt versions.
-  It passes the selected release as `OPENWRT_VERSION`; diagnostics derive
-  the container name from that same variable and the scenario name.
-- To add a release, add its version to the CI matrix only. Do not duplicate
-  version-specific platform entries in individual scenario files.
+- `.github/openwrt-versions.json` is the single source of truth for the
+  OpenWrt release-version matrix used by Molecule, forward-compatibility, and
+  script smoke-test workflows. Each workflow expands the list into its own
+  GitHub Actions matrix.
+- Keep the file valid JSON. For example, to test two releases, set
+  `"versions": ["24.10", "25.12"]`. Do not add comments to the JSON file.
+- `.github/actions/openwrt-image/action.yml` centralizes release/snapshot tag
+  selection, image pulling, and image ID/digest reporting. Forward-compatibility
+  and script smoke tests explicitly select regular release images.
+- To add or remove a tested release, edit the `versions` array in
+  `.github/openwrt-versions.json`; do not duplicate version lists in workflows
+  or Molecule scenario files.
 
 ## Adding a new role (checklist)
 
@@ -413,8 +429,8 @@ Always select dynamically via the fact set by
 
 ## Adding a new OpenWrt version
 
-1. Add the release version to the `openwrt_version` matrix in
-   `.github/workflows/molecule.yml`.
+1. Add or remove the release in the `versions` array in
+   `.github/openwrt-versions.json`.
 2. Verify that `community.openwrt.init` supports the version and sets
    `openwrt_package_manager` correctly.
 3. Check the CI results for every Molecule scenario. The scenario files
@@ -434,7 +450,8 @@ Run these after installing collections (see below).
 ### Full test run (CI task, requires Docker)
 
     # run the test, keep containers on failure
-    export OPENWRT_VERSION="25.12"
+    export OPENWRT_VERSION="$(jq -r '.versions[0]' \
+      .github/openwrt-versions.json)"
     export OPENWRT_IMAGE="openwrt/rootfs:x86_64-openwrt-${OPENWRT_VERSION}"
     molecule test --destroy=never
     # inspect a failed container (scenario name shown by molecule list)
@@ -531,15 +548,18 @@ with it.
     `requirements/ci/molecule.txt` with `--require-hashes`.
   - Sets `MOLECULE_GLOB` to discover scenarios under
     `extensions/molecule/`.
-  - Matrix lists OpenWrt release versions and scenarios `default`,
-    `network-static`, and `network-dhcp`, with `fail-fast: false`.
-    Each combination runs in a separate job.
+  - Matrix lists scenarios `default`, `network-static`, and `network-dhcp`,
+    with `fail-fast: false`. Each scenario runs in a separate job.
+  - Expands `versions` from `.github/openwrt-versions.json` into the
+    OpenWrt-version matrix, combined with the scenario matrix.
+  - Uses `.github/actions/openwrt-image` to select, pull, and identify the
+    regular or snapshot image for each matrix entry.
   - Sets `OPENWRT_SNAPSHOT` by comparing `github.event.schedule` with the
     snapshot cron (`17 7 * * 0`). The existing `17 6 * * 0` schedule keeps
     testing the regular release image.
-  - Defines `OPENWRT_IMAGE` at job level from the snapshot flag and
-    `OPENWRT_VERSION`, so every Molecule command, including cleanup, gets
-    a valid image. The pull step logs its image ID and repository digests.
+  - The shared image action exports `OPENWRT_VERSION` and `OPENWRT_IMAGE`
+    for all subsequent Molecule commands, including cleanup, and logs the
+    pulled image ID and repository digests.
   - Runs `molecule test -s "${{ matrix.scenario }}" --destroy=never`
     to preserve a failed scenario's container for diagnostics.
   - Logs the tested container's image ID and prints detailed diagnostics
@@ -547,7 +567,7 @@ with it.
     OpenWrt release and opkg version, network/firewall init links,
     firewall rules, recent system log, filesystem space, and container
     logs. Container names derive from `OPENWRT_VERSION` and scenario.
-  - The `17 6 * * 0` schedule tests the regular moving OpenWrt 25.12 image;
+  - The `17 6 * * 0` schedule tests the regular moving OpenWrt release image;
     the separate `17 7 * * 0` schedule tests the moving snapshot tag.
     Pull requests, pushes, and manual runs use the regular image.
   - Destroys only the scenario assigned to that job in an unconditional
@@ -561,14 +581,41 @@ with it.
 When changing the workflow, update this section to reflect actual job
 dependencies, conditions, matrix, and commands.
 
+### Forward compatibility pre-release tests
+
+Workflow: `.github/workflows/forward-compatibility.yml`.
+
+- Runs on its weekly Sunday schedule (08:17 UTC), manual dispatch, and
+  pull requests that change the workflow, shared OpenWrt version matrix, or
+  pre-release discovery script. It does not run on pushes.
+- Does not use or modify the hash-locked CI requirement inputs or lockfiles.
+  It discovers published, non-yanked PEP 440 pre-release/development versions
+  from the PyPI JSON API and reports an explicit notice when none exist.
+- The Ansible Core lane installs the selected pre-release with the current
+  Molecule Docker toolchain and runs all three existing scenarios:
+  `default`, `network-static`, and `network-dhcp`.
+- The Ansible Core lane expands the same OpenWrt-version matrix and uses the
+  shared image action with `snapshot: 'false'`; it never selects the snapshot
+  image.
+- A separate lane tests the newest published ansible-lint pre-release.
+  pip resolves its Ansible Core dependency constraints and `pip check`
+  validates the resulting environment. A dependency conflict fails the lane.
+- If a tool has no published pre-release, its test is explicitly skipped;
+  a latest-stable installation is never reported as a forward-compatibility
+  test. Each executed lane reports the installed tool versions.
+- Keep this workflow independent of the weekly snapshot schedule in
+  `.github/workflows/molecule.yml`, which continues to use the pinned
+  stable Ansible baseline.
+
 ### State discovery script tests (`.github/workflows/script-tests.yml`)
 
 - The workflow starts for all pull requests and pushes to
   `development`/`master`. A local full-history Git diff gates the test job
-  to changes under `scripts/**` or changes to this workflow file. It also
-  supports manual dispatch.
+  to changes under `scripts/**`, the shared OpenWrt version matrix, the
+  image action, or this workflow file. It also supports manual dispatch.
 - Runs shell syntax and command-line smoke tests for
-  `scripts/owrt-extra.sh` in the regular OpenWrt 25.12 image.
+  `scripts/owrt-extra.sh` in every configured regular release image, using
+  the shared OpenWrt-version matrix and image action.
 - The local diff avoids GitHub's changed-file API limit; if the base commit
   is unavailable, tests run by default.
 - Does not depend on the Molecule matrix, so script-only changes avoid
@@ -582,7 +629,7 @@ dependencies, conditions, matrix, and commands.
   commit is unavailable or diffing fails, all checks run.
 - Shell changes under `scripts/**` are checked with ShellCheck in POSIX
   shell mode. Changes to `.shellcheckrc` also trigger ShellCheck. The existing
-  OpenWrt 25.12 smoke tests remain separate in
+  OpenWrt release smoke tests remain separate in
   `.github/workflows/script-tests.yml`.
 - Markdown files are checked with `markdownlint-cli2` and `codespell`.
   Markdown line length is not enforced because long URLs, tables, and code
