@@ -88,6 +88,8 @@ jobs:
             case "$path" in
               scripts/*|\
                 roles/router_storage/files/*|\
+                roles/router_storage/tasks/*|\
+                roles/router_storage/defaults/*|\
                 .github/openwrt-versions.json|\
                 .github/actions/openwrt-image/action.yml|\
                 .github/workflows/script-tests.yml)
@@ -139,6 +141,10 @@ jobs:
           cp scripts/owrt-extra.sh "$RUNNER_TEMP/owrt-test/owrt-extra.sh"
           cp roles/router_storage/files/detect.sh \
             "$RUNNER_TEMP/owrt-test/detect.sh"
+          cp roles/router_storage/files/70-rootpt-resize \
+            "$RUNNER_TEMP/owrt-test/70-rootpt-resize"
+          cp roles/router_storage/files/80-rootfs-resize \
+            "$RUNNER_TEMP/owrt-test/80-rootfs-resize"
           cp scripts/test-router-storage-detect.sh \
             "$RUNNER_TEMP/owrt-test/test.sh"
           docker run --rm \
