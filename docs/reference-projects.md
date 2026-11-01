@@ -104,17 +104,18 @@ without understanding their assumptions.
 
 - **Focus:** builds smaller Tailscale IPK/APK packages and provides install,
   update, and package-feed workflows for OpenWrt devices.
-- **Useful entry points:** [APK feed setup][gunanovo-apk],
-  [installer modes and behavior][gunanovo-installer], and
-  [post-install configuration][gunanovo-postinstall].
+- **Useful entry points:** [available packages by architecture][gunanovo-packages],
+  [APK feed setup][gunanovo-apk], [installer modes and behavior][gunanovo-installer],
+  and [post-install configuration][gunanovo-postinstall].
 - **Ideas to examine:** architecture-specific packaging, persistent versus
   temporary/binary installation, storage and memory constraints, and how
   package installation integrates with the OpenWrt init service.
 - **Caution:** this is a third-party package and installer project, not an
   Ansible configuration role. Its OpenWrt 25.12 APK feed requires adding a
   third-party signing key and repository. Do not make that feed a dependency
-  when the official OpenWrt package meets our requirements. The project also
-  notes that most architectures/devices are not tested.
+  when the official OpenWrt package meets our requirements. Its own project
+  notes state that most devices/architectures are untested, so a listed
+  package is not evidence of tested hardware compatibility.
 
 ### [fl0w1nd/openwrt-tailscale][flowind-tailscale]
 
@@ -149,6 +150,8 @@ without understanding their assumptions.
 
 ## Official documentation
 
+- [OpenWrt Tailscale guide][openwrt-tailscale]
+- [Tailscale subnet routers][tailscale-subnet]
 - [community.openwrt collection][openwrt-docs]
 - [community.openwrt.setup module][setup-docs]
 - [community.openwrt.uci module][uci-docs]
@@ -167,12 +170,15 @@ without understanding their assumptions.
 [digitec-firewall]: https://github.com/DigitecGalaxus/ansible-openwrt-framework/blob/master/roles/openwrt/config/templates/firewall_config.j2
 [digitec-tailscale]: https://github.com/DigitecGalaxus/ansible-openwrt-framework/blob/master/roles/openwrt/config/templates/tailscale_config.j2
 [digitec-config-tasks]: https://github.com/DigitecGalaxus/ansible-openwrt-framework/blob/master/roles/openwrt/config/tasks/main.yaml
+[gunanovo-packages]: https://github.com/GuNanOvO/openwrt-tailscale/blob/main/docs/en/packages.md
 [gunanovo-apk]: https://github.com/GuNanOvO/openwrt-tailscale/blob/main/docs/en/guide/apk-setup.md
 [gunanovo-installer]: https://github.com/GuNanOvO/openwrt-tailscale/blob/main/docs/en/guide/install-script.md
 [gunanovo-postinstall]: https://github.com/GuNanOvO/openwrt-tailscale/blob/main/docs/en/guide/post-install.md
 [flowind-subnet]: https://github.com/fl0w1nd/openwrt-tailscale/blob/main/docs/en/guide/subnet-routing.md
 [flowind-storage]: https://github.com/fl0w1nd/openwrt-tailscale/blob/main/docs/en/guide/storage-modes.md
 [flowind-readme]: https://github.com/fl0w1nd/openwrt-tailscale/blob/main/README.md
+[openwrt-tailscale]: https://openwrt.org/docs/guide-user/services/vpn/tailscale/start
+[tailscale-subnet]: https://tailscale.com/kb/1019/subnets
 [openwrt-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/index.html
 [setup-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/setup_module.html
 [uci-docs]: https://docs.ansible.com/ansible/latest/collections/community/openwrt/uci_module.html
