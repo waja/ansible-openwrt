@@ -45,6 +45,8 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   non-interactive tailnet authentication
 - `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/router_storage/` – read-only root storage detection and opt-in expansion
+- `roles/router_owut/` – optional read-only firmware update checks for
+  OpenWrt 25.12+
 - `roles/<role_name>/` – roles with `tasks/main.yml` and
   `defaults/main.yml`
 - `./collections/` – installed dependencies, **never edit**, must be
