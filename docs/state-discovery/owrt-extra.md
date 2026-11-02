@@ -59,7 +59,7 @@ if later commands succeed.
 Copy the script to the router and run it as root:
 
 ```sh
-scp scripts/owrt-extra.sh root@router1:/tmp/owrt-extra.sh
+scp scripts/owrt-extra.sh scripts/owrt-extra-runtime.sh root@router1:/tmp/
 ssh root@router1 'sh /tmp/owrt-extra.sh'
 ```
 
@@ -254,35 +254,40 @@ service's supported configuration interface rather than copying generated
 files. Keep only files that are genuinely required, reproducible, and
 appropriate to manage as desired state.
 
-### Runtime-only state needs separate inspection
+### Runtime-only state snapshots
 
-The script primarily discovers persistent configuration and filesystem
-differences. It does not comprehensively capture changes made directly
-to the running kernel or network stack. Examples include manually added
-nftables rules, IP addresses and routes, policy-routing rules,
-`sysctl -w` changes, loaded kernel modules, and manually started
-processes.
+The collector invokes the optional helper next to the script (or at
+`/usr/libexec/owrt-extra-runtime.sh`) and stores its output under
+`/tmp/owrt-diff/runtime/`. The helper records separate snapshots for:
 
-For a manual, read-only snapshot, collect the relevant state separately:
+- `nft list ruleset` — active nftables ruleset.
+- `ip address show` — current addresses and link state.
+- `ip route show table all` — routing tables.
+- `ip rule show` — policy-routing rules.
+- `lsmod` — currently loaded modules.
 
-```sh
-nft list ruleset
-ip address show
-ip route show table all
-ip rule show
-sysctl -a
-lsmod
-ps w
-```
+Each command is optional. `status.txt` records `ok`, `failed`, or
+`unavailable` and the exit status. Failed commands retain partial output
+for diagnosis; one failure does not prevent later snapshots. Raw output is
+not printed to the terminal. The helper is read-only and refuses to
+overwrite an existing output path. Files and directory permissions are
+restricted (0700/0600).
 
-Compare these observations with persistent configuration and service
-state, for example firewall UCI configuration, `/etc/config/network`,
-and the services that are enabled. A snapshot shows what is active now;
-it does not establish how the state was created, whether it is intended,
-or whether it will survive a reboot. Do not replay runtime output as
-Ansible tasks. Any persistent change must be designed and reviewed
-explicitly. Runtime discovery is tracked separately in
-[issue #53](https://github.com/waja/ansible-openwrt/issues/53).
+No unrestricted `sysctl -a` or process listing is collected: both can
+create large/noisy output, process arguments can contain credentials,
+and neither reliably distinguishes manual changes from service-managed
+state. A future narrowly scoped sysctl allowlist would need a concrete
+migration use case.
+
+Compare the nftables snapshot with `fw4 print` and firewall UCI; the
+active ruleset includes generated rules, includes, and manually added
+rules. Compare addresses/routes/rules with `/etc/config/network` and
+active network service state. `lsmod` shows loaded modules but not why
+they are loaded. Snapshots are sensitive point-in-time evidence: they do
+not identify who created an object, whether it is intentional or
+persistent, or whether it is safe to reproduce on another device. Never
+replay them or derive Ansible tasks blindly. Runtime discovery is tracked
+in [issue #53](https://github.com/waja/ansible-openwrt/issues/53).
 
 ### Flash and hardware data are not normal Ansible state
 

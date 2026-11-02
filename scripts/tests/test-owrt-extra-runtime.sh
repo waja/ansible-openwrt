@@ -1,0 +1,53 @@
+#!/bin/sh
+set -eu
+HELPER=${1:?usage: test-owrt-extra-runtime.sh HELPER}
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+BIN=$TMP/bin
+mkdir -m 700 "$BIN"
+fail() { echo "FAIL: $*" >&2; exit 1; }
+cat > "$BIN/nft" <<'EOF'
+#!/bin/sh
+[ "$1" = list ] && [ "$2" = ruleset ] || exit 9
+echo "table inet fixture"
+EOF
+cat > "$BIN/ip" <<'EOF'
+#!/bin/sh
+case "$*" in
+ "address show") echo "lo: <LOOPBACK>" ;;
+ "route show table all") echo "default dev eth0" ;;
+ "rule show") echo "0: from all lookup local" ;;
+ *) exit 8 ;;
+esac
+EOF
+cat > "$BIN/lsmod" <<'EOF'
+#!/bin/sh
+echo "fixture_module 123 0"
+EOF
+chmod 700 "$BIN/"*
+PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/success"
+test "$(stat -c %a "$TMP/success")" = 700 || fail "directory mode"
+test "$(stat -c %a "$TMP/success/status.txt")" = 600 || fail "status mode"
+for f in nft-ruleset ip-address ip-routes ip-rules loaded-modules; do
+ test -s "$TMP/success/$f.txt" || fail "missing snapshot $f"
+ test "$(stat -c %a "$TMP/success/$f.txt")" = 600 || fail "$f mode"
+done
+grep -Fx "nft-ruleset	ok	0" "$TMP/success/status.txt" >/dev/null || fail "success status"
+cat > "$BIN/nft" <<'EOF'
+#!/bin/sh
+echo "partial ruleset"
+exit 7
+EOF
+PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/failure"
+grep -Fx "nft-ruleset	failed	7" "$TMP/failure/status.txt" >/dev/null || fail "failure status"
+grep -Fq "partial ruleset" "$TMP/failure/nft-ruleset.txt" || fail "partial output"
+grep -Fx "ip-address	ok	0" "$TMP/failure/status.txt" >/dev/null || fail "later snapshot skipped"
+mkdir -m 700 "$TMP/missing-bin"
+cp "$BIN/ip" "$TMP/missing-bin/ip"
+PATH="$TMP/missing-bin:/usr/bin:/bin" "$HELPER" "$TMP/missing"
+grep -Fx "nft-ruleset	unavailable	-" "$TMP/missing/status.txt" >/dev/null || fail "missing command status"
+if PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/success" >/dev/null 2>&1; then fail "existing path overwritten"; fi
+mkdir -m 700 "$TMP/target"
+ln -s "$TMP/target" "$TMP/link"
+if PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/link" >/dev/null 2>&1; then fail "symlink accepted"; fi
+echo "All owrt-extra runtime snapshot tests passed."

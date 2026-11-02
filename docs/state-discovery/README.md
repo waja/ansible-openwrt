@@ -11,7 +11,7 @@ options, report sections, retained files, security precautions, migration
 guidance, and known limitations.
 
 ```sh
-scp scripts/owrt-extra.sh root@router1:/tmp/owrt-extra.sh
+scp scripts/owrt-extra.sh scripts/owrt-extra-runtime.sh root@router1:/tmp/
 ssh root@router1 'sh /tmp/owrt-extra.sh'
 ```
 
@@ -49,9 +49,10 @@ and detection of real overlay changes still need validation on a suitable
 OpenWrt VM or physical router.
 
 This is an investigative report, not an automatic Ansible generator.
-Runtime state such as manually installed nftables rules, `ip` changes,
-temporary `sysctl` values, loaded modules, and running processes is not
-comprehensively captured. Files in the overlay may also be caches or
+Runtime state is captured separately when the optional helper is present.
+It records the active nftables ruleset, addresses, routes, policy rules,
+and loaded modules under `runtime/`. Temporary `sysctl` values and process
+state are not collected. Files in the overlay may also be caches or
 service state rather than configuration. Review each candidate before
 managing it with Ansible. Data outside the overlay, such as calibration
 data and bootloader storage, is not suitable for normal Ansible
