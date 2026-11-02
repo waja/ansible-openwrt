@@ -545,8 +545,10 @@ with it.
   generator version. Both lock workflows install from it, and the update
   script validates the installed version against it.
 - Generate or refresh locks with `bash scripts/update-ci-lockfiles.sh`.
-  CI regenerates them and fails if committed lockfiles are stale.
-  A separate weekly workflow opens or updates a PR only when locks change.
+  The updater normalizes only pip-compile's Python-version comment; package
+  versions and hashes remain fully checked. CI tests this normalization,
+  regenerates the locks, and fails if committed lockfiles are stale. A
+  separate weekly workflow opens or updates a PR only when locks change.
 - Triggers: `workflow_dispatch`, weekly schedules (Sunday at 06:17 and
   07:17 UTC), pull requests, and pushes to `development` and `master`.
   The workflow starts for all push and pull-request events so required checks

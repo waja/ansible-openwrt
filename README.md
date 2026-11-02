@@ -306,5 +306,9 @@ The CI Python toolchains are hash-locked separately for lint, Ansible
 sanity/unit tests, and Molecule. Edit the matching `.in` input and regenerate
 all lockfiles with `bash scripts/update-ci-lockfiles.sh`. The script requires
 the `pip-tools` version in `requirements/ci/pip-tools.in`; Python is selected
-from `.python-version`. CI validates lockfile freshness. A weekly workflow
-opens or updates a maintenance PR when transitive dependencies change.
+from `.python-version`. The updater normalizes only pip-compile's
+Python-version comment in the generated header, so changing the Python
+version alone does not create noisy diffs. CI still compares the complete
+generated lockfiles, including package versions and hashes. A weekly
+workflow opens or updates a maintenance PR when transitive dependencies
+change.
