@@ -360,6 +360,16 @@ jobs:
             ubus -v list network.interface 2>&1 || true
             echo "--- all network-related ubus objects ---"
             ubus list 2>&1 | grep -E "^(network|service)" || true
+            echo "--- network configuration ---"
+            cat /etc/config/network 2>&1 || true
+            echo "--- kernel link state ---"
+            ip -d link show 2>&1 || true
+            echo "--- per-interface status: lan ---"
+            ubus -t 2 call network.interface.lan status 2>&1 || true
+            echo "--- per-interface status: loopback ---"
+            ubus -t 2 call network.interface.loopback status 2>&1 || true
+            echo "--- network.device status ---"
+            ubus -t 2 call network.device status 2>&1 || true
             echo "--- network.interface dump ---"
             ubus -t 2 call network.interface dump 2>&1 || true
             echo "--- service firewall data ---"
