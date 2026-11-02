@@ -124,7 +124,7 @@ jobs:
           ansible-galaxy role install -r requirements.yml \
             --roles-path ~/.ansible/roles
           ansible-galaxy collection install -r requirements.yml \
-            --collections-path ~/.ansible/collections --force
+            --collections-path ~/.ansible/collections
           ansible-lint \
             --exclude collections/ansible_collections/community/openwrt/
 
@@ -269,6 +269,10 @@ jobs:
         uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
+      - name: Record setup start
+        id: setup-start
+        run: echo "started_at=$(date +%s)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Python
         id: python
         # v7
@@ -288,7 +292,7 @@ jobs:
           ansible-galaxy role install -r requirements.yml \
             --roles-path ~/.ansible/roles
           ansible-galaxy collection install -r requirements.yml \
-            --collections-path ~/.ansible/collections --force
+            --collections-path ~/.ansible/collections
 
       - name: Versions
         run: |
@@ -307,12 +311,35 @@ jobs:
           version: ${{ matrix.openwrt_version }}
           snapshot: ${{ env.OPENWRT_SNAPSHOT }}
 
+      - name: Record setup duration
+        id: setup-duration
+        env:
+          STARTED_AT: ${{ steps.setup-start.outputs.started_at }}
+        run: |
+          echo "duration_seconds=$(($(date +%s) - STARTED_AT))" \
+            >> "$GITHUB_OUTPUT"
+
       - name: Test ${{ matrix.scenario }} scenario
-        run: molecule test -s "${{ matrix.scenario }}" --destroy=never
+        id: molecule-test
+        shell: bash
+        run: |
+          set +e
+          started_at=$(date +%s)
+          molecule test -s "${{ matrix.scenario }}" --destroy=never
+          test_status=$?
+          ended_at=$(date +%s)
+          echo "duration_seconds=$((ended_at - started_at))" >> "$GITHUB_OUTPUT"
+          if [[ "$test_status" -eq 0 ]]; then
+            echo "result=PASS" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=FAIL" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$test_status"
         env:
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
-
+          ANSIBLE_DISPLAY_OK_HOSTS: 'false'
+          ANSIBLE_DISPLAY_SKIPPED_HOSTS: 'false'
       - name: Record tested container image
         if: always()
         run: |
@@ -363,32 +390,307 @@ jobs:
           docker logs "$container" || true
 
       - name: Destroy ${{ matrix.scenario }} scenario
+        id: molecule-destroy
         if: always()
-        run: molecule destroy -s "${{ matrix.scenario }}"
+        shell: bash
+        run: |
+          set +e
+          started_at=$(date +%s)
+          molecule destroy -s "${{ matrix.scenario }}"
+          destroy_status=$?
+          ended_at=$(date +%s)
+          echo "duration_seconds=$((ended_at - started_at))" >> "$GITHUB_OUTPUT"
+          if [[ "$destroy_status" -eq 0 ]]; then
+            echo "result=PASS" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=FAIL" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$destroy_status"
 
+
+      - name: Record matrix result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          TEST_OUTCOME: ${{ steps.molecule-test.outcome }}
+          TEST_DURATION: ${{ steps.molecule-test.outputs.duration_seconds }}
+          DESTROY_OUTCOME: ${{ steps.molecule-destroy.outcome }}
+          DESTROY_DURATION: >-
+            ${{ steps.molecule-destroy.outputs.duration_seconds }}
+          SETUP_DURATION: ${{ steps.setup-duration.outputs.duration_seconds }}
+          OPENWRT_VERSION: ${{ matrix.openwrt_version }}
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          mkdir -p matrix-results
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          job_status = os.environ['JOB_STATUS']
+          test_outcome = os.environ.get('TEST_OUTCOME', 'skipped')
+          destroy_outcome = os.environ.get('DESTROY_OUTCOME', 'skipped')
+          if job_status == 'cancelled':
+              status = 'CANCELLED'
+          elif (
+              job_status == 'success'
+              and test_outcome == 'success'
+              and destroy_outcome == 'success'
+          ):
+              status = 'PASS'
+          else:
+              status = 'FAIL'
+
+          data = {
+              'openwrt': os.environ['OPENWRT_VERSION'],
+              'scenario': os.environ['SCENARIO'],
+              'status': status,
+              'job_status': job_status,
+              'test_outcome': test_outcome,
+              'destroy_outcome': destroy_outcome,
+              'setup_duration_seconds': os.environ.get('SETUP_DURATION', ''),
+              'test_duration_seconds': os.environ.get('TEST_DURATION', ''),
+              'destroy_duration_seconds': os.environ.get(
+                  'DESTROY_DURATION', ''
+              ),
+          }
+          filename = f"{data['openwrt']}-{data['scenario']}.json"
+          Path('matrix-results', filename).write_text(
+              json.dumps(data, sort_keys=True) + chr(10), encoding='utf-8'
+          )
+          PY
+
+      - name: Upload matrix result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: >-
+            molecule-result-${{ matrix.openwrt_version }}-
+            ${{ matrix.scenario }}
+          path: matrix-results/*.json
+          if-no-files-found: error
+          retention-days: 1
   molecule-status:
     name: Molecule
     needs:
       - changes
+      - openwrt-versions
       - check-structure
       - lint
       - sanity
       - units
       - molecule
-    if: ${{ !cancelled() }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     steps:
-      - name: Report aggregate Molecule status
+      - name: Download matrix results
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: molecule-result-*
+          path: matrix-results
+        continue-on-error: true
+
+      - name: Publish matrix summary and verify results
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CHANGES_MOLECULE: ${{ needs.changes.outputs.molecule }}
+          EVENT_NAME: ${{ github.event_name }}
+          OPENWRT_VERSIONS: ${{ needs['openwrt-versions'].outputs.versions }}
+          VERSIONS_RESULT: ${{ needs['openwrt-versions'].result }}
           STRUCTURE_RESULT: ${{ needs.check-structure.result }}
           LINT_RESULT: ${{ needs.lint.result }}
           SANITY_RESULT: ${{ needs.sanity.result }}
           UNITS_RESULT: ${{ needs.units.result }}
           MOLECULE_RESULT: ${{ needs.molecule.result }}
         run: |
-          set -eu
-          test "$STRUCTURE_RESULT" = success
-          test "$LINT_RESULT" = success
-          case "$SANITY_RESULT" in success|skipped) ;; *) exit 1 ;; esac
-          case "$UNITS_RESULT" in success|skipped) ;; *) exit 1 ;; esac
-          case "$MOLECULE_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          scenarios = ('default', 'network-static', 'network-dhcp')
+          versions = json.loads(os.environ.get('OPENWRT_VERSIONS') or '[]')
+          results = {}
+          errors = []
+          for path in sorted(Path('matrix-results').glob('*/*.json')):
+              try:
+                  data = json.loads(path.read_text(encoding='utf-8'))
+                  if not isinstance(data['openwrt'], str) or not isinstance(
+                      data['scenario'], str
+                  ):
+                      raise ValueError(
+                          'OpenWrt version and scenario must be strings'
+                      )
+                  key = (data['openwrt'], data['scenario'])
+                  if key in results:
+                      errors.append(f'Duplicate result for {key[0]} / {key[1]}')
+                  if (
+                      data['status'] not in ('PASS', 'FAIL', 'CANCELLED')
+                      or data['job_status'] not in (
+                          'success', 'failure', 'cancelled'
+                      )
+                      or data['test_outcome'] not in (
+                          'success', 'failure', 'skipped', 'cancelled'
+                      )
+                      or data['destroy_outcome'] not in (
+                          'success', 'failure', 'skipped', 'cancelled'
+                      )
+                  ):
+                      errors.append(f'Malformed result: {path.name}')
+                  expected_status = (
+                      'CANCELLED' if data['job_status'] == 'cancelled'
+                      else 'PASS' if (
+                          data['job_status'] == 'success'
+                          and data['test_outcome'] == 'success'
+                          and data['destroy_outcome'] == 'success'
+                      )
+                      else 'FAIL'
+                  )
+                  if data['status'] != expected_status:
+                      errors.append(f'Inconsistent result status: {path.name}')
+                  if path.name != f'{key[0]}-{key[1]}.json':
+                      errors.append(
+                          'Result filename does not match its identity: '
+                          + path.name
+                      )
+                  results[key] = data
+              except (OSError, ValueError, KeyError, TypeError) as exc:
+                  errors.append(f'Malformed result {path.name}: {exc}')
+
+          prechecks = {
+              'OpenWrt version matrix': os.environ['VERSIONS_RESULT'],
+              'collection structure': os.environ['STRUCTURE_RESULT'],
+              'lint': os.environ['LINT_RESULT'],
+              'sanity': os.environ['SANITY_RESULT'],
+              'units': os.environ['UNITS_RESULT'],
+          }
+          prechecks_ok = (
+              prechecks['OpenWrt version matrix'] == 'success'
+              and prechecks['collection structure'] == 'success'
+              and prechecks['lint'] == 'success'
+              and prechecks['sanity'] in ('success', 'skipped')
+              and prechecks['units'] in ('success', 'skipped')
+          )
+          changes_result = os.environ['CHANGES_RESULT']
+          event_name = os.environ['EVENT_NAME']
+          changes_molecule = os.environ.get('CHANGES_MOLECULE', '')
+          molecule_expected = prechecks_ok and (
+              changes_result == 'failure'
+              or (changes_result == 'success' and changes_molecule == 'true')
+              or (
+                  changes_result == 'skipped'
+                  and event_name in ('schedule', 'workflow_dispatch')
+              )
+          )
+          intentional_skip = (
+              prechecks_ok
+              and changes_result == 'success'
+              and changes_molecule == 'false'
+          )
+
+          rows = []
+          if molecule_expected:
+              expected = {
+                  (version, scenario)
+                  for version in versions
+                  for scenario in scenarios
+              }
+              for version in versions:
+                  for scenario in scenarios:
+                      key = (version, scenario)
+                      data = results.get(key)
+                      if data is None:
+                          status = 'NO RESULT'
+                          errors.append(
+                              f'Missing result for {version} / {scenario}'
+                          )
+                          data = {}
+                      else:
+                          status = data['status']
+                      rows.append({
+                          'openwrt': version,
+                          'scenario': scenario,
+                          'status': status,
+                          'setup': data.get('setup_duration_seconds') or '—',
+                          'test': data.get('test_duration_seconds') or '—',
+                          'destroy': (
+                              data.get('destroy_duration_seconds') or '—'
+                          ),
+                      })
+              for key in sorted(set(results) - expected):
+                  errors.append(f'Unexpected result for {key[0]} / {key[1]}')
+          else:
+              for version, scenario in sorted(results):
+                  errors.append(
+                      'Unexpected artifact for skipped matrix: '
+                      f'{version} / {scenario}'
+                  )
+              rows.append({
+                  'openwrt': '—', 'scenario': 'matrix',
+                  'status': 'SKIPPED' if intentional_skip else 'BLOCKED',
+                  'setup': '—', 'test': '—', 'destroy': '—',
+              })
+
+          if not prechecks_ok:
+              errors.extend(
+                  f'{name}: {status}' for name, status in prechecks.items()
+                  if status not in ('success', 'skipped')
+              )
+              if changes_result not in ('success', 'skipped'):
+                  errors.append(f'change detection: {changes_result}')
+          elif molecule_expected and os.environ['MOLECULE_RESULT'] != 'success':
+              errors.append(
+                  f'Molecule matrix job: {os.environ["MOLECULE_RESULT"]}'
+              )
+          elif (
+              not molecule_expected
+              and os.environ['MOLECULE_RESULT'] != 'skipped'
+          ):
+              errors.append(
+                  'Molecule matrix should have been skipped but was '
+                  + os.environ['MOLECULE_RESULT']
+              )
+          elif not molecule_expected and not intentional_skip and prechecks_ok:
+              errors.append(
+                  'Molecule matrix was skipped without an explicit '
+                  'Markdown-only change result or scheduled/manual event.'
+              )
+
+          if any(
+              row['status'] in ('FAIL', 'CANCELLED', 'NO RESULT', 'BLOCKED')
+              for row in rows
+          ):
+              errors.append('One or more expected matrix entries did not pass.')
+          overall = (
+              'FAIL' if errors
+              else 'SKIPPED' if not molecule_expected
+              else 'PASS'
+          )
+          lines = [
+              '## Molecule matrix', '', f'**Overall result: {overall}**', '',
+              '| OpenWrt | Scenario | Result | Setup (s) | '
+              'Test (s) | Destroy (s) |',
+              '|---|---|---:|---:|---:|---:|',
+          ]
+          for row in rows:
+              lines.append(
+                  '| {openwrt} | {scenario} | {status} | {setup} | '
+                  '{test} | {destroy} |'.format(**row)
+              )
+          if errors:
+              lines.extend(['', '### Problems', ''])
+              lines.extend(f'- {error}' for error in errors)
+          report = '\n'.join(lines) + '\n'
+          with open(
+              os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8'
+          ) as summary:
+              summary.write(report)
+          print(report)
+          if errors:
+              sys.exit(1)
+          PY
