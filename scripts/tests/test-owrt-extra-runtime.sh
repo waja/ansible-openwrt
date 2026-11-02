@@ -6,10 +6,20 @@ trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 BIN=$TMP/bin
 mkdir -m 700 "$BIN"
 fail() { echo "FAIL: $*" >&2; exit 1; }
+cat > "$BIN/fw4" <<'EOF'
+#!/bin/sh
+[ "$1" = print ] || exit 9
+echo "table inet fw4"
+EOF
 cat > "$BIN/nft" <<'EOF'
 #!/bin/sh
 [ "$1" = list ] && [ "$2" = ruleset ] || exit 9
 echo "table inet fixture"
+EOF
+cat > "$BIN/ubus" <<'EOF'
+#!/bin/sh
+[ "$1" = call ] && [ "$2" = network.interface ] && [ "$3" = dump ] || exit 9
+echo '{"interface":[{"interface":"lan","up":true}]}'
 EOF
 cat > "$BIN/ip" <<'EOF'
 #!/bin/sh
@@ -28,11 +38,13 @@ chmod 700 "$BIN/"*
 PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/success"
 test "$(stat -c %a "$TMP/success")" = 700 || fail "directory mode"
 test "$(stat -c %a "$TMP/success/status.txt")" = 600 || fail "status mode"
-for f in nft-ruleset ip-address ip-routes ip-rules loaded-modules; do
+for f in fw4-ruleset nft-ruleset netifd-interfaces ip-address ip-routes ip-rules loaded-modules; do
  test -s "$TMP/success/$f.txt" || fail "missing snapshot $f"
  test "$(stat -c %a "$TMP/success/$f.txt")" = 600 || fail "$f mode"
 done
-grep -Fx "nft-ruleset	ok	0" "$TMP/success/status.txt" >/dev/null || fail "success status"
+grep -Fx "fw4-ruleset	ok	0" "$TMP/success/status.txt" >/dev/null || fail "fw4 success status"
+grep -Fx "netifd-interfaces	ok	0" "$TMP/success/status.txt" >/dev/null || fail "netifd success status"
+grep -Fq '"interface"' "$TMP/success/netifd-interfaces.txt" || fail "netifd output"
 cat > "$BIN/nft" <<'EOF'
 #!/bin/sh
 echo "partial ruleset"
@@ -45,7 +57,7 @@ grep -Fx "ip-address	ok	0" "$TMP/failure/status.txt" >/dev/null || fail "later s
 mkdir -m 700 "$TMP/missing-bin"
 cp "$BIN/ip" "$TMP/missing-bin/ip"
 PATH="$TMP/missing-bin:/usr/bin:/bin" "$HELPER" "$TMP/missing"
-grep -Fx "nft-ruleset	unavailable	-" "$TMP/missing/status.txt" >/dev/null || fail "missing command status"
+grep -Fx "fw4-ruleset	unavailable	-" "$TMP/missing/status.txt" >/dev/null || fail "missing command status"
 if PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/success" >/dev/null 2>&1; then fail "existing path overwritten"; fi
 mkdir -m 700 "$TMP/target"
 ln -s "$TMP/target" "$TMP/link"
