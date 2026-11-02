@@ -349,7 +349,7 @@ jobs:
           docker inspect --format \
             'status={{.State.Status}} network={{.HostConfig.NetworkMode}}' \
             "$container" || true
-          docker exec "$container" sh -s <<'DIAGNOSTICS' || true
+          docker exec -i "$container" sh -s <<'DIAGNOSTICS' || true
           echo "--- processes ---"
           ps w 2>&1 | grep -E "[n]etifd|[u]bus|[p]rocd" || true
           echo "--- netifd process state ---"
