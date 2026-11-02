@@ -1,2 +1,2 @@
 # Shared Ansible Core version for all CI toolchains.
-ansible-core==2.21.5
+ansible-core==2.22.0
