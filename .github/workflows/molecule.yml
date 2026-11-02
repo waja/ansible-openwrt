@@ -349,65 +349,65 @@ jobs:
           docker inspect --format \
             'status={{.State.Status}} network={{.HostConfig.NetworkMode}}' \
             "$container" || true
-          docker exec "$container" sh -c '
-            echo "--- processes ---"
-            ps w 2>&1 | grep -E "[n]etifd|[u]bus|[p]rocd" || true
-            echo "--- netifd process state ---"
-            netifd_pid="$(pidof netifd 2>/dev/null | awk '\''{print $1}'\'')"
-            if [ -n "$netifd_pid" ] && [ -r "/proc/$netifd_pid/status" ]; then
-              grep -E '^(Name|State|Pid|PPid|Threads):' \
-                "/proc/$netifd_pid/status" || true
-              wchan="$(cat "/proc/$netifd_pid/wchan" 2>/dev/null)"
-              syscall="$(cat "/proc/$netifd_pid/syscall" 2>/dev/null)"
-              echo "wchan=$wchan syscall=$syscall"
-              for task in /proc/"$netifd_pid"/task/*; do
-                [ -d "$task" ] || continue
-                thread_id="${task##*/}"
-                thread_comm="$(cat "$task/comm" 2>/dev/null)"
-                thread_wchan="$(cat "$task/wchan" 2>/dev/null)"
-                echo "thread=$thread_id comm=$thread_comm wchan=$thread_wchan"
-              done
-            fi
-              echo "netifd process status unavailable"
-            fi
-            echo "--- kernel network interfaces ---"
-            cat /proc/net/dev 2>&1 || true
-            for interface in /sys/class/net/*; do
-              [ -e "$interface" ] || continue
-              state="$(cat "$interface/operstate" 2>/dev/null)"
-              carrier="$(cat "$interface/carrier" 2>/dev/null)"
-              master="$(readlink "$interface/master" 2>/dev/null || echo none)"
-              echo "$interface: state=$state carrier=$carrier master=$master"
+          docker exec "$container" sh -s <<'DIAGNOSTICS' || true
+          echo "--- processes ---"
+          ps w 2>&1 | grep -E "[n]etifd|[u]bus|[p]rocd" || true
+          echo "--- netifd process state ---"
+          netifd_pid="$(pidof netifd 2>/dev/null | awk '{print $1}')"
+          if [ -n "$netifd_pid" ] && [ -r "/proc/$netifd_pid/status" ]; then
+            grep -E '^(Name|State|Pid|PPid|Threads):' \
+              "/proc/$netifd_pid/status" || true
+            wchan="$(cat "/proc/$netifd_pid/wchan" 2>/dev/null)"
+            syscall="$(cat "/proc/$netifd_pid/syscall" 2>/dev/null)"
+            echo "wchan=$wchan syscall=$syscall"
+            for task in /proc/"$netifd_pid"/task/*; do
+              [ -d "$task" ] || continue
+              thread_id="${task##*/}"
+              thread_comm="$(cat "$task/comm" 2>/dev/null)"
+              thread_wchan="$(cat "$task/wchan" 2>/dev/null)"
+              echo "thread=$thread_id comm=$thread_comm wchan=$thread_wchan"
             done
-            echo "--- kernel messages ---"
-            dmesg 2>&1 | tail -80 || true
-            echo "--- ubus socket ---"
-            ls -l /var/run/ubus /var/run/ubus/ubus.sock 2>&1 || true
-            echo "--- ubus system board ---"
-            ubus -t 2 call system board 2>&1 || true
-            echo "--- network.interface object ---"
-            ubus -v list network.interface 2>&1 || true
-            echo "--- all network-related ubus objects ---"
-            ubus list 2>&1 | grep -E "^(network|service)" || true
-            echo "--- network configuration ---"
-            cat /etc/config/network 2>&1 || true
-            echo "--- kernel link state ---"
-            ip -d link show 2>&1 || true
-            echo "--- per-interface status: lan ---"
-            ubus -t 2 call network.interface.lan status 2>&1 || true
-            echo "--- per-interface status: loopback ---"
-            ubus -t 2 call network.interface.loopback status 2>&1 || true
-            echo "--- network.device status ---"
-            ubus -t 2 call network.device status 2>&1 || true
-            echo "--- network.interface dump ---"
-            ubus -t 2 call network.interface dump 2>&1 || true
-            echo "--- service firewall data ---"
-            ubus -t 2 call service get_data \
-              "{\"type\":\"firewall\"}" 2>&1 || true
-            echo "--- recent network/ubus log messages ---"
-            logread 2>&1 | grep -iE "netifd|ubus|network.interface|interface" \
-              | tail -100 || true
-          ' || true
+          else
+            echo "netifd process status unavailable"
+          fi
+          echo "--- kernel network interfaces ---"
+          cat /proc/net/dev 2>&1 || true
+          for interface in /sys/class/net/*; do
+            [ -e "$interface" ] || continue
+            state="$(cat "$interface/operstate" 2>/dev/null)"
+            carrier="$(cat "$interface/carrier" 2>/dev/null)"
+            master="$(readlink "$interface/master" 2>/dev/null || echo none)"
+            echo "$interface: state=$state carrier=$carrier master=$master"
+          done
+          echo "--- kernel messages ---"
+          dmesg 2>&1 | tail -80 || true
+          echo "--- ubus socket ---"
+          ls -l /var/run/ubus /var/run/ubus/ubus.sock 2>&1 || true
+          echo "--- ubus system board ---"
+          ubus -t 2 call system board 2>&1 || true
+          echo "--- network.interface object ---"
+          ubus -v list network.interface 2>&1 || true
+          echo "--- all network-related ubus objects ---"
+          ubus list 2>&1 | grep -E "^(network|service)" || true
+          echo "--- network configuration ---"
+          cat /etc/config/network 2>&1 || true
+          echo "--- kernel link state ---"
+          ip -d link show 2>&1 || true
+          echo "--- per-interface status: lan ---"
+          ubus -t 2 call network.interface.lan status 2>&1 || true
+          echo "--- per-interface status: loopback ---"
+          ubus -t 2 call network.interface.loopback status 2>&1 || true
+          echo "--- network.device status ---"
+          ubus -t 2 call network.device status 2>&1 || true
+          echo "--- network.interface dump ---"
+          ubus -t 2 call network.interface dump 2>&1 || true
+          echo "--- service firewall data ---"
+          ubus -t 2 call service get_data \
+            "{\\"type\\":\\"firewall\\"}" 2>&1 || true
+          echo "--- recent network/ubus log messages ---"
+          logread 2>&1 | grep -iE "netifd|ubus|network.interface|interface" \
+            | tail -100 || true
+          DIAGNOSTICS
 
       - name: Record tested container image
         if: always()
