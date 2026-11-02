@@ -251,6 +251,12 @@ Keep this file as valid JSON (without comments). The workflows expand the
 array into their OpenWrt-version matrix. The shared
 `.github/actions/openwrt-image` action handles release and snapshot image tags.
 
+The Molecule workflow runs its independent scenarios in parallel only after
+the required lint, structure, sanity, and unit checks pass. Its final
+`Molecule` check publishes a per-version/scenario result table, including
+setup, test, and cleanup durations. Missing or failed matrix results fail
+the aggregate check; intentional Markdown-only skips are reported separately.
+
 ## Script and documentation checks
 
 The CI workflow checks shell scripts with ShellCheck, and

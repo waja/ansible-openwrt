@@ -602,22 +602,31 @@ with it.
     for all subsequent Molecule commands, including cleanup, and logs the
     pulled image ID and repository digests.
   - Runs `molecule test -s "${{ matrix.scenario }}" --destroy=never`
-    to preserve a failed scenario's container for diagnostics.
+    to preserve a failed scenario's container for diagnostics. Successful
+    and skipped Ansible task output is suppressed with the supported
+    `ANSIBLE_DISPLAY_OK_HOSTS` and `ANSIBLE_DISPLAY_SKIPPED_HOSTS`
+    settings; changed tasks, warnings, failures, diagnostics, and play
+    recaps remain visible.
   - Logs the tested container's image ID and prints detailed diagnostics
     on failure: Docker configuration, network interfaces/routes/DNS,
     OpenWrt release and opkg version, network/firewall init links,
     firewall rules, recent system log, filesystem space, and container
     logs. Container names derive from `OPENWRT_VERSION` and scenario.
+  - Destroys only the scenario assigned to that job in an unconditional
+    cleanup step. Each matrix job records its setup, test, and destroy
+    durations and uploads a result artifact even when a step fails.
   - The `17 6 * * 0` schedule tests the regular moving OpenWrt release image;
     the separate `17 7 * * 0` schedule tests the moving snapshot tag.
     Pull requests, pushes, and manual runs use the regular image.
-  - Destroys only the scenario assigned to that job in an unconditional
-    cleanup step.
 - `molecule-status`
   - Exposes the stable `Molecule` check. Configure branch protection to
     require this aggregate check, not the individual matrix jobs.
-  - Succeeds for intentional matrix skips and fails when a prerequisite or
-    any executed matrix job fails.
+  - Runs after success, failure, or cancellation to publish the matrix
+    summary. It validates one artifact for every expected OpenWrt-version
+    and scenario pair, reports durations and explicit skipped status, and
+    fails for failed, cancelled, missing, duplicate, malformed, or
+    unexpected results. Intentional Markdown-only skips are reported as
+    skipped; failed prechecks fail the aggregate check.
 
 When changing the workflow, update this section to reflect actual job
 dependencies, conditions, matrix, and commands.
