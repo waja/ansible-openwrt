@@ -25,7 +25,12 @@ snapshot() {
  fi
  return 0
 }
+# fw4 print is the generated firewall configuration; nft list ruleset is
+# the effective kernel ruleset, including runtime-only additions.
+snapshot fw4-ruleset fw4 fw4 print || exit 1
 snapshot nft-ruleset nft nft list ruleset || exit 1
+# netifd/ubus state complements the live kernel view from iproute2.
+snapshot netifd-interfaces ubus ubus call network.interface dump || exit 1
 snapshot ip-address ip ip address show || exit 1
 snapshot ip-routes ip ip route show table all || exit 1
 snapshot ip-rules ip ip rule show || exit 1
