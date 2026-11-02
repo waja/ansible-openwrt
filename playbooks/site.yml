@@ -56,3 +56,7 @@
       tags:
         - router_tailscale
       when: router_tailscale_enabled | default(false) | bool
+    - role: router_owut
+      tags:
+        - router_owut
+      when: router_owut_enabled | default(false) | bool

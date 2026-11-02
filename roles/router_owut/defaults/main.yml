@@ -1,0 +1,5 @@
+# roles/router_owut/defaults/main.yml
+---
+# Disabled by default because OWUT must be installed separately.
+router_owut_enabled: false
+router_owut_binary: /usr/bin/owut
