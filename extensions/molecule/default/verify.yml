@@ -1421,7 +1421,7 @@
             "firewall.molecule_named_precedence.target='ACCEPT'"
             in router_firewall_named_precedence_show.result
           - router_firewall_named_precedence_matches.result_list | length == 2
-          - router_firewall_anonymous_precedence_target.result == 'DROP'
+          - router_firewall_anonymous_precedence_target.result | trim == 'DROP'
 
     - name: Create firewall rules in a deliberately non-alphabetical order
       ansible.builtin.include_role:
