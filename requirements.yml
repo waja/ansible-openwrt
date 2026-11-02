@@ -6,7 +6,7 @@ roles:
 
 collections:
   - name: ansible.utils
-    version: "6.1.0"
+    version: "6.1.1"
   - name: community.openwrt
     version: "1.10.0"
   - name: community.docker
