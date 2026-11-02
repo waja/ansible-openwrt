@@ -120,7 +120,7 @@ jobs:
         with:
           python-version: '3.15'
 
-      - name: Lint POSIX shell scripts
+      - name: Lint shell scripts
         if: >-
           needs.changes.result != 'success'
           || needs.changes.outputs.scripts == 'true'
@@ -132,7 +132,7 @@ jobs:
           scandir: ./scripts
           version: v0.11.0
         env:
-          SHELLCHECK_OPTS: --shell=sh
+          SHELLCHECK_OPTS: --external-sources
 
       - name: Lint Markdown syntax
         if: >-
