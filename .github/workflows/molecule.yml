@@ -360,7 +360,7 @@ jobs:
               echo "syscall=$(cat "/proc/$netifd_pid/syscall" 2>/dev/null || echo unavailable)"
               for task in /proc/"$netifd_pid"/task/*; do
                 [ -d "$task" ] || continue
-                echo "thread=\${task##*/} comm=$(cat "$task/comm" 2>/dev/null) wchan=$(cat "$task/wchan" 2>/dev/null || echo unavailable)"
+                echo "thread=${task##*/} comm=$(cat "$task/comm" 2>/dev/null) wchan=$(cat "$task/wchan" 2>/dev/null || echo unavailable)"
                 grep -E "^(State|voluntary_ctxt_switches|nonvoluntary_ctxt_switches):" "$task/status" 2>/dev/null || true
               done
             else
@@ -370,7 +370,7 @@ jobs:
             cat /proc/net/dev 2>&1 || true
             for interface in /sys/class/net/*; do
               [ -e "$interface" ] || continue
-              echo "\${interface##*/}: operstate=$(cat "$interface/operstate" 2>/dev/null) carrier=$(cat "$interface/carrier" 2>/dev/null) ifindex=$(cat "$interface/ifindex" 2>/dev/null) iflink=$(cat "$interface/iflink" 2>/dev/null) master=$(readlink "$interface/master" 2>/dev/null || echo none)"
+              echo "${interface##*/}: operstate=$(cat "$interface/operstate" 2>/dev/null) carrier=$(cat "$interface/carrier" 2>/dev/null) ifindex=$(cat "$interface/ifindex" 2>/dev/null) iflink=$(cat "$interface/iflink" 2>/dev/null) master=$(readlink "$interface/master" 2>/dev/null || echo none)"
             done
             echo "--- kernel messages ---"
             dmesg 2>&1 | tail -80 || true
