@@ -1392,15 +1392,36 @@
       register: router_firewall_named_precedence_show
       changed_when: false
 
+    - name: Find both rules sharing the precedence test name
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_named_precedence
+      register: router_firewall_named_precedence_matches
+      changed_when: false
+
+    - name: Read the matching anonymous firewall rule target
+      community.openwrt.uci:
+        command: get
+        key: >-
+          firewall.{{
+            router_firewall_named_precedence_matches.result_list
+            | select('match', '^@rule')
+            | first
+          }}.target
+      register: router_firewall_anonymous_precedence_target
+      changed_when: false
+
     - name: Assert named firewall section takes precedence over anonymous match
       ansible.builtin.assert:
         that:
           - >-
             "firewall.molecule_named_precedence.target='ACCEPT'"
             in router_firewall_named_precedence_show.result
-          - >-
-            router_firewall_named_precedence_show.result
-            is search("firewall\\.@rule\\[[0-9]+\\]\\.target='DROP'")
+          - router_firewall_named_precedence_matches.result_list | length == 2
+          - router_firewall_anonymous_precedence_target.result == 'DROP'
 
     - name: Create firewall rules in a deliberately non-alphabetical order
       ansible.builtin.include_role:
