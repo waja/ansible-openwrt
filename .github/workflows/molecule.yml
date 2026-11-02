@@ -340,6 +340,36 @@ jobs:
           ANSIBLE_FORCE_COLOR: '1'
           ANSIBLE_DISPLAY_OK_HOSTS: 'false'
           ANSIBLE_DISPLAY_SKIPPED_HOSTS: 'false'
+      - name: Diagnose netifd and ubus state
+        if: always() && matrix.scenario == 'default'
+        shell: bash
+        run: |
+          container="openwrt-${OPENWRT_VERSION}-default"
+          echo "=== netifd and ubus diagnostics ==="
+          docker inspect --format \
+            'status={{.State.Status}} network={{.HostConfig.NetworkMode}}' \
+            "$container" || true
+          docker exec "$container" sh -c '
+            echo "--- processes ---"
+            ps w 2>&1 | grep -E "[n]etifd|[u]bus|[p]rocd" || true
+            echo "--- ubus socket ---"
+            ls -l /var/run/ubus /var/run/ubus/ubus.sock 2>&1 || true
+            echo "--- ubus system board ---"
+            ubus -t 2 call system board 2>&1 || true
+            echo "--- network.interface object ---"
+            ubus -v list network.interface 2>&1 || true
+            echo "--- all network-related ubus objects ---"
+            ubus list 2>&1 | grep -E "^(network|service)" || true
+            echo "--- network.interface dump ---"
+            ubus -t 2 call network.interface dump 2>&1 || true
+            echo "--- service firewall data ---"
+            ubus -t 2 call service get_data \
+              "{\"type\":\"firewall\"}" 2>&1 || true
+            echo "--- recent network/ubus log messages ---"
+            logread 2>&1 | grep -iE "netifd|ubus|network.interface|interface" \
+              | tail -100 || true
+          ' || true
+
       - name: Record tested container image
         if: always()
         run: |
