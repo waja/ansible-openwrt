@@ -13,6 +13,14 @@
       delay: 2
       changed_when: false
 
+    - name: Verify netifd exposes its interface dump through ubus
+      ansible.builtin.raw: ubus -t 2 call network.interface dump >/dev/null
+      register: network_interface_dump
+      until: network_interface_dump.rc == 0
+      retries: 5
+      delay: 1
+      changed_when: false
+
     - name: Create an anonymous factory-style firewall zone for adoption
       community.openwrt.uci:
         autocommit: true
