@@ -218,6 +218,8 @@ jobs:
 
   molecule:
     name: Molecule tests (${{ matrix.openwrt_version }}, ${{ matrix.scenario }})
+    permissions:
+      contents: read
     needs:
       - changes
       - openwrt-versions
@@ -336,6 +338,7 @@ jobs:
           fi
           exit "$test_status"
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
           ANSIBLE_DISPLAY_OK_HOSTS: 'false'

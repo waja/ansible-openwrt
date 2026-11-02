@@ -87,6 +87,7 @@ jobs:
           while IFS= read -r path; do
             case "$path" in
               scripts/*|\
+                roles/router_cve_2026_98432/files/*|\
                 roles/router_storage/files/*|\
                 roles/router_storage/tasks/*|\
                 roles/router_storage/defaults/*|\
@@ -190,6 +191,24 @@ jobs:
               apk audit --system > /tmp/apk-audit-restored.txt
               test ! -s /tmp/apk-audit-restored.txt
             '
+
+      - name: Test CVE mitigation detection and lifecycle
+        run: |
+          manage_script="$PWD/roles/router_cve_2026_98432/files/manage.sh"
+          detection_test="$PWD/scripts/tests/test-cve-2026-98432-detection.sh"
+          lifecycle_test="$PWD/scripts/tests/test-cve-2026-98432-lifecycle.sh"
+          docker run --rm \
+            -v "$manage_script:/opt/manage.sh:ro" \
+            -v "$detection_test:/opt/detection-test.sh:ro" \
+            -v "$lifecycle_test:/opt/lifecycle-test.sh:ro" \
+            --entrypoint busybox \
+            "$OPENWRT_IMAGE" \
+            ash -c 'set -eu; \
+              busybox ash -n /opt/manage.sh; \
+              busybox ash -n /opt/detection-test.sh; \
+              busybox ash -n /opt/lifecycle-test.sh; \
+              busybox ash /opt/detection-test.sh /opt/manage.sh; \
+              busybox ash /opt/lifecycle-test.sh /opt/manage.sh'
 
       - name: Check shell syntax and command-line behavior
         run: |

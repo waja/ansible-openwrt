@@ -76,8 +76,18 @@
             router_librenms_source_ref | urlencode
           }}
         method: GET
-        headers:
-          Accept: application/vnd.github+json
+        headers: >-
+          {{
+            {'Accept': 'application/vnd.github+json'}
+            | combine(
+                {
+                  'Authorization': 'Bearer '
+                    ~ lookup('ansible.builtin.env', 'GITHUB_TOKEN')
+                }
+                if lookup('ansible.builtin.env', 'GITHUB_TOKEN') | length > 0
+                else {}
+              )
+          }}
         return_content: true
         status_code: 200
         timeout: 30
