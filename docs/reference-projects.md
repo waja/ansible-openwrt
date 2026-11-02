@@ -148,6 +148,69 @@ without understanding their assumptions.
 - Revisit links when needed; external repositories, branches and file paths
   can change.
 
+## Runtime state discovery assessment
+
+The following references were reviewed specifically for issue
+[#53](https://github.com/waja/ansible-openwrt/issues/53). None provides a
+drop-in runtime snapshot collector; each informs a different boundary of
+the design:
+
+- **[LinuxConfig][linuxconfig] — persistent backup, not runtime state.**
+  Its `sysupgrade --create-backup` workflow is a useful pattern for a
+  separate configuration export: create an archive, retrieve it with
+  Ansible, and clean up the temporary file. It does not capture the
+  currently active kernel or network state and is therefore outside #53.
+- **[3ti-Energy/Rut-config][rut-config] — configuration and runtime are
+  distinct views.** Its use of `community.openwrt.setup` and review of
+  staged UCI changes before an explicit commit reinforces that collected
+  facts, pending configuration changes, and the active kernel state must
+  not be conflated. The collector remains evidence-only and does not
+  stage or commit UCI changes.
+- **[Kblack0610/home-config][home-config] — validation and recovery.**
+  Its phased rollout, verification and rollback guidance is a useful
+  model for the later real-system validation procedure. It does not
+  justify changing live state during collection.
+- **[bairhys/Ansible-Openwrt][bairhys] — monitoring, not discovery.**
+  Its exporter and monitoring integrations may inform future monitoring
+  roles, but continuous metrics collection is not the goal of this
+  point-in-time migration aid.
+- **[thiagoalmeidasa/homelab][homelab] and [Lumpiasty/klaster][klaster]**
+  demonstrate modular configuration task organization. That is useful
+  for Ansible roles but does not change the collector's runtime data
+  sources or behavior.
+- The Tailscale-focused references and
+  [DigitecGalaxus framework][digitec-openwrt] address VPN/UCI
+  configuration rather than general runtime-state discovery; no
+  implementation pattern was adopted from them for #53.
+
+### Resulting design decisions
+
+- Keep runtime snapshots separate from UCI, overlay files, package
+  inventories and persistent configuration backups.
+- Capture complementary views rather than treating one source as
+  authoritative: fw4-generated rules versus the effective nftables
+  ruleset; netifd's logical interface status versus kernel state from
+  `ip`.
+- Keep collection optional and read-only. Missing utilities are reported,
+  never installed automatically.
+- Treat every snapshot as sensitive, point-in-time evidence. Do not infer
+  origin, intent, persistence or safe desired state from it, and never
+  replay it into Ansible configuration automatically.
+- Defer broad process and unrestricted sysctl inventories; reconsider a
+  narrowly scoped sysctl allowlist only when a concrete migration use
+  case exists.
+- Use the validation and rollback discipline exemplified by home-config
+  when testing on a booted OpenWrt system. The collector itself must not
+  perform rollback or mutate router state.
+
+These decisions preserve the scope of #53. They do not require another
+runtime data source or a broader system inventory. The collector was
+subsequently validated on a booted OpenWrt 25.12.5 x86/64 VM: all seven
+snapshots succeeded, restrictive permissions and overwrite protection were
+verified, and the full discovery run cleaned up its temporary mounts and lock.
+See [PR #149](https://github.com/waja/ansible-openwrt/pull/149) for the
+validation record.
+
 ## Official documentation
 
 - [OpenWrt Tailscale guide][openwrt-tailscale]

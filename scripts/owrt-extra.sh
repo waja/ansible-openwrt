@@ -675,7 +675,7 @@ RUNTIME_HELPER=$(dirname "$0")/owrt-extra-runtime.sh
 [ -r "$RUNTIME_HELPER" ] || RUNTIME_HELPER=/usr/libexec/owrt-extra-runtime.sh
 if [ -r "$RUNTIME_HELPER" ]; then
     print_section "10. Runtime-only state (point-in-time snapshots)"
-    if "$RUNTIME_HELPER" "$OUT/runtime" 2> "$OUT/runtime-collector.log"; then
+    if sh "$RUNTIME_HELPER" "$OUT/runtime" 2> "$OUT/runtime-collector.log"; then
         cat "$OUT/runtime/status.txt"
         echo "Raw snapshots: $OUT/runtime/ (sensitive; inspect before sharing)"
     else

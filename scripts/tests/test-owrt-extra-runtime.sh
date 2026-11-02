@@ -35,7 +35,7 @@ cat > "$BIN/lsmod" <<'EOF'
 echo "fixture_module 123 0"
 EOF
 chmod 700 "$BIN/"*
-PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/success"
+PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/success"
 test "$(stat -c %a "$TMP/success")" = 700 || fail "directory mode"
 test "$(stat -c %a "$TMP/success/status.txt")" = 600 || fail "status mode"
 for f in fw4-ruleset nft-ruleset netifd-interfaces ip-address ip-routes ip-rules loaded-modules; do
@@ -50,16 +50,16 @@ cat > "$BIN/nft" <<'EOF'
 echo "partial ruleset"
 exit 7
 EOF
-PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/failure"
+PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/failure"
 grep -Fx "nft-ruleset	failed	7" "$TMP/failure/status.txt" >/dev/null || fail "failure status"
 grep -Fq "partial ruleset" "$TMP/failure/nft-ruleset.txt" || fail "partial output"
 grep -Fx "ip-address	ok	0" "$TMP/failure/status.txt" >/dev/null || fail "later snapshot skipped"
 mkdir -m 700 "$TMP/missing-bin"
 cp "$BIN/ip" "$TMP/missing-bin/ip"
-PATH="$TMP/missing-bin:/usr/bin:/bin" "$HELPER" "$TMP/missing"
+PATH="$TMP/missing-bin:/usr/bin:/bin" sh "$HELPER" "$TMP/missing"
 grep -Fx "fw4-ruleset	unavailable	-" "$TMP/missing/status.txt" >/dev/null || fail "missing command status"
-if PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/success" >/dev/null 2>&1; then fail "existing path overwritten"; fi
+if PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/success" >/dev/null 2>&1; then fail "existing path overwritten"; fi
 mkdir -m 700 "$TMP/target"
 ln -s "$TMP/target" "$TMP/link"
-if PATH="$BIN:/usr/bin:/bin" "$HELPER" "$TMP/link" >/dev/null 2>&1; then fail "symlink accepted"; fi
+if PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/link" >/dev/null 2>&1; then fail "symlink accepted"; fi
 echo "All owrt-extra runtime snapshot tests passed."

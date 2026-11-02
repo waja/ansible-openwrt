@@ -50,8 +50,9 @@ OpenWrt VM or physical router.
 
 This is an investigative report, not an automatic Ansible generator.
 Runtime state is captured separately when the optional helper is present.
-It records the active nftables ruleset, addresses, routes, policy rules,
-and loaded modules under `runtime/`. Temporary `sysctl` values and process
+It records the fw4-generated and effective nftables rulesets, netifd
+interface status, kernel addresses, routes, policy rules, and loaded
+modules under `runtime/`. Temporary `sysctl` values and process
 state are not collected. Files in the overlay may also be caches or
 service state rather than configuration. Review each candidate before
 managing it with Ansible. Data outside the overlay, such as calibration

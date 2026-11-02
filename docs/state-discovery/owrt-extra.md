@@ -260,15 +260,18 @@ The collector invokes the optional helper next to the script (or at
 `/usr/libexec/owrt-extra-runtime.sh`) and stores its output under
 `/tmp/owrt-diff/runtime/`. The helper records separate snapshots for:
 
-- `nft list ruleset` — active nftables ruleset.
-- `ip address show` — current addresses and link state.
+- `fw4 print` — ruleset generated from current firewall4/UCI configuration.
+- `nft list ruleset` — effective kernel rules, including rules added outside fw4.
+- `ubus call network.interface dump` — netifd's logical interface status.
+- `ip address show` — current addresses and link state from the kernel.
 - `ip route show table all` — routing tables.
 - `ip rule show` — policy-routing rules.
 - `lsmod` — currently loaded modules.
 
-Each command is optional. `status.txt` records `ok`, `failed`, or
-`unavailable` and the exit status. Failed commands retain partial output
-for diagnosis; one failure does not prevent later snapshots. Raw output is
+Each command is optional, including `fw4`, `nft`, `ubus`, `ip`, and
+`lsmod`; the collector does not install packages. `status.txt` records
+`ok`, `failed`, or `unavailable` and the exit status. Failed commands
+retain partial output for diagnosis; one failure does not prevent later snapshots. Raw output is
 not printed to the terminal. The helper is read-only and refuses to
 overwrite an existing output path. Files and directory permissions are
 restricted (0700/0600).
@@ -279,11 +282,15 @@ and neither reliably distinguishes manual changes from service-managed
 state. A future narrowly scoped sysctl allowlist would need a concrete
 migration use case.
 
-Compare the nftables snapshot with `fw4 print` and firewall UCI; the
-active ruleset includes generated rules, includes, and manually added
-rules. Compare addresses/routes/rules with `/etc/config/network` and
-active network service state. `lsmod` shows loaded modules but not why
-they are loaded. Snapshots are sensitive point-in-time evidence: they do
+Compare `fw4-ruleset.txt` with `nft-ruleset.txt` and firewall UCI:
+`fw4 print` shows what fw4 generates from configuration, while the nft
+snapshot shows the effective kernel rules, including included and
+runtime-added rules. A difference is a clue for investigation, not proof
+of a manual change. Compare `netifd-interfaces.txt` with
+`/etc/config/network` and the `ip` snapshots: ubus reports netifd's
+logical interface state, while `ip` reports the kernel's addresses,
+routes, and policy rules. The views are complementary. `lsmod` shows
+loaded modules but not why they are loaded. Snapshots are sensitive point-in-time evidence: they do
 not identify who created an object, whether it is intentional or
 persistent, or whether it is safe to reproduce on another device. Never
 replay them or derive Ansible tasks blindly. Runtime discovery is tracked
