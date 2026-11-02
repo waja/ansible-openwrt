@@ -240,6 +240,11 @@
         echo "Running the unchanged fw4 validation"
         time fw4 print >/dev/null
       changed_when: false
+      register: fw4_diagnostic_result
+
+    - name: Show fw4 ubus diagnostic output
+      ansible.builtin.debug:
+        var: fw4_diagnostic_result.stdout
 
     - name: Apply router packages role
       ansible.builtin.include_role:
