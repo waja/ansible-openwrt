@@ -3,6 +3,10 @@
 # rootfs container: the tests create fixtures under /etc, /rom and /overlay.
 set -eu
 
+TEST_TMP=$(mktemp -d "/tmp/owrt-extra-tests.XXXXXX")
+export OWRT_TEST_TMP="$TEST_TMP"
+trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
+
 SCRIPT=/tmp/owrt-extra-test.sh
 cp /opt/owrt-test/owrt-extra.sh "$SCRIPT"
 chmod 700 "$SCRIPT"
@@ -12,7 +16,8 @@ fail() {
     exit 1
 }
 reset_case() {
-    rm -rf /tmp/owrt-diff /tmp/owrt-extra.lock /tmp/ref /tmp/owrt-test-factory-failed
+    rm -rf /tmp/owrt-diff /tmp/owrt-extra.lock /tmp/ref
+    rm -f "$TEST_TMP"/*-ran "$TEST_TMP"/uci-commit-ran "$TEST_TMP"/factory-failed
 }
 assert_no_run_state() {
     [ ! -e /tmp/owrt-extra.lock ] || fail "lock left behind"
@@ -23,7 +28,7 @@ mkdir -p /overlay/upper /rom/etc/apk /tmp/sysinfo /etc/apk
 
 # A missing required command must fail before creating the report.
 reset_case
-path_bin=/tmp/owrt-path-without-apk
+path_bin=$TEST_TMP/path-without-apk
 mkdir -p "$path_bin"
 for cmd in awk basename cat chmod chroot cmp comm cp diff dirname find grep id ln mkdir mktemp mount readlink rm sed sort sync tr uci umount sysupgrade apk wc; do
     [ "$cmd" = apk ] && continue
@@ -84,7 +89,7 @@ printf 'test-board\n' > /tmp/sysinfo/board_name
 
 # Stub only the operations that would require a real OpenWrt overlay/chroot.
 # All other commands are the actual OpenWrt rootfs utilities.
-stub=/tmp/owrt-stubs
+stub=$TEST_TMP/stubs
 mkdir -p "$stub"
 cat > "$stub/mount" <<'EOF_MOUNT'
 #!/bin/sh
@@ -96,7 +101,7 @@ EOF_MOUNT
 real_grep=$(command -v grep)
 cat > "$stub/grep" <<EOF_GREP
 #!/bin/sh
-if [ -f /tmp/owrt-test-factory-failed ] &&
+if [ -f "$OWRT_TEST_TMP/factory-failed" ] &&
    [ "\${1:-}" = -Fq ] &&
    [ "\${2:-}" = " /tmp/ref/merged " ] &&
    [ "\${3:-}" = /proc/mounts ]; then
@@ -112,27 +117,57 @@ if [ "${OWRT_TEST_UNMOUNT_FAIL:-0}" = 1 ]; then
 fi
 exit 0
 EOF_UMOUNT
-cat > "$stub/chroot" <<'EOF_CHROOT'
+# Execute the actual factory-generation shell body with a fixture
+# root. Only the absolute factory paths are redirected; command sequencing,
+# subshell handling, error aggregation and final status remain production code.
+factory_root=$TEST_TMP/factory-fixture
+mkdir -p "$factory_root/bin" "$factory_root/etc/uci-defaults"
+cat > "$factory_root/bin/config_generate" <<'EOF_CONFIG'
 #!/bin/sh
-case "${OWRT_TEST_FACTORY_FAIL:-}" in
-    config-generate)
-        : > /tmp/owrt-test-factory-failed
-        echo "FAIL: /bin/config_generate (exit 41)"
-        exit 1
-        ;;
-    uci-defaults)
-        echo "FAIL: /etc/uci-defaults/99-test-failure (exit 42)"
-        exit 1
-        ;;
-    uci-commit)
-        echo "FAIL: uci commit (exit 43)"
-        exit 1
+: > "$OWRT_TEST_TMP/config-generate-ran"
+case ",${OWRT_TEST_FACTORY_FAIL:-}," in
+    *,config-generate,*)
+        : > "$OWRT_TEST_TMP/factory-failed"
+        echo "simulated config_generate failure" >&2
+        exit 41
         ;;
 esac
 exit 0
+EOF_CONFIG
+chmod 700 "$factory_root/bin/config_generate"
+create_factory_defaults_fixture() {
+    cat > "$factory_root/etc/uci-defaults/99-test-failure" <<'EOF_DEFAULT'
+: > "$OWRT_TEST_TMP/uci-defaults-ran"
+case ",${OWRT_TEST_FACTORY_FAIL:-}," in
+    *,uci-defaults,*)
+        echo "simulated uci-defaults failure" >&2
+        exit 42
+        ;;
+esac
+return 0
+EOF_DEFAULT
+    chmod 700 "$factory_root/etc/uci-defaults/99-test-failure"
+}
+cat > "$stub/chroot" <<'EOF_CHROOT'
+#!/bin/sh
+[ "$#" = 4 ] || exit 90
+[ "$2" = /bin/sh ] && [ "$3" = -c ] || exit 91
+cmd=$(printf '%s' "$4" | sed -E \
+    -e "s#(^|[^[:alnum:]_./-])/bin/config_generate([^[:alnum:]_./-]|$)#\1$OWRT_TEST_ROOT/bin/config_generate\2#g" \
+    -e "s#(^|[^[:alnum:]_./-])/etc/uci-defaults/#\1$OWRT_TEST_ROOT/etc/uci-defaults/#g")
+/bin/sh -c "$cmd"
 EOF_CHROOT
 cat > "$stub/uci" <<'EOF_UCI'
 #!/bin/sh
+if [ "${1:-}" = commit ]; then
+    : > "$OWRT_TEST_TMP/uci-commit-ran"
+    case ",${OWRT_TEST_FACTORY_FAIL:-}," in
+        *,uci-commit,*)
+            echo "simulated uci commit failure" >&2
+            exit 43
+            ;;
+    esac
+fi
 exit 0
 EOF_UCI
 cat > "$stub/sysupgrade" <<'EOF_SYSUPGRADE'
@@ -179,6 +214,8 @@ esac
 exit 0
 EOF_APK
 chmod 700 "$stub"/*
+OWRT_TEST_ROOT=$factory_root
+export OWRT_TEST_ROOT
 
 # Minimal APK world files; the factory comparison falls back to /rom.
 : > /rom/etc/apk/world
@@ -190,6 +227,7 @@ run_failure_case() {
     name=$1
     expected=$2
     reset_case
+    create_factory_defaults_fixture
     if /bin/sh "$SCRIPT" > "/tmp/$name.log" 2>&1; then
         cat "/tmp/$name.log" >&2
         fail "$name unexpectedly succeeded"
@@ -221,7 +259,11 @@ run_factory_failure_case() {
     name=$1
     failure=$2
     expected=$3
+    expected2=${4:-}
     reset_case
+    create_factory_defaults_fixture
+    rm -f "$TEST_TMP"/config-generate-ran "$TEST_TMP"/uci-defaults-ran \
+        "$TEST_TMP"/uci-commit-ran
     OWRT_TEST_FACTORY_FAIL=$failure
     export OWRT_TEST_FACTORY_FAIL
     if /bin/sh "$SCRIPT" > "/tmp/$name.log" 2>&1; then
@@ -234,6 +276,16 @@ run_factory_failure_case() {
         fail "$name did not preserve the chroot diagnostic log"
     grep -Fq "$expected" /tmp/owrt-diff/chroot.log ||
         { cat /tmp/owrt-diff/chroot.log >&2; fail "$name failure detail missing"; }
+    if [ -n "$expected2" ]; then
+        grep -Fq "$expected2" /tmp/owrt-diff/chroot.log ||
+            { cat /tmp/owrt-diff/chroot.log >&2; fail "$name second failure detail missing"; }
+    fi
+    [ -f "$TEST_TMP/config-generate-ran" ] ||
+        fail "$name did not execute config_generate"
+    [ -f "$TEST_TMP/uci-defaults-ran" ] ||
+        fail "$name did not execute the uci-defaults script"
+    [ -f "$TEST_TMP/uci-commit-ran" ] ||
+        fail "$name did not execute uci commit after the failure"
     ! grep -Fq "##### 1. UCI diff" "/tmp/$name.log" ||
         fail "$name continued into comparison reporting"
     assert_no_run_state
@@ -242,15 +294,20 @@ run_factory_failure_case() {
 }
 
 run_factory_failure_case config-generate-failure config-generate \
-    "FAIL: /bin/config_generate (exit 41)"
+    "config_generate (exit 41)"
 run_factory_failure_case uci-defaults-failure uci-defaults \
-    "FAIL: /etc/uci-defaults/99-test-failure (exit 42)"
+    "99-test-failure (exit 42)"
 run_factory_failure_case uci-commit-failure uci-commit \
     "FAIL: uci commit (exit 43)"
+
+# Multiple factory failures in one reconstruction must all be reported.
+run_factory_failure_case multiple-factory-failures config-generate,uci-defaults \
+    "config_generate (exit 41)" "99-test-failure (exit 42)"
 
 # A failed unmount must preserve the reference tree and lock. A subsequent
 # invocation must refuse to start rather than reuse uncertain mount state.
 reset_case
+create_factory_defaults_fixture
 OWRT_TEST_FACTORY_FAIL=config-generate
 OWRT_TEST_UNMOUNT_FAIL=1
 export OWRT_TEST_FACTORY_FAIL OWRT_TEST_UNMOUNT_FAIL
@@ -295,6 +352,7 @@ assert_no_run_state
 # Positive comparison coverage: a modified package-owned file and a
 # newly enabled service must both appear in the report.
 reset_case
+create_factory_defaults_fixture
 mkdir -p /rom/etc/apk /etc/apk /overlay/upper/usr/share \
     /overlay/upper/etc/rc.d
 : > /rom/etc/apk/world
