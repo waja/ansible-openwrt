@@ -357,21 +357,28 @@ jobs:
             if [ -n "$netifd_pid" ] && [ -r "/proc/$netifd_pid/status" ]; then
               grep -E '^(Name|State|Pid|PPid|Threads):' \
                 "/proc/$netifd_pid/status" || true
-              echo "wchan=$(cat "/proc/$netifd_pid/wchan" 2>/dev/null)"
-              echo "syscall=$(cat "/proc/$netifd_pid/syscall" 2>/dev/null)"
+              wchan="$(cat "/proc/$netifd_pid/wchan" 2>/dev/null)"
+              syscall="$(cat "/proc/$netifd_pid/syscall" 2>/dev/null)"
+              echo "wchan=$wchan syscall=$syscall"
+              for task in /proc/"$netifd_pid"/task/*; do
                 [ -d "$task" ] || continue
-                echo "thread=${task##*/} comm=$(cat "$task/comm" 2>/dev/null) wchan=$(cat "$task/wchan" 2>/dev/null || echo unavailable)"
-                echo "thread=$task comm=$(cat "$task/comm")"
-                cat "$task/wchan" 2>/dev/null || true
-            else
+                thread_id="${task##*/}"
+                thread_comm="$(cat "$task/comm" 2>/dev/null)"
+                thread_wchan="$(cat "$task/wchan" 2>/dev/null)"
+                echo "thread=$thread_id comm=$thread_comm wchan=$thread_wchan"
+              done
+            fi
               echo "netifd process status unavailable"
             fi
             echo "--- kernel network interfaces ---"
             cat /proc/net/dev 2>&1 || true
             for interface in /sys/class/net/*; do
               [ -e "$interface" ] || continue
-              echo "${interface##*/}: operstate=$(cat "$interface/operstate" 2>/dev/null) carrier=$(cat "$interface/carrier" 2>/dev/null) ifindex=$(cat "$interface/ifindex" 2>/dev/null) iflink=$(cat "$interface/iflink" 2>/dev/null) master=$(readlink "$interface/master" 2>/dev/null || echo none)"
-              echo "$interface: $(cat "$interface/operstate")"
+              state="$(cat "$interface/operstate" 2>/dev/null)"
+              carrier="$(cat "$interface/carrier" 2>/dev/null)"
+              master="$(readlink "$interface/master" 2>/dev/null || echo none)"
+              echo "$interface: state=$state carrier=$carrier master=$master"
+            done
             echo "--- kernel messages ---"
             dmesg 2>&1 | tail -80 || true
             echo "--- ubus socket ---"
