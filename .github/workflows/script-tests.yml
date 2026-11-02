@@ -138,9 +138,9 @@ jobs:
       - name: Verify APK system audit behavior on OpenWrt
         run: |
           docker run --rm \
-            --entrypoint /bin/sh \
+            --entrypoint busybox \
             "$OPENWRT_IMAGE" \
-            -c '
+            ash -c '
               set -eu
 
               # A clean rootfs must produce no findings and exit successfully.
@@ -203,28 +203,31 @@ jobs:
             "$RUNNER_TEMP/owrt-test/80-rootfs-resize"
           cp scripts/test-router-storage-detect.sh \
             "$RUNNER_TEMP/owrt-test/test.sh"
+          cp scripts/tests/test-owrt-extra-cli.sh \
+            "$RUNNER_TEMP/owrt-test/cli-tests.sh"
           docker run --rm \
             -v "$RUNNER_TEMP/owrt-test:/opt/owrt-test:ro" \
-            --entrypoint /bin/sh \
+            --entrypoint busybox \
             "$OPENWRT_IMAGE" \
-            -c '
-              set -eu
+            ash -c '
+              set -eux
 
               cp /opt/owrt-test/owrt-extra.sh /tmp/owrt-extra-test.sh
-              sh -n /tmp/owrt-extra-test.sh
-              sh -n /opt/owrt-test/detect.sh
-              sh -n /opt/owrt-test/70-rootpt-resize
-              sh -n /opt/owrt-test/80-rootfs-resize
-              sh -n /opt/owrt-test/test.sh
-              sh /opt/owrt-test/test.sh \
+              busybox ash -n /tmp/owrt-extra-test.sh
+              busybox ash -n /opt/owrt-test/detect.sh
+              busybox ash -n /opt/owrt-test/70-rootpt-resize
+              busybox ash -n /opt/owrt-test/80-rootfs-resize
+              busybox ash -n /opt/owrt-test/test.sh
+              busybox ash /opt/owrt-test/test.sh \
                 /opt/owrt-test/detect.sh
 
-              sh /tmp/owrt-extra-test.sh -h > /tmp/help.txt
+              busybox ash /tmp/owrt-extra-test.sh -h > /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-k([[:space:]]|$)" /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-f([[:space:]]|$)" /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-H([[:space:]]|$)" /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-c([[:space:]]|$)" /tmp/help.txt
               grep -Fq -- "--redact-uci-diff FILE" /tmp/help.txt
+              grep -Fq -- "--redact-text FILE" /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-h([[:space:]]|$)" /tmp/help.txt
 
               # Exercise redaction using representative UCI output.
@@ -241,7 +244,7 @@ jobs:
                 "> system.@user[0].password=\$1\$salt\$hash" \
                 > /tmp/uci-fixture.txt
               cp /tmp/uci-fixture.txt /tmp/uci-fixture.original
-              sh /tmp/owrt-extra-test.sh --redact-uci-diff \
+              busybox ash /tmp/owrt-extra-test.sh --redact-uci-diff \
                 /tmp/uci-fixture.txt > /tmp/uci-redacted.txt
               cmp -s /tmp/uci-fixture.txt /tmp/uci-fixture.original
               for secret in \
@@ -257,90 +260,253 @@ jobs:
               grep -Fq "public-value" /tmp/uci-redacted.txt
               grep -Fq "router-name" /tmp/uci-redacted.txt
 
-              # Existing reports must survive a new run attempt.
-              mkdir -m 700 /tmp/owrt-diff
-              echo preserved > /tmp/owrt-diff/marker
-              if sh /tmp/owrt-extra-test.sh \
-                > /tmp/existing.stdout 2> /tmp/existing.stderr; then
-                echo "Expected an existing report to block a new run." >&2
-                exit 1
-              fi
-              test "$(cat /tmp/owrt-diff/marker)" = preserved
-              grep -Fq -- " -c" /tmp/existing.stderr
-
-              # -c removes only the report and is safe to repeat.
-              sh /tmp/owrt-extra-test.sh -c
-              test ! -e /tmp/owrt-diff
-              sh /tmp/owrt-extra-test.sh -c
-              test ! -e /tmp/owrt-diff
-
-              # Cleanup must respect an existing run lock.
-              mkdir -m 700 /tmp/owrt-extra.lock
-              mkdir -m 700 /tmp/owrt-diff
-              echo locked > /tmp/owrt-diff/marker
-              mkdir -p /tmp/ref/merged
-              if sh /tmp/owrt-extra-test.sh -c \
-                > /tmp/locked.stdout 2> /tmp/locked.stderr; then
-                echo "Expected cleanup to respect an existing lock." >&2
-                exit 1
-              fi
-              test -d /tmp/owrt-extra.lock
-              test "$(cat /tmp/owrt-diff/marker)" = locked
-              test -d /tmp/ref/merged
-              rmdir /tmp/owrt-extra.lock
-              sh /tmp/owrt-extra-test.sh -c
-              test ! -e /tmp/owrt-diff
-              test -d /tmp/ref/merged
-              rm -rf /tmp/ref
-
-              # Cleanup refuses a mounted report path when mounts are permitted.
-              mkdir -m 700 /tmp/owrt-diff
-              if mount -t tmpfs tmpfs /tmp/owrt-diff 2>/dev/null; then
-                if sh /tmp/owrt-extra-test.sh -c \
-                  > /tmp/mounted.stdout 2> /tmp/mounted.stderr; then
-                  echo "Expected cleanup to refuse a mounted report path." >&2
-                  umount /tmp/owrt-diff
+              # General text redaction: key/value names, auth headers, URL
+              # credentials and multi-line PEM private keys. Input stays raw.
+              cat > /tmp/sensitive-text.txt <<EOF_SENSITIVE
+              api_token=api-token-secret
+              oauth.secret: client-secret-value
+              client_key=client-key-secret
+              encryption_key=encryption-key-secret
+              signing_key=signing-key-secret
+              shared_key=shared-key-secret
+              Authorization: Bearer bearer-token-secret
+              authorization: Bearer lowercase-bearer-secret
+              pRoXy-AuThOrIzAtIoN: Basic mixed-case-auth-secret
+              Cookie: session=session-cookie-secret
+              set-cookie: session=lowercase-cookie-secret
+              repository=https://user:url-password-secret@example.invalid/feed
+              -----BEGIN PRIVATE KEY-----
+              private-key-line-one
+              private-key-line-two
+              -----END PRIVATE KEY-----
+              -----BEGIN RSA PRIVATE KEY-----
+              rsa-private-key-material
+              -----END RSA PRIVATE KEY-----
+              -----BEGIN EC PRIVATE KEY-----
+              ec-private-key-material
+              -----END EC PRIVATE KEY-----
+              -----BEGIN ENCRYPTED PRIVATE KEY-----
+              encrypted-private-key-material
+              -----END ENCRYPTED PRIVATE KEY-----
+              public_key=public-value
+              hostname=router-name
+              keyboard_layout=us
+              monkey_count=3
+              secretary_name=alice
+              passenger_count=2
+              EOF_SENSITIVE
+              cp /tmp/sensitive-text.txt /tmp/sensitive-text.original
+              busybox ash /tmp/owrt-extra-test.sh --redact-text \
+                /tmp/sensitive-text.txt > /tmp/sensitive-text.redacted
+              cmp -s /tmp/sensitive-text.txt /tmp/sensitive-text.original
+              for secret in api-token-secret client-secret-value \
+                client-key-secret encryption-key-secret signing-key-secret \
+                shared-key-secret bearer-token-secret lowercase-bearer-secret \
+                mixed-case-auth-secret session-cookie-secret \
+                lowercase-cookie-secret url-password-secret \
+                private-key-line-one private-key-line-two \
+                rsa-private-key-material ec-private-key-material \
+                encrypted-private-key-material; do
+                if grep -Fq "$secret" /tmp/sensitive-text.redacted; then
+                  echo "Sensitive text leaked: $secret" >&2
                   exit 1
                 fi
-                grep -Fq "Refusing to clean mounted path" /tmp/mounted.stderr
-                umount /tmp/owrt-diff
-              else
-                echo "SKIP: mount namespace does not permit tmpfs mount test."
-              fi
-              rmdir /tmp/owrt-diff
+              done
+              grep -Fq "public-value" /tmp/sensitive-text.redacted
+              grep -Fq "router-name" /tmp/sensitive-text.redacted
+              grep -Fq "keyboard_layout=us" /tmp/sensitive-text.redacted
+              grep -Fq "monkey_count=3" /tmp/sensitive-text.redacted
+              grep -Fq "secretary_name=alice" /tmp/sensitive-text.redacted
+              grep -Fq "passenger_count=2" /tmp/sensitive-text.redacted
+              grep -Fq "[REDACTED PRIVATE KEY]" /tmp/sensitive-text.redacted
 
-              # Cleanup refuses a symlink instead of following it.
-              mkdir -m 700 /tmp/report-target
-              ln -s /tmp/report-target /tmp/owrt-diff
-              if sh /tmp/owrt-extra-test.sh -c \
-                > /tmp/cleanup.stdout 2> /tmp/cleanup.stderr; then
-                echo "Expected cleanup to refuse a report symlink." >&2
-                exit 1
-              fi
-              test -L /tmp/owrt-diff
-              test -d /tmp/report-target
-              rm /tmp/owrt-diff
-              rmdir /tmp/report-target
-
-              if sh /tmp/owrt-extra-test.sh --invalid \
-                > /tmp/invalid.stdout 2> /tmp/invalid.stderr; then
-                echo "Expected an unknown option to fail." >&2
-                exit 1
-              else
-                status=$?
-                if [ "$status" -ne 1 ]; then
-                  echo "Expected status 1, got $status." >&2
+              # JSON keys and shell assignment prefixes must not bypass the
+              # same heuristic used for plain key/value text.
+              printf '%s%s\n' \
+                '{"api_token": "json-api-token-secret",' \
+                '"password": "json-password-secret"}' \
+                > /tmp/json-shell-secrets.txt
+              cat >> /tmp/json-shell-secrets.txt <<'EOF_JSON_SHELL'
+              export PASSWORD=shell-password-secret
+              readonly TOKEN=shell-token-secret
+              local client_secret=shell-client-secret
+              {"hostname": "router-name", "keyboard_layout": "us"}
+              EOF_JSON_SHELL
+              cp /tmp/json-shell-secrets.txt /tmp/json-shell-secrets.original
+              busybox ash /tmp/owrt-extra-test.sh --redact-text \
+                /tmp/json-shell-secrets.txt > /tmp/json-shell-secrets.redacted
+              cmp -s /tmp/json-shell-secrets.txt \
+                /tmp/json-shell-secrets.original
+              for secret in json-api-token-secret json-password-secret \
+                shell-password-secret shell-token-secret \
+                shell-client-secret; do
+                if grep -Fq "$secret" /tmp/json-shell-secrets.redacted; then
+                  echo "JSON/shell secret leaked: $secret" >&2
                   exit 1
                 fi
-              fi
-              test ! -s /tmp/invalid.stdout
-              if [ "$(cat /tmp/invalid.stderr)" != \
-                "Unknown option: --invalid (allowed: -k -f -H -c -h)" ] || \
-                [ "$(wc -l < /tmp/invalid.stderr)" -ne 1 ]; then
-                echo "Unexpected stderr for an unknown option:" >&2
-                cat /tmp/invalid.stderr >&2
+              done
+              grep -Fq "router-name" /tmp/json-shell-secrets.redacted
+              grep -Fq "keyboard_layout" /tmp/json-shell-secrets.redacted
+
+              # Sensitive file classification is path-based; public keys and
+              # ordinary public certificates are not treated as private keys.
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/passwd; then
+                :
+              else
+                echo "Sensitive path not classified: etc/passwd" >&2
                 exit 1
               fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/shadow; then
+                :
+              else
+                echo "Sensitive path not classified: etc/shadow" >&2
+                exit 1
+              fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/dropbear/dropbear_ed25519_host_key; then
+                :
+              else
+                echo "Sensitive path not classified:" \
+                  "etc/dropbear/dropbear_ed25519_host_key" >&2
+                exit 1
+              fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/ssh/ssh_host_ed25519_key; then
+                :
+              else
+                echo "Sensitive path not classified:" \
+                  "etc/ssh/ssh_host_ed25519_key" >&2
+                exit 1
+              fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/uhttpd.key; then
+                :
+              else
+                echo "Sensitive path not classified: etc/uhttpd.key" >&2
+                exit 1
+              fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/ssl/private/server.key; then
+                :
+              else
+                echo "Sensitive path not classified:" \
+                  "etc/ssl/private/server.key" >&2
+                exit 1
+              fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/wireguard/wg0.conf; then
+                :
+              else
+                echo "Sensitive path not classified: etc/wireguard/wg0.conf" >&2
+                exit 1
+              fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/openvpn/client.key; then
+                :
+              else
+                echo "Sensitive path not classified: etc/openvpn/client.key" >&2
+                exit 1
+              fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/ipsec.secrets; then
+                :
+              else
+                echo "Sensitive path not classified: etc/ipsec.secrets" >&2
+                exit 1
+              fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/swanctl/private/key.pem; then
+                :
+              else
+                echo "Sensitive path not classified:" \
+                  "etc/swanctl/private/key.pem" >&2
+                exit 1
+              fi
+              if ! busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                root/.ssh/id_ed25519; then
+                :
+              else
+                echo "Sensitive path not classified: root/.ssh/id_ed25519" >&2
+                exit 1
+              fi
+              if busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/ssh/ssh_host_ed25519_key.pub; then
+                echo "Non-secret path classified:" \
+                  "etc/ssh/ssh_host_ed25519_key.pub" >&2
+                exit 1
+              fi
+              if busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/openvpn/ca.crt; then
+                echo "Non-secret path classified: etc/openvpn/ca.crt" >&2
+                exit 1
+              fi
+              if busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/config/network; then
+                echo "Non-secret path classified: etc/config/network" >&2
+                exit 1
+              fi
+              if busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                usr/share/example/document.key; then
+                echo "Unrelated extension classified as sensitive:" \
+                  "usr/share/example/document.key" >&2
+                exit 1
+              fi
+              if busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                usr/share/example/archive.p12; then
+                echo "Unrelated extension classified as sensitive:" \
+                  "usr/share/example/archive.p12" >&2
+                exit 1
+              fi
+              if busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                usr/share/example/backup.pfx; then
+                echo "Unrelated extension classified as sensitive:" \
+                  "usr/share/example/backup.pfx" >&2
+                exit 1
+              fi
+              if busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                etc/config/network.key; then
+                echo "Unrelated extension classified as sensitive:" \
+                  "etc/config/network.key" >&2
+                exit 1
+              fi
+              if busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                tmp/private.key; then
+                echo "Unrelated extension classified as sensitive:" \
+                  "tmp/private.key" >&2
+                exit 1
+              fi
+              if busybox ash /tmp/owrt-extra-test.sh \
+                --is-sensitive-path \
+                usr/share/ca-certificates/root.pem.pub; then
+                echo "Non-secret path classified:" \
+                  "usr/share/ca-certificates/root.pem.pub" >&2
+                exit 1
+              fi
+
+              busybox ash -n /opt/owrt-test/cli-tests.sh
+              busybox ash /opt/owrt-test/cli-tests.sh \
+                /tmp/owrt-extra-test.sh
             '
 
       - name: Test discovery failure handling
@@ -351,7 +517,7 @@ jobs:
             "$RUNNER_TEMP/owrt-test/failure-tests.sh"
           docker run --rm \
             -v "$RUNNER_TEMP/owrt-test:/opt/owrt-test:ro" \
-            --entrypoint /bin/sh \
+            --entrypoint busybox \
             "$OPENWRT_IMAGE" \
-            -c 'sh -n /opt/owrt-test/failure-tests.sh && \
-              sh /opt/owrt-test/failure-tests.sh'
+            ash -c 'busybox ash -n /opt/owrt-test/failure-tests.sh && \
+              busybox ash /opt/owrt-test/failure-tests.sh'

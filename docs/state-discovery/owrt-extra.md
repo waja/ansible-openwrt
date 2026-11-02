@@ -298,18 +298,49 @@ device before any recovery operation.
 ## Security and cleanup
 
 Treat the entire report as sensitive until you have reviewed it.
-UCI values and raw diffs can contain Wi-Fi passwords, password hashes,
-and other plaintext credentials. The terminal summary redacts common
-crypt(3) password hashes and values of credential-named UCI options,
-including wireless keys/PSKs, WireGuard private keys, secret/client/
-encryption/signing/shared keys, passwords, passphrases, secrets, and
-tokens. This is a best-effort display filter,
-not a complete secret scanner. The same filter is available for an
-existing diff, for example
+UCI values, command output and raw diffs can contain Wi-Fi passwords,
+password hashes, API tokens, authentication headers, embedded credentials
+in URLs, and private-key material. The human-readable presentation applies
+best-effort masking to crypt(3) password hashes, credential-like key/value
+names (including common password, passphrase, token, API-key, shared-secret,
+authentication and private-key variants), Authorization/Cookie headers,
+URL user-info, and PEM private-key blocks. Feed/repository diffs, APK audit
+findings, and matching shell-history lines use the same display filter.
+Sensitive file locations (for example account databases, SSH/Dropbear private
+keys, TLS private-key directories, WireGuard keys and VPN shared secrets) are
+reported by path only. Classification is based on known locations and
+explicit filenames; file extensions such as `.key`, `.p12`, and `.pfx`
+are not treated as sensitive globally. A file with one of those extensions
+outside a known sensitive location is not automatically classified. Public
+SSH keys and ordinary public certificates are not classified as private-key
+material merely because they are key/certificate files. The path classifier
+is explicit and best-effort; it does not inspect file contents or identify
+arbitrary secrets stored under unexpected names.
+Use `sh /tmp/owrt-extra.sh --is-sensitive-path RELATIVE_PATH` to check the
+script's current path rules.
+
+The filter is deliberately heuristic: it cannot identify every secret,
+especially opaque values under innocuous names, arbitrary binary data,
+unusual encodings, or secrets split across lines/formats it does not know.
+It is a presentation filter, not a sanitization step: only selected terminal
+output is masked. The report files and diagnostic logs remain raw, including
+`factory.show`, `current.show`, `uci.diff`, `factory-generated-values.txt`,
+`chroot.log`, `sysupgrade.log`, the APK installation logs,
+`apk-audit-system.txt`, `uboot.env`, and optional host-key exports.
+Treat every file under `/tmp/owrt-diff/` as confidential until individually
+reviewed; do not upload the directory wholesale to CI artifacts, paste its
+contents into issue or pull-request comments, or attach it to public tickets.
+Even output passed through the display filter is best-effort and must be
+reviewed before external sharing. The filter does not alter or sanitize
+persisted evidence.
+
+Review the report before sharing it. For an existing raw text file, use
+`sh /tmp/owrt-extra.sh --redact-text FILE`; for a UCI diff,
 `sh /tmp/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
-The password field in `/etc/passwd` comparisons is also masked. Raw
-files such as `factory.show`, `current.show`, and `uci.diff` are
-deliberately not redacted and remain sensitive.
+Both commands write only to stdout and leave the input byte-for-byte
+unchanged. Raw files such as `factory.show`, `current.show`, `uci.diff`,
+`apk-audit-system.txt`, `uboot.env`, and optional host-key exports are
+not automatically rewritten and remain sensitive.
 Do not commit raw discovery output, attach it to public issues, or store
 it in an unprotected shared location.
 
@@ -349,11 +380,29 @@ mounts, but the chroot is not a security boundary.
 The rootfs container used in CI checks shell syntax and command-line
 behavior. It is intentionally not treated as a complete router root
 filesystem: packages such as `uci` may not be present in that minimal
-image. The script's preflight therefore has to be validated on the
-actual booted OpenWrt environment. The container also does not provide
-a booted device-like overlay environment. The full mount/chroot workflow, factory inputs such as
-`/tmp/sysinfo`, and detection of actual overlay changes still need
-validation on a suitable booted OpenWrt VM or physical router.
+image. The script's preflight therefore has to be validated on an
+actual booted OpenWrt environment. The container does not provide a
+booted device-like overlay environment.
+
+The full mount/chroot workflow has been exercised on a booted OpenWrt
+25.12.5 x86/64 QEMU system using a SquashFS `/rom` and OverlayFS
+`/overlay/upper`. Factory inputs, overlay comparison, report generation,
+and normal cleanup completed successfully (exit status 0). This validates
+the successful execution path on that environment, not every device model
+or failure path. A separate OpenWrt 25.12.6 x86/64 QEMU system with an
+ext4 root filesystem was used only for a comparative APK audit; the full
+discovery workflow was not run there.
+
+The SquashFS test system's APK audit reported 18 missing
+`/etc/uci-defaults` scripts, one missing `rom/note`, and one modified
+`usr/bin/cmp`. The missing defaults are one-shot first-boot scripts
+that had already been processed. The current `/usr/bin/cmp` resolves to
+`/usr/libexec/cmp-gnu` from `diffutils`, while APK associates the path
+with BusyBox. On the ext4 comparison system, the same 18 defaults and
+the `cmp` finding appeared, but `/rom/note` was present. These are
+observed image/system-specific audit findings, not automatically evidence
+of user changes or discovery failures; review them in context. Do not
+treat all APK audit findings as router customizations.
 
 The current script does not generate the structured discovery bundle
 defined by the [state discovery architecture](architecture.md).
