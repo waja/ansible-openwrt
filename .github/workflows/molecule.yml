@@ -346,8 +346,8 @@ jobs:
         run: |
           container="openwrt-${OPENWRT_VERSION}-default"
           echo "=== netifd and ubus diagnostics ==="
-          docker inspect --format \\
-            'status={{.State.Status}} network={{.HostConfig.NetworkMode}} pid={{.HostConfig.PidMode}} privileged={{.HostConfig.Privileged}} CapAdd={{json .HostConfig.CapAdd}} CapDrop={{json .HostConfig.CapDrop}} SecurityOpt={{json .HostConfig.SecurityOpt}}' \\
+          docker inspect --format \
+            'status={{.State.Status}} network={{.HostConfig.NetworkMode}} pid={{.HostConfig.PidMode}} privileged={{.HostConfig.Privileged}} CapAdd={{json .HostConfig.CapAdd}} CapDrop={{json .HostConfig.CapDrop}} SecurityOpt={{json .HostConfig.SecurityOpt}}' \
             "$container" || true
           docker exec "$container" sh -c '
             echo "--- processes ---"
