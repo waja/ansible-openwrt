@@ -44,9 +44,11 @@ is unavailable.
 CI checks shell syntax and command-line behavior using the OpenWrt 25.12
 rootfs image. It does not run the full discovery workflow in that
 container: the rootfs image does not provide the same device-like overlay
-environment as a booted OpenWrt router. The mount/chroot reconstruction
-and detection of real overlay changes still need validation on a suitable
-OpenWrt VM or physical router.
+environment as a booted OpenWrt router. The full discovery workflow,
+including mount/chroot reconstruction and overlay-change detection, was
+validated separately on a booted OpenWrt 25.12.5 x86/64 VM on 2026-11-02.
+This validates the VM environment; physical-router and hardware-specific
+behavior have not been claimed as tested.
 
 This is an investigative report, not an automatic Ansible generator.
 Runtime state is captured separately when the optional helper is present.
