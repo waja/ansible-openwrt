@@ -6,13 +6,23 @@
   tasks:
     - name: Diagnose fw4 ubus calls
       ansible.builtin.raw: |
-        echo "Timing network.interface dump (2-second diagnostic timeout)"
-        { time ubus -t 2 call network.interface dump >/dev/null; } 2>&1
-        echo "Timing service get_data (2-second diagnostic timeout)"
-        { time ubus -t 2 call service get_data \
-          '{"type":"firewall"}' >/dev/null; } 2>&1
+        start=$(date +%s)
+        ubus -t 2 call network.interface dump >/dev/null 2>&1
+        result=$?
+        end=$(date +%s)
+        echo "network.interface dump: $((end - start))s (exit $result)"
+        start=$(date +%s)
+        ubus -t 2 call service get_data '{"type":"firewall"}' >/dev/null 2>&1
+        result=$?
+        end=$(date +%s)
+        echo "service get_data: $((end - start))s (exit $result)"
+      register: fw4_ubus_diagnostic
       changed_when: true
 
+    - name: Display fw4 ubus diagnostic measurements
+      ansible.builtin.debug:
+        var: fw4_ubus_diagnostic.stdout
+      changed_when: true
     - name: Update one managed firewall zone option
       ansible.builtin.include_role:
         name: router_firewall
