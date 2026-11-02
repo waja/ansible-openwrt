@@ -23,8 +23,14 @@ inventory and customize variables there.
   does not install or remove packages to reconcile them.
 - `playbooks/storage.yml` inspects supported x86/64 SquashFS storage and
   can optionally expand the root partition and writable overlay.
+- `playbooks/cve-2026-98432.yml` independently manages the temporary
+  CVE-2026-98432 nftables mitigation and detects fixed running kernels.
 
 All playbooks target the `openwrt` inventory group.
+
+The CVE mitigation playbook is deliberately standalone and does not run
+other project roles. See its [role guide](docs/roles/router_cve_2026_98432.md)
+for detection behavior and removal instructions.
 
 For role-specific settings and examples, start with the
 [router configuration overview](docs/configuration.md) and follow its links

@@ -47,6 +47,19 @@ LibreNMS, and Tailscale roles are skipped unless their corresponding
 automatically. Selecting one role does not automatically run other project
 roles that may be prerequisites; review the selected tasks before execution.
 
+## Standalone security mitigation
+
+The temporary CVE-2026-98432 workaround has its own playbook and does not
+run the standard router configuration or any other project role:
+
+```bash
+ansible-playbook -i inventory.ini playbooks/cve-2026-98432.yml \
+  --limit router1
+```
+
+See the [CVE-2026-98432 role guide](roles/router_cve_2026_98432.md) for
+kernel detection, status overrides, verification, and removal.
+
 ## Role configuration guides
 
 | Role | Purpose | Guide |
@@ -60,6 +73,7 @@ roles that may be prerequisites; review the selected tasks before execution.
 | `router_tailscale` | Optional Tailscale daemon and tailnet configuration | [Tailscale](roles/router_tailscale.md) |
 | `router_package_audit` | Compare installed packages with a saved baseline | [Package audit](roles/router_package_audit.md) |
 | `router_storage` | Detect and optionally expand root storage | [Storage](roles/router_storage.md) |
+| `router_cve_2026_98432` | Temporary, standalone CVE-2026-98432 mitigation | [CVE mitigation](roles/router_cve_2026_98432.md) |
 
 ## Reference projects
 
