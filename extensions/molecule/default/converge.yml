@@ -229,8 +229,14 @@
         }
       changed_when: false
 
-    - name: Validate generated firewall rules with fw4
-      ansible.builtin.raw: fw4 print >/dev/null
+    - name: Diagnose fw4 ubus calls and validate generated firewall rules
+      ansible.builtin.raw: |
+        echo "Timing network.interface dump (2-second diagnostic timeout)"
+        time ubus -t 2 call network.interface dump >/dev/null || echo "network.interface dump failed or timed out"
+        echo "Timing service get_data (2-second diagnostic timeout)"
+        time ubus -t 2 call service get_data '{"type":"firewall"}' >/dev/null || echo "service get_data failed or timed out"
+        echo "Running the unchanged fw4 validation"
+        time fw4 print >/dev/null
       changed_when: false
 
     - name: Apply router packages role
