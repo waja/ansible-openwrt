@@ -340,6 +340,8 @@ jobs:
           ANSIBLE_FORCE_COLOR: '1'
           ANSIBLE_DISPLAY_OK_HOSTS: 'false'
           ANSIBLE_DISPLAY_SKIPPED_HOSTS: 'false'
+          ANSIBLE_CALLBACK_PLUGINS: ${{ github.workspace }}/extensions/molecule/callback_plugins
+          ANSIBLE_CALLBACKS_ENABLED: task_timing
       - name: Record tested container image
         if: always()
         run: |
