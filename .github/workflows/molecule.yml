@@ -346,12 +346,34 @@ jobs:
         run: |
           container="openwrt-${OPENWRT_VERSION}-default"
           echo "=== netifd and ubus diagnostics ==="
-          docker inspect --format \
-            'status={{.State.Status}} network={{.HostConfig.NetworkMode}}' \
+          docker inspect --format \\
+            'status={{.State.Status}} network={{.HostConfig.NetworkMode}} pid={{.HostConfig.PidMode}} privileged={{.HostConfig.Privileged}} CapAdd={{json .HostConfig.CapAdd}} CapDrop={{json .HostConfig.CapDrop}} SecurityOpt={{json .HostConfig.SecurityOpt}}' \\
             "$container" || true
           docker exec "$container" sh -c '
             echo "--- processes ---"
             ps w 2>&1 | grep -E "[n]etifd|[u]bus|[p]rocd" || true
+            echo "--- netifd process state ---"
+            netifd_pid="$(pidof netifd 2>/dev/null | awk '\''{print $1}'\'')"
+            if [ -n "$netifd_pid" ] && [ -r "/proc/$netifd_pid/status" ]; then
+              grep -E "^(Name|State|Pid|PPid|Threads|voluntary_ctxt_switches|nonvoluntary_ctxt_switches):" "/proc/$netifd_pid/status" || true
+              echo "wchan=$(cat "/proc/$netifd_pid/wchan" 2>/dev/null || echo unavailable)"
+              echo "syscall=$(cat "/proc/$netifd_pid/syscall" 2>/dev/null || echo unavailable)"
+              for task in /proc/"$netifd_pid"/task/*; do
+                [ -d "$task" ] || continue
+                echo "thread=\${task##*/} comm=$(cat "$task/comm" 2>/dev/null) wchan=$(cat "$task/wchan" 2>/dev/null || echo unavailable)"
+                grep -E "^(State|voluntary_ctxt_switches|nonvoluntary_ctxt_switches):" "$task/status" 2>/dev/null || true
+              done
+            else
+              echo "netifd process status unavailable"
+            fi
+            echo "--- kernel network interfaces ---"
+            cat /proc/net/dev 2>&1 || true
+            for interface in /sys/class/net/*; do
+              [ -e "$interface" ] || continue
+              echo "\${interface##*/}: operstate=$(cat "$interface/operstate" 2>/dev/null) carrier=$(cat "$interface/carrier" 2>/dev/null) ifindex=$(cat "$interface/ifindex" 2>/dev/null) iflink=$(cat "$interface/iflink" 2>/dev/null) master=$(readlink "$interface/master" 2>/dev/null || echo none)"
+            done
+            echo "--- kernel messages ---"
+            dmesg 2>&1 | tail -80 || true
             echo "--- ubus socket ---"
             ls -l /var/run/ubus /var/run/ubus/ubus.sock 2>&1 || true
             echo "--- ubus system board ---"
