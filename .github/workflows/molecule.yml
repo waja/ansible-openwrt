@@ -402,8 +402,7 @@ jobs:
           echo "--- network.interface dump ---"
           ubus -t 2 call network.interface dump 2>&1 || true
           echo "--- service firewall data ---"
-          ubus -t 2 call service get_data \
-            "{\\"type\\":\\"firewall\\"}" 2>&1 || true
+          ubus -t 2 call service get_data '{ "type": "firewall" }' 2>&1 || true
           echo "--- recent network/ubus log messages ---"
           logread 2>&1 | grep -iE "netifd|ubus|network.interface|interface" \
             | tail -100 || true
