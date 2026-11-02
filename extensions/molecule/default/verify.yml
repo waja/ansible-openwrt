@@ -990,3 +990,462 @@
           - >-
             router_firewall_cross_type_validation.result
             is not search('firewall\\.bad_log=')
+    - name: Create a declarative firewall rule
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            name: Molecule allow SSH
+            src: guest_test
+            dest_port: "22"
+            proto:
+              - tcp
+            target: ACCEPT
+            enabled: true
+
+    - name: Read the declarative firewall rule
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_rule_show
+      changed_when: false
+
+    - name: Verify the declarative firewall rule and list option
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_allow_ssh=rule'
+            in router_firewall_rule_show.result
+          - >-
+            "firewall.molecule_allow_ssh.name='Molecule allow SSH'"
+            in router_firewall_rule_show.result
+          - >-
+            "firewall.molecule_allow_ssh.src='guest_test'"
+            in router_firewall_rule_show.result
+          - >-
+            "firewall.molecule_allow_ssh.proto='tcp'"
+            in router_firewall_rule_show.result
+          - >-
+            "firewall.molecule_allow_ssh.target='ACCEPT'"
+            in router_firewall_rule_show.result
+
+    - name: Update the declarative firewall rule and remove an option
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            enabled: false
+            dest_port: null
+
+    - name: Read the updated declarative firewall rule
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_rule_updated
+      changed_when: false
+
+    - name: Verify rule updates, null removal, and retention
+      ansible.builtin.assert:
+        that:
+          - >-
+            "firewall.molecule_allow_ssh.enabled='0'"
+            in router_firewall_rule_updated.result
+          - >-
+            'firewall.molecule_allow_ssh.dest_port='
+            not in router_firewall_rule_updated.result
+          - >-
+            'firewall.molecule_allow_ssh=rule'
+            in router_firewall_rule_updated.result
+
+
+    - name: Reapply the same declarative firewall rule configuration
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            enabled: false
+
+    - name: Verify declarative firewall rule application is idempotent
+      ansible.builtin.assert:
+        that:
+          - not router_firewall_apply_result.changed
+
+    - name: Reapply the same declarative firewall rule configuration again
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            enabled: false
+
+    - name: Verify repeated declarative firewall rule application is idempotent
+      ansible.builtin.assert:
+        that:
+          - not router_firewall_apply_result.changed
+
+    - name: Remove the declarative firewall rule
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            state: absent
+
+    - name: Verify the declarative firewall rule was removed
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_allow_ssh
+      register: router_firewall_rule_removed
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the declarative firewall rule is absent
+      ansible.builtin.assert:
+        that:
+          - router_firewall_rule_removed.result | default('') == ''
+    - name: Create an anonymous firewall rule for adoption
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_anonymous_rule
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Adopt an anonymous firewall rule by its name
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_anonymous_rule:
+            name: molecule_anonymous_rule
+            target: ACCEPT
+
+    - name: Find the adopted anonymous firewall rule
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_anonymous_rule
+      register: router_firewall_adopted_rule
+      changed_when: false
+
+    - name: Read the adopted anonymous firewall rule target
+      community.openwrt.uci:
+        command: get
+        key: "firewall.{{ router_firewall_adopted_rule.result_list[0] }}.target"
+      register: router_firewall_adopted_rule_target
+      changed_when: false
+
+    - name: Verify anonymous firewall rule adoption
+      ansible.builtin.assert:
+        that:
+          - router_firewall_adopted_rule.result_list | length == 1
+          - router_firewall_adopted_rule_target.result == 'ACCEPT'
+
+    - name: Create two anonymous firewall rules with an ambiguous name
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_ambiguous_rule
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_ambiguous_rule
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Capture ambiguous anonymous firewall rule validation
+      block:
+        - name: Attempt to adopt an ambiguous anonymous firewall rule
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_rules:
+              molecule_ambiguous_rule:
+                name: molecule_ambiguous_rule
+                target: ACCEPT
+      rescue:
+        - name: Record the ambiguous rule validation failure
+          ansible.builtin.set_fact:
+            router_firewall_ambiguous_rule_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify ambiguous anonymous rules are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_ambiguous_rule_failure
+            == 'Reject ambiguous anonymous firewall rule matches'
+
+    - name: Verify ambiguous rule input did not create a named section
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_ambiguous_rule
+      register: router_firewall_ambiguous_named_rule
+      changed_when: false
+      failed_when: false
+
+    - name: Verify both ambiguous anonymous rules remain
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_ambiguous_rule
+      register: router_firewall_ambiguous_rules
+      changed_when: false
+
+    - name: Assert ambiguous firewall rules remain unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_ambiguous_named_rule.result | default('') == ''
+          - router_firewall_ambiguous_rules.result_list | length == 2
+
+    - name: Capture invalid firewall rule zone reference validation
+      block:
+        - name: Attempt to create a rule with an unknown zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_rules:
+              molecule_invalid_zone_rule:
+                src: missing_zone
+                target: ACCEPT
+      rescue:
+        - name: Record the invalid rule zone reference failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_rule_zone_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify invalid firewall rule zone references are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_rule_zone_failure
+            == 'Validate firewall rule zone references'
+
+    - name: Verify invalid firewall rule input did not create a section
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_invalid_zone_rule
+      register: router_firewall_invalid_zone_rule
+      changed_when: false
+      failed_when: false
+
+    - name: Assert invalid firewall rule input left UCI unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_invalid_zone_rule.result | default('') == ''
+
+    - name: Capture an empty protocol list validation failure
+      block:
+        - name: Attempt to create a rule with an empty protocol list
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_rules:
+              molecule_empty_proto:
+                proto: []
+                target: ACCEPT
+      rescue:
+        - name: Record the empty protocol list failure
+          ansible.builtin.set_fact:
+            router_firewall_empty_proto_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify empty protocol lists are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_empty_proto_failure
+            == 'Validate firewall rule definitions'
+
+    - name: Create an anonymous firewall rule matching a mapping key
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_key_without_explicit_name
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Create a named rule when no explicit name is supplied
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_key_without_explicit_name:
+            target: ACCEPT
+
+    - name: Read named and anonymous rules after omitted-name handling
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_omitted_name_show
+      changed_when: false
+
+    - name: Find the anonymous rule retained alongside the named rule
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_key_without_explicit_name
+      register: router_firewall_omitted_name_matches
+      changed_when: false
+
+    - name: Assert anonymous rules are not adopted without explicit name
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_key_without_explicit_name=rule'
+            in router_firewall_omitted_name_show.result
+          - router_firewall_omitted_name_matches.result_list | length == 2
+          - >-
+            "firewall.molecule_key_without_explicit_name.target='ACCEPT'"
+            in router_firewall_omitted_name_show.result
+          - >-
+            router_firewall_omitted_name_show.result
+            is search("firewall\\.@rule\\[[0-9]+\\]\\.target='DROP'")
+
+    - name: Create a named firewall rule and a matching anonymous rule
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: section
+            config: firewall
+            type: rule
+            name: molecule_named_precedence
+            value:
+              name: molecule_named_precedence
+              src: guest_test
+              target: DROP
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_named_precedence
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Update the named firewall rule ahead of a matching anonymous rule
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_named_precedence:
+            name: molecule_named_precedence
+            target: ACCEPT
+
+    - name: Read named and anonymous firewall rule precedence results
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_named_precedence_show
+      changed_when: false
+
+    - name: Find both rules sharing the precedence test name
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_named_precedence
+      register: router_firewall_named_precedence_matches
+      changed_when: false
+
+    - name: Assert named firewall section takes precedence over anonymous match
+      ansible.builtin.assert:
+        that:
+          - >-
+            "firewall.molecule_named_precedence.target='ACCEPT'"
+            in router_firewall_named_precedence_show.result
+          - router_firewall_named_precedence_matches.result_list | length == 2
+          - >-
+            router_firewall_named_precedence_show.result
+            is search("firewall\\.@rule\\[[0-9]+\\]\\.target='DROP'")
+
+    - name: Create firewall rules in a deliberately non-alphabetical order
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_order_second:
+            name: Molecule order second
+            src: guest_test
+            target: ACCEPT
+          molecule_order_first:
+            name: Molecule order first
+            src: guest_test
+            target: ACCEPT
+
+    - name: Read firewall rules after ordered creation
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_order_show
+      changed_when: false
+
+    - name: Assert newly created rules preserve declaration order
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_order_show.result.find(
+              'firewall.molecule_order_second=rule'
+            ) >= 0
+          - >-
+            router_firewall_order_show.result.find(
+              'firewall.molecule_order_first=rule'
+            ) >
+            router_firewall_order_show.result.find(
+              'firewall.molecule_order_second=rule'
+            )

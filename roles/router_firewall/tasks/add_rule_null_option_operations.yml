@@ -1,0 +1,44 @@
+# roles/router_firewall/tasks/add_rule_null_option_operations.yml
+---
+- name: Add operation to remove an explicitly null firewall rule option
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + (
+          [{
+            'command': 'absent',
+            'key': 'firewall.' ~ router_firewall_rule.key ~ '.' ~ item.key
+          }]
+          if router_firewall_named_rules.results[
+            router_firewall_rule_index
+          ].result == 'rule'
+          else [{
+            'command': 'absent',
+            'config': 'firewall',
+            'type': 'rule',
+            'find': {
+              'name': router_firewall_rule.value.name
+                      | default(router_firewall_rule.key)
+            },
+            'value': [item.key]
+          }]
+        )
+      }}
+  loop: "{{ router_firewall_rule.value | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - router_firewall_rule.value.state | default('present') == 'present'
+    - item.key not in ['name', 'state']
+    - item.value is none
+    - >-
+      router_firewall_named_rules.results[
+        router_firewall_rule_index
+      ].result == 'rule' or
+      (
+        router_firewall_rule.value.name is defined and
+        router_firewall_matching_rules.results[
+          router_firewall_rule_index
+        ].result_list | length == 1
+      )
+  changed_when: false

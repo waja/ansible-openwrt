@@ -1,9 +1,9 @@
 # Firewall role
 
 The `router_firewall` role manages the firewall default policies,
-explicitly declared firewall zones, and an optional WAN rule for additional
-Dropbear SSH listeners. It does not currently manage arbitrary firewall
-rules, redirects, forwardings, or SYN-flood protection.
+explicitly declared firewall zones and filter rules, and an optional WAN
+rule for additional Dropbear SSH listeners. Redirects and inter-zone
+forwardings are not currently managed.
 
 ## Requirements and execution
 
@@ -24,8 +24,9 @@ timed rollback.
 ## Default policies
 
 The role manages the input, forward, and output policies in the first
-firewall defaults section. `router_firewall_zones` defaults to an empty
-mapping (`{}`), so no additional zones are managed unless you declare them.
+firewall defaults section. `router_firewall_zones` and `router_firewall_rules` default to empty
+mappings (`{}`), so no additional zones or filter rules are managed unless
+you declare them.
 
 | Variable | Default | Accepted values |
 | --- | --- | --- |
@@ -46,6 +47,49 @@ router_firewall_output: ACCEPT
 Use these settings only where appropriate for the network design.
 `input: ACCEPT` allows traffic to services on the router, while
 `forward: ACCEPT` removes the default forwarding restriction.
+
+## Declarative firewall rules
+
+Declare filter rules as a mapping keyed by the desired UCI section ID:
+
+```yaml
+router_firewall_rules:
+  allow_ssh_from_admin:
+    name: Allow SSH from admin network
+    src: wan
+    src_ip: 192.0.2.10
+    dest_port: "22"
+    proto:
+      - tcp
+    target: ACCEPT
+```
+
+The mapping key is the stable UCI section ID and may contain only letters,
+digits, and underscores. The optional `name` is the human-readable rule label and defaults
+to the mapping key for newly created named sections. Anonymous UCI rules
+are adopted only when `name` is explicitly supplied; the mapping key is
+not an implicit adoption identity. Adoption is refused if more than one
+candidate exists. An existing named section with the requested ID takes
+precedence.
+
+Use `state: absent` to remove a rule. Use `enabled: false` to disable it
+without removing its section. Omitted options remain unchanged and explicit
+`null` removes an option. Empty lists are rejected; use `null` to remove
+list-valued options.
+
+Supported options include `src`, `dest`, `src_ip`, `src_ip6`,
+`src_mac`, `src_port`, `dest_ip`, `dest_ip6`, `dest_port`,
+`proto`, `family`, `target`, `icmp_type`, `limit`,
+`limit_burst`, `enabled`, `log`, `log_limit`, `ipset`,
+`mark`, `set_mark`, `set_xmark`, and `extra`. Protocols and ICMP
+types accept non-empty YAML lists; other options use their documented
+scalar form. Zone references must resolve to an existing zone or one
+declared as present in the same role invocation.
+
+New rules are appended in declaration order. Existing rules are not
+automatically reordered. The role validates the complete rule input and
+identities before applying UCI operations, and shares the existing single
+firewall commit and reload lifecycle.
 
 ## Declarative zones
 
@@ -460,9 +504,9 @@ when your network design permits.
 | --- | --- | --- |
 | `router_firewall_apply_runtime_changes` | `true` | Reload fw4 after changes |
 
-Default policies, declared zones, and the optional Dropbear WAN rule are
-staged together and committed once. The firewall is reloaded once only
-when the UCI configuration changes. Set
+Default policies, declared zones and rules, and the optional Dropbear WAN
+rule are staged together and committed once. The firewall is reloaded
+once only when the UCI configuration changes. Set
 `router_firewall_apply_runtime_changes: false` for configuration-only
 runs where the runtime reload must be deferred. The UCI configuration is
 still committed.
