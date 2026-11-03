@@ -80,8 +80,11 @@ esac
 EOF
 chmod 700 "$BIN/ip"
 if OWRT_TEST_STATUS="$TMP/status-write/status.txt" PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/status-write" >/dev/null 2>&1; then
- fail "status append failure reported success"
+ status_rc=0
+else
+ status_rc=$?
 fi
 test -d "$TMP/status-write/status.txt" || fail "ip fixture did not replace status file"
+[ "$status_rc" -ne 0 ] || fail "status append failure reported success"
 
 echo "All owrt-extra runtime snapshot tests passed."
