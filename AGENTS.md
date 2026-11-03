@@ -200,6 +200,19 @@ other contributors or its history is already in use.
 
 ## Change scope and technical decisions
 
+### Shared utilities and abstractions
+
+- Do not introduce generic helpers, shared download mechanisms, or
+  collection-wide abstractions for a single use case without a concrete
+  reuse requirement.
+- Keep functionality local to the owning role until a second real use case
+  demonstrates the need for reuse.
+- When multiple roles require the same functionality, evaluate extracting
+  it into a shared collection utility rather than duplicating implementations.
+- Keep shared interfaces narrowly scoped to demonstrated requirements.
+  Avoid speculative options and configurability.
+
+
 ### Reference project research
 
 For every new implementation PR, review `docs/reference-projects.md`
