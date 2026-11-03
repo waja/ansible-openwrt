@@ -64,6 +64,9 @@
     - name: Apply router firewall role with defaults
       ansible.builtin.include_role:
         name: router_firewall
+        apply:
+          tags:
+            - molecule-idempotence-notest
       vars:
         router_firewall_input: ACCEPT
         router_firewall_forward: ACCEPT
@@ -79,9 +82,9 @@
           echo "Unexpected additional Dropbear WAN firewall rule"
           exit 1
         fi
+        echo "Verified: no extra Dropbear WAN firewall rule by default"
       changed_when: false
-      tags:
-        - molecule-idempotence-notest
+      when: "'molecule-idempotence-notest' not in ansible_skip_tags"
 
     - name: Apply router firewall role with WAN access enabled
       ansible.builtin.include_role:
