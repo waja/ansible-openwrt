@@ -3,7 +3,45 @@
 set -u
 OUT=${1:-}
 [ -n "$OUT" ] || { echo "Usage: $0 OUTPUT_DIRECTORY" >&2; exit 2; }
-[ ! -e "$OUT" ] && [ ! -L "$OUT" ] || { echo "Refusing to overwrite existing path: $OUT" >&2; exit 1; }
+case "$OUT" in
+ /*) ;;
+ *) echo "Output directory must be an absolute path: $OUT" >&2; exit 1 ;;
+esac
+case "$OUT" in
+ */) echo "Output directory must not end with a slash: $OUT" >&2; exit 1 ;;
+ */*)
+  parent=${OUT%/*}
+  output_name=${OUT##*/}
+  [ -n "$parent" ] || parent=/
+  ;;
+esac
+case "$output_name" in
+ ""|.|..) echo "Invalid output directory name: $output_name" >&2; exit 1 ;;
+esac
+# Pin the parent directory as the working directory before validating it.
+# All subsequent output paths are relative to this directory, so a rename or
+# replacement of the original pathname cannot redirect status/snapshot writes.
+cd -P "$parent" || { echo "Cannot access output parent: $parent" >&2; exit 1; }
+parent_metadata=$(stat -c '%u %a' .) || {
+ echo "Cannot inspect output parent directory." >&2
+ exit 1
+}
+set -- $parent_metadata
+[ "$#" = 2 ] || { echo "Invalid output parent metadata." >&2; exit 1; }
+[ "$1" = "$(id -u)" ] || {
+ echo "Output parent must be owned by the invoking user." >&2
+ exit 1
+}
+parent_mode=$((0$2))
+[ $((parent_mode & 0022)) -eq 0 ] || {
+ echo "Output parent must not be group- or world-writable." >&2
+ exit 1
+}
+OUT=./$output_name
+[ ! -e "$OUT" ] && [ ! -L "$OUT" ] || {
+ echo "Refusing to overwrite existing path: $OUT" >&2
+ exit 1
+}
 umask 077
 mkdir -m 700 "$OUT" || exit 1
 STATUS=$OUT/status.txt
