@@ -36,6 +36,10 @@ cat > "$BIN/lsmod" <<'EOF'
 echo "fixture_module 123 0"
 EOF
 chmod 700 "$BIN/"*
+mkdir -m 777 "$TMP/untrusted-parent"
+if PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/untrusted-parent/rejected" >/dev/null 2>&1; then
+ fail "group/world-writable output parent accepted"
+fi
 PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/success"
 test "$(stat -c %a "$TMP/success")" = 700 || fail "directory mode"
 test "$(stat -c %a "$TMP/success/status.txt")" = 600 || fail "status mode"
