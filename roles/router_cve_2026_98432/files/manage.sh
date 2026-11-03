@@ -215,6 +215,15 @@ status() {
         "$firewall_backend" "$firewall_service_enabled"
 }
 
+
+refuse_pending_firewall_changes() {
+    pending=$(uci changes firewall 2>/dev/null || true)
+    [ -z "$pending" ] || {
+        echo "Refusing to modify firewall state with pending UCI changes; commit or revert them first" >&2
+        return 1
+    }
+}
+
 prepare_backups() {
     tmp_file_backup=$(mktemp)
     tmp_uci_backup=$(mktemp)
@@ -264,6 +273,7 @@ cleanup_backups() {
 
 install_mitigation() {
     before=$(status)
+    refuse_pending_firewall_changes || return 1
     section_type=$(uci -q get "firewall.$UCI_SECTION" 2>/dev/null || true)
     section_path=$(uci -q get "firewall.$UCI_SECTION.path" 2>/dev/null || true)
     section_kind=$(uci -q get "firewall.$UCI_SECTION.type" 2>/dev/null || true)
@@ -329,17 +339,8 @@ remove_mitigation() {
         echo "Refusing to remove an unmanaged nftables table" >&2
         return 1
     fi
-    if printf '%s\n' "$before" | grep -qx 'file=absent' &&
-       printf '%s\n' "$before" | grep -qx 'include=absent' &&
-       printf '%s\n' "$before" | grep -qx 'sysupgrade=absent' &&
-       printf '%s\n' "$before" | grep -qx 'active=absent'; then
-        printf 'changed=no\n'
-        return 0
-    fi
-    prepare_backups
-    trap 'rollback' EXIT
-    trap 'exit 1' HUP INT TERM
     section_type=$(uci -q get "firewall.$UCI_SECTION" 2>/dev/null || true)
+    section_exists=no
     if [ -n "$section_type" ]; then
         [ "$section_type" = include ] || {
             echo "Refusing to remove conflicting UCI section $UCI_SECTION" >&2
@@ -353,6 +354,20 @@ remove_mitigation() {
             echo "Refusing to remove UCI include with unexpected type" >&2
             return 1
         }
+        section_exists=yes
+    fi
+    if printf '%s\n' "$before" | grep -qx 'file=absent' &&
+       printf '%s\n' "$before" | grep -qx 'include=absent' &&
+       printf '%s\n' "$before" | grep -qx 'sysupgrade=absent' &&
+       printf '%s\n' "$before" | grep -qx 'active=absent'; then
+        printf 'changed=no\n'
+        return 0
+    fi
+    refuse_pending_firewall_changes || return 1
+    prepare_backups
+    trap 'rollback' EXIT
+    trap 'exit 1' HUP INT TERM
+    if [ "$section_exists" = yes ]; then
         uci -q delete "firewall.$UCI_SECTION"
         uci commit firewall
     fi
