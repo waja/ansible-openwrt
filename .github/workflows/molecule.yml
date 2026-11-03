@@ -352,7 +352,7 @@ jobs:
           fi
           exit "$test_status"
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.event_name == 'push' || github.event_name == 'schedule' ? github.token : '' }}
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
           ANSIBLE_DISPLAY_OK_HOSTS: 'false'
