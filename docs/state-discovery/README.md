@@ -11,7 +11,10 @@ options, report sections, retained files, security precautions, migration
 guidance, and known limitations.
 
 ```sh
-scp scripts/owrt-extra.sh scripts/owrt-extra-runtime.sh root@router1:/tmp/
+scp scripts/owrt-extra.sh root@router1:/tmp/
+scp scripts/owrt-extra-runtime.sh \\
+  root@router1:/usr/libexec/owrt-extra-runtime.sh
+ssh root@router1 'chmod 600 /usr/libexec/owrt-extra-runtime.sh'
 ssh root@router1 'sh /tmp/owrt-extra.sh'
 ```
 
