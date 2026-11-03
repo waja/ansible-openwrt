@@ -181,6 +181,7 @@ cat > "$stub/chroot" <<'EOF_CHROOT'
 cmd=$(printf '%s' "$4" | sed \
     -e "s#/bin/config_generate#$OWRT_TEST_ROOT/bin/config_generate#g" \
     -e "s#/etc/uci-defaults/#$OWRT_TEST_ROOT/etc/uci-defaults/#g")
+/bin/sh -c "$cmd"
 EOF_CHROOT
 cat > "$stub/uci" <<'EOF_UCI'
 #!/bin/sh
