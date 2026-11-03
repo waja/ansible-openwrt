@@ -26,13 +26,21 @@ parent_metadata=$(stat -c '%u %a' .) || {
  echo "Cannot inspect output parent directory." >&2
  exit 1
 }
-set -- $parent_metadata
-[ "$#" = 2 ] || { echo "Invalid output parent metadata." >&2; exit 1; }
-[ "$1" = "$(id -u)" ] || {
+case "$parent_metadata" in
+ *" "*)
+  parent_uid=${parent_metadata%% *}
+  parent_mode_text=${parent_metadata#* }
+  ;;
+ *) echo "Invalid output parent metadata." >&2; exit 1 ;;
+esac
+[ "$parent_uid" = "$(id -u)" ] || {
  echo "Output parent must be owned by the invoking user." >&2
  exit 1
 }
-parent_mode=$((0$2))
+case "$parent_mode_text" in
+ ""|*[!0-7]*) echo "Invalid output parent mode." >&2; exit 1 ;;
+esac
+parent_mode=$((0$parent_mode_text))
 [ $((parent_mode & 0022)) -eq 0 ] || {
  echo "Output parent must not be group- or world-writable." >&2
  exit 1
