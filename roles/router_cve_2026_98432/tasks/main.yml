@@ -1,3 +1,4 @@
+# roles/router_cve_2026_98432/tasks/main.yml
 ---
 - name: Validate CVE mitigation state and kernel override
   ansible.builtin.assert:
@@ -17,6 +18,7 @@
     CVE_ACTION: detect
   register: router_cve_2026_98432_kernel_probe
   changed_when: false
+  check_mode: false
 
 - name: Derive effective running kernel status
   ansible.builtin.set_fact:
@@ -28,6 +30,7 @@
           router_cve_2026_98432_kernel_probe.stdout
           | regex_findall('(?m)^kernel_status=(.*)$')
           | first
+          | trim
           | default('unknown', true)
         )
       }}
@@ -65,6 +68,7 @@
     CVE_ACTION: status
   register: router_cve_2026_98432_status_probe
   changed_when: false
+  check_mode: false
   when: not router_cve_2026_98432_manage | bool
 
 - name: Report mitigation and kernel detection
