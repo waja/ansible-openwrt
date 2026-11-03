@@ -231,6 +231,7 @@ prepare_backups() {
     file_existed=no
     upgrade_existed=no
     table_existed=no
+    live_changed=no
     if nft list table ip "$TABLE" >/dev/null 2>&1; then
         table_existed=yes
     fi
@@ -258,7 +259,7 @@ rollback() {
     else
         rm -f "$SYSUPGRADE_FILE"
     fi
-    if fw4 check >/dev/null 2>&1; then
+    if [ "$live_changed" = yes ] && fw4 check >/dev/null 2>&1; then
         fw4 reload >/dev/null 2>&1 || true
     fi
     if [ "$table_existed" = no ]; then
@@ -323,6 +324,7 @@ install_mitigation() {
         printf '%s\n' "$NFT_FILE" >> "$SYSUPGRADE_FILE"
 
     fw4 check
+    live_changed=yes
     fw4 reload
     is_active
     trap - EXIT HUP INT TERM
@@ -359,7 +361,8 @@ remove_mitigation() {
     if printf '%s\n' "$before" | grep -qx 'file=absent' &&
        printf '%s\n' "$before" | grep -qx 'include=absent' &&
        printf '%s\n' "$before" | grep -qx 'sysupgrade=absent' &&
-       printf '%s\n' "$before" | grep -qx 'active=absent'; then
+       printf '%s\n' "$before" | grep -qx 'active=absent' &&
+       [ "$section_exists" = no ]; then
         printf 'changed=no\n'
         return 0
     fi
@@ -379,6 +382,7 @@ remove_mitigation() {
     fi
     rm -f "$NFT_FILE"
     fw4 check
+    live_changed=yes
     fw4 reload
     if nft list table ip "$TABLE" >/dev/null 2>&1; then
         nft delete table ip "$TABLE"
