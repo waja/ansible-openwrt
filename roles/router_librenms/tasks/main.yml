@@ -83,7 +83,7 @@
 
     - name: Download LibreNMS agent source archive
       ansible.builtin.get_url:
-        url: "{{ router_librenms_source_archive_url }}"
+        url: "{{ __router_librenms_source_archive_url }}"
         dest: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
         mode: '0600'
         force: true
