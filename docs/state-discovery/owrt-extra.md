@@ -376,7 +376,7 @@ script's guarded cleanup mode, then remove the copied script:
 
 ```sh
 sh /tmp/owrt-extra.sh -c
-rm -f /tmp/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh /usr/libexec/owrt-extra-runtime.sh
+rm -f /tmp/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh
 ```
 
 Do not replace the guarded cleanup with a manual `rm -rf`: the `-c`
