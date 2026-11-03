@@ -173,7 +173,7 @@ for arg do
 done
 if [ "${1:-}" = commit ]; then
     : > "$OWRT_TEST_TMP/uci-commit-ran"
-printf 'uci-commit\\n' >> "$OWRT_TEST_TMP/factory-order"
+    printf 'uci-commit\\n' >> "$OWRT_TEST_TMP/factory-order"
     case ",${OWRT_TEST_FACTORY_FAIL:-}," in
         *,uci-commit,*)
             echo "simulated uci commit failure" >&2
