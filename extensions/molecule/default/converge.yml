@@ -327,11 +327,110 @@
       tags:
         - molecule-idempotence-notest
 
-    - name: Apply LibreNMS integration role
+    - name: Apply LibreNMS integration role with the default source ref
       ansible.builtin.include_role:
         name: router_librenms
       vars:
         router_librenms_enabled: true
+        router_librenms_wireless_interfaces:
+          - interface: radio0-ap0
+            name: wl-test
+
+    - name: >-
+        Build a source URL for a slash-containing branch ref and custom mirror
+      ansible.builtin.include_role:
+        name: router_librenms
+        tasks_from: build_source_url.yml
+      vars:
+        router_librenms_source_ref: refs/heads/feature/my-branch
+        router_librenms_source_archive_base_url: >-
+          https://mirror.example/librenms-agent/archive/
+
+    - name: >-
+        Verify the role preserves slash refs and the configured archive endpoint
+      ansible.builtin.assert:
+        that:
+          - >-
+              __router_librenms_source_archive_url
+              == (
+                'https://mirror.example/librenms-agent/archive/'
+                ~ 'refs/heads/feature/my-branch'
+              )
+
+    - name: Verify the role rejects non-HTTPS archive endpoints
+      block:
+        - name: Build a source URL using an insecure endpoint
+          ansible.builtin.include_role:
+            name: router_librenms
+            tasks_from: build_source_url.yml
+          vars:
+            router_librenms_source_ref: master
+            router_librenms_source_archive_base_url: >-
+              http://mirror.example/librenms-agent/archive
+
+        - name: Fail when an insecure archive endpoint was accepted
+          ansible.builtin.fail:
+            msg: The role accepted a non-HTTPS archive endpoint.
+      rescue:
+        - name: Confirm the insecure endpoint was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_result.msg
+                is search('must be an HTTPS archive endpoint')
+
+    - name: Verify the role rejects archive endpoints with query strings
+      block:
+        - name: Build a source URL with a query string
+          ansible.builtin.include_role:
+            name: router_librenms
+            tasks_from: build_source_url.yml
+          vars:
+            router_librenms_source_ref: master
+            router_librenms_source_archive_base_url: >-
+              https://mirror.example/librenms-agent/archive?download=1
+
+        - name: Fail when a query string was accepted
+          ansible.builtin.fail:
+            msg: The role accepted an archive endpoint with a query string.
+      rescue:
+        - name: Confirm the query string was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_result.msg
+                is search('without query parameters or fragments')
+
+    - name: Verify the role rejects archive endpoints with fragments
+      block:
+        - name: Build a source URL with a fragment
+          ansible.builtin.include_role:
+            name: router_librenms
+            tasks_from: build_source_url.yml
+          vars:
+            router_librenms_source_ref: master
+            router_librenms_source_archive_base_url: >-
+              https://mirror.example/librenms-agent/archive#snapshot
+
+        - name: Fail when a fragment was accepted
+          ansible.builtin.fail:
+            msg: The role accepted an archive endpoint with a fragment.
+      rescue:
+        - name: Confirm the fragment was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_result.msg
+                is search('without query parameters or fragments')
+
+    - name: Apply LibreNMS integration role with a fully qualified source ref
+      tags:
+        - molecule-idempotence-notest
+      ansible.builtin.include_role:
+        name: router_librenms
+      vars:
+        router_librenms_enabled: true
+        router_librenms_source_ref: refs/heads/master
         router_librenms_wireless_interfaces:
           - interface: radio0-ap0
             name: wl-test

@@ -1,0 +1,19 @@
+# roles/router_librenms/tasks/build_source_url.yml
+---
+- name: Validate LibreNMS source archive base URL
+  ansible.builtin.assert:
+    that:
+      - router_librenms_source_archive_base_url is string
+      - router_librenms_source_archive_base_url is match('^https://')
+      - router_librenms_source_archive_base_url is not search('[?#]')
+    fail_msg: >-
+      router_librenms_source_archive_base_url must be an HTTPS archive endpoint
+      without query parameters or fragments.
+
+- name: Build LibreNMS source archive URL
+  ansible.builtin.set_fact:
+    __router_librenms_source_archive_url: >-
+      {{ router_librenms_source_archive_base_url.rstrip('/') }}/{{
+        router_librenms_source_ref | urlencode
+      }}
+  changed_when: false

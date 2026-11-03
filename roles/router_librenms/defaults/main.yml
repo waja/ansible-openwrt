@@ -2,4 +2,6 @@
 ---
 router_librenms_enabled: false
 router_librenms_source_ref: master
+router_librenms_source_archive_base_url: >-
+  {{ 'https://codeload.github.com/' ~ 'librenms/librenms-agent/tar.gz' }}
 router_librenms_wireless_interfaces: []
