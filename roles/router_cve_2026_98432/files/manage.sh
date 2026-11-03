@@ -247,6 +247,7 @@ prepare_backups() {
 }
 
 rollback() {
+    set +e
     if [ "$file_existed" = yes ]; then
         cp -p "$tmp_file_backup" "$NFT_FILE"
     else
