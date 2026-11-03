@@ -60,6 +60,7 @@ Copy the script to the router and run it as root:
 
 ```sh
 scp scripts/owrt-extra.sh scripts/owrt-extra-runtime.sh root@router1:/tmp/
+ssh root@router1 'cp /tmp/owrt-extra-runtime.sh /usr/libexec/owrt-extra-runtime.sh && chmod 600 /usr/libexec/owrt-extra-runtime.sh'
 ssh root@router1 'sh /tmp/owrt-extra.sh'
 ```
 
@@ -375,7 +376,7 @@ script's guarded cleanup mode, then remove the copied script:
 
 ```sh
 sh /tmp/owrt-extra.sh -c
-rm -f /tmp/owrt-extra.sh
+rm -f /tmp/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh
 ```
 
 Do not replace the guarded cleanup with a manual `rm -rf`: the `-c`
