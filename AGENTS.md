@@ -212,7 +212,6 @@ other contributors or its history is already in use.
 - Keep shared interfaces narrowly scoped to demonstrated requirements.
   Avoid speculative options and configurability.
 
-
 ### Reference project research
 
 For every new implementation PR, review `docs/reference-projects.md`
