@@ -201,6 +201,7 @@ jobs:
             -v "$manage_script:/opt/manage.sh:ro" \
             -v "$detection_test:/opt/detection-test.sh:ro" \
             -v "$lifecycle_test:/opt/lifecycle-test.sh:ro" \
+            -e CVE_TEST_DISPOSABLE=yes \
             --entrypoint busybox \
             "$OPENWRT_IMAGE" \
             ash -c 'set -eu; \
