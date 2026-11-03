@@ -1,0 +1,8 @@
+---
+- name: Build LibreNMS source archive URL
+  ansible.builtin.set_fact:
+    router_librenms_source_archive_url: >-
+      https://codeload.github.com/librenms/librenms-agent/tar.gz/{{
+        router_librenms_source_ref | urlencode
+      }}
+  changed_when: false

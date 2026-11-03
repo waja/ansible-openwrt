@@ -69,22 +69,26 @@ router_packages_list:
 
 ## Managed files and SNMP configuration
 
-The role downloads the LibreNMS scripts from the official
+The role downloads one source archive from the official
 [librenms-agent repository](https://github.com/librenms/librenms-agent)
-to the Ansible controller during each run, then deploys them under
-`/etc/librenms`. `wlInterfaces.txt` is rendered locally from the configured
-interface mappings and is not downloaded. The router itself does not need
-Internet access; the Ansible controller must be able to reach GitHub over
-HTTPS.
+to the Ansible controller during each run, then deploys the required scripts
+under `/etc/librenms`. Downloading one archive ensures all scripts come from
+the same repository snapshot and avoids depending on the GitHub REST API.
+`wlInterfaces.txt` is rendered locally from the configured interface
+mappings and is not downloaded. The router itself does not need Internet
+access; the Ansible controller must be able to reach `codeload.github.com`
+over HTTPS.
 
 `router_librenms_source_ref` selects the upstream branch, tag, or commit
-(default: `master`). The role resolves this ref to a commit SHA once per run and downloads every
-script from that immutable commit. The default therefore picks up the current
-upstream scripts on each role run without mixing files if the branch moves
-during the download. For reproducible deployments, set this variable to an
-immutable commit SHA. Downloaded files are compared with the installed
-copies, so an unchanged upstream version does not trigger a file change or
-SNMP restart.
+(default: `master`). Each host downloads its own archive, so a moving ref can
+resolve to different snapshots across hosts in the same play. Use an immutable
+commit SHA when all hosts must deploy exactly the same source. Fully qualified
+refs such as `refs/heads/feature/my-branch` support branch names containing
+slashes; ordinary refs such as `master` remain supported as well. Molecule
+checks the default ref, the fully qualified `refs/heads/master` form, and URL
+construction for a slash-containing branch name. Downloaded files are
+compared with the installed copies, so unchanged upstream files do
+not trigger a file change or SNMP restart.
 
 SNMP extend entries are managed through UCI. The executable path is stored
 in `prog` and command-line arguments are stored separately in `args`.

@@ -327,11 +327,40 @@
       tags:
         - molecule-idempotence-notest
 
-    - name: Apply LibreNMS integration role
+    - name: Apply LibreNMS integration role with the default source ref
       ansible.builtin.include_role:
         name: router_librenms
       vars:
         router_librenms_enabled: true
+        router_librenms_wireless_interfaces:
+          - interface: radio0-ap0
+            name: wl-test
+
+    - name: Build a source URL for a slash-containing branch ref
+      ansible.builtin.include_role:
+        name: router_librenms
+        tasks_from: build_source_url.yml
+      vars:
+        router_librenms_source_ref: refs/heads/feature/my-branch
+
+    - name: Verify the role preserves slash-containing source refs
+      ansible.builtin.assert:
+        that:
+          - >-
+              router_librenms_source_archive_url
+              == (
+                'https://codeload.github.com/librenms/librenms-agent/tar.gz/'
+                ~ 'refs/heads/feature/my-branch'
+              )
+
+    - name: Apply LibreNMS integration role with a fully qualified source ref
+      tags:
+        - molecule-idempotence-notest
+      ansible.builtin.include_role:
+        name: router_librenms
+      vars:
+        router_librenms_enabled: true
+        router_librenms_source_ref: refs/heads/master
         router_librenms_wireless_interfaces:
           - interface: radio0-ap0
             name: wl-test

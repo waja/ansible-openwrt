@@ -10,6 +10,9 @@
       router_librenms_source_ref must be a branch, tag, or commit reference
       containing only letters, digits, dots, underscores, slashes, and hyphens.
 
+- name: Build LibreNMS source archive URL
+  ansible.builtin.include_tasks: build_source_url.yml
+
 - name: Validate LibreNMS wireless interface mappings
   ansible.builtin.assert:
     that:
@@ -69,36 +72,55 @@
       become: false
       changed_when: false
 
-    - name: Resolve configured LibreNMS source ref to a commit
-      ansible.builtin.uri:
-        url: >-
-          https://api.github.com/repos/librenms/librenms-agent/commits/{{
-            router_librenms_source_ref | urlencode
-          }}
-        method: GET
-        headers:
-          Accept: application/vnd.github+json
-        return_content: true
-        status_code: 200
-        timeout: 30
-        validate_certs: true
-      register: router_librenms_upstream_commit
+    - name: Create temporary LibreNMS source directory on the controller
+      ansible.builtin.file:
+        path: "{{ router_librenms_download_dir.path }}/src"
+        state: directory
+        mode: '0700'
       delegate_to: localhost
       become: false
       changed_when: false
 
-    - name: Download LibreNMS scripts from the resolved upstream commit
+    - name: Download LibreNMS agent source archive
       ansible.builtin.get_url:
-        url: >-
-          {{
-            'https://raw.githubusercontent.com/librenms/librenms-agent/'
-            ~ router_librenms_upstream_commit.json.sha ~ '/' ~ item.path
-          }}
-        dest: "{{ router_librenms_download_dir.path }}/{{ item.name }}"
+        url: "{{ router_librenms_source_archive_url }}"
+        dest: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
         mode: '0600'
         force: true
-        timeout: 30
+        timeout: 60
         validate_certs: true
+      register: router_librenms_archive_download
+      retries: 3
+      delay: 2
+      until: router_librenms_archive_download is succeeded
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Extract LibreNMS agent source archive
+      ansible.builtin.unarchive:
+        src: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
+        dest: "{{ router_librenms_download_dir.path }}/src"
+        remote_src: true
+        extra_opts:
+          - --strip-components=1
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Create LibreNMS script directory
+      community.openwrt.file:
+        path: /etc/librenms
+        state: directory
+        mode: '0755'
+
+    - name: Deploy downloaded LibreNMS scripts
+      community.openwrt.copy:
+        src: "{{ router_librenms_download_dir.path }}/src/{{ item.path }}"
+        dest: "/etc/librenms/{{ item.name }}"
+        owner: root
+        group: root
+        mode: '0755'
       loop:
         - name: distro
           path: snmp/distro
@@ -114,30 +136,6 @@
           path: snmp/Openwrt/wlSNR.sh
       loop_control:
         label: "{{ item.name }}"
-      delegate_to: localhost
-      become: false
-      changed_when: false
-
-    - name: Create LibreNMS script directory
-      community.openwrt.file:
-        path: /etc/librenms
-        state: directory
-        mode: '0755'
-
-    - name: Deploy downloaded LibreNMS scripts
-      community.openwrt.copy:
-        src: "{{ router_librenms_download_dir.path }}/{{ item }}"
-        dest: "/etc/librenms/{{ item }}"
-        owner: root
-        group: root
-        mode: '0755'
-      loop:
-        - distro
-        - wlClients.sh
-        - wlFrequency.sh
-        - wlNoiseFloor.sh
-        - wlRate.sh
-        - wlSNR.sh
       notify: Restart SNMP daemon
 
     - name: Deploy LibreNMS hardware detection script
