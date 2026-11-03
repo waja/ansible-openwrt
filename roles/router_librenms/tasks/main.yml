@@ -90,9 +90,12 @@
           }}
         return_content: true
         status_code: 200
+        unredirected_headers:
+          - Authorization
         timeout: 30
         validate_certs: true
       register: router_librenms_upstream_commit
+      no_log: true
       delegate_to: localhost
       become: false
       changed_when: false
