@@ -13,7 +13,7 @@
       must be auto, patched, or vulnerable; manage must be a boolean.
 
 - name: Detect running and installed kernel patch status
-  ansible.builtin.script: "{{ role_path }}/files/manage.sh"
+  ansible.builtin.script: "{{ (role_path ~ '/files/manage.sh') | quote }}"
   environment:
     CVE_ACTION: detect
   register: router_cve_2026_98432_kernel_probe
@@ -53,7 +53,7 @@
   changed_when: false
 
 - name: Manage CVE mitigation independently of other roles
-  ansible.builtin.script: "{{ role_path }}/files/manage.sh"
+  ansible.builtin.script: "{{ (role_path ~ '/files/manage.sh') | quote }}"
   environment:
     CVE_ACTION: >-
       {{ 'install' if router_cve_2026_98432_desired_state == 'present'
@@ -63,7 +63,7 @@
   when: router_cve_2026_98432_manage | bool
 
 - name: Inspect current mitigation state in detection-only mode
-  ansible.builtin.script: "{{ role_path }}/files/manage.sh"
+  ansible.builtin.script: "{{ (role_path ~ '/files/manage.sh') | quote }}"
   environment:
     CVE_ACTION: status
   register: router_cve_2026_98432_status_probe
