@@ -60,7 +60,9 @@ Copy the script to the router and run it as root:
 
 ```sh
 scp scripts/owrt-extra.sh scripts/owrt-extra-runtime.sh root@router1:/tmp/
-ssh root@router1 'cp /tmp/owrt-extra-runtime.sh /usr/libexec/owrt-extra-runtime.sh && chmod 600 /usr/libexec/owrt-extra-runtime.sh'
+ssh root@router1 \\
+  'cp /tmp/owrt-extra-runtime.sh /usr/libexec/owrt-extra-runtime.sh && \\
+   chmod 600 /usr/libexec/owrt-extra-runtime.sh'
 ssh root@router1 'sh /tmp/owrt-extra.sh'
 ```
 
@@ -261,9 +263,12 @@ The collector invokes the optional helper only from
 `/usr/libexec/owrt-extra-runtime.sh` and stores its output under
 `/tmp/owrt-diff/runtime/`. The helper records separate snapshots for:
 
-- `fw4 print` — ruleset generated from current firewall4/UCI configuration.
-- `nft list ruleset` — effective kernel rules, including rules added outside fw4.
-- `ubus call network.interface dump` — netifd's logical interface status.
+- `fw4 print` — ruleset generated from current firewall4/UCI
+  configuration.
+- `nft list ruleset` — effective kernel rules, including rules added
+  outside fw4.
+- `ubus call network.interface dump` — netifd's logical interface
+  status.
 - `ip address show` — current addresses and link state from the kernel.
 - `ip route show table all` — routing tables.
 - `ip rule show` — IPv4 policy-routing rules.
@@ -271,14 +276,15 @@ The collector invokes the optional helper only from
 - `lsmod` — currently loaded modules.
 
 Each command is optional, including `fw4`, `nft`, `ubus`, `ip`, and
-`lsmod`; the collector does not install packages. `status.txt` records `ok` or `failed` together with the command's numeric
-process exit code when it executes. If a command is unavailable, its status
-is `unavailable` and the exit-status field is `-` (no process was started).
-Failed commands retain partial output for diagnosis; one failure does not
-prevent later snapshots. Raw output is
-not printed to the terminal. The helper is read-only and refuses to
-overwrite an existing output path. Files and directory permissions are
-restricted (0700/0600).
+`lsmod`; the collector does not install packages. `status.txt` records
+`ok` or `failed` together with the command's numeric process exit code
+when it executes. If a command is unavailable, its status is
+`unavailable` and the exit-status field is `-` (no process was
+started). Failed commands retain partial output for diagnosis; one
+failure does not prevent later snapshots. Raw output is not printed to
+the terminal. The helper is read-only and refuses to overwrite an
+existing output path. Files and directory permissions are restricted
+(0700/0600).
 
 No unrestricted `sysctl -a` or process listing is collected: both can
 create large/noisy output, process arguments can contain credentials,
@@ -294,11 +300,12 @@ of a manual change. Compare `netifd-interfaces.txt` with
 `/etc/config/network` and the `ip` snapshots: ubus reports netifd's
 logical interface state, while `ip` reports the kernel's addresses,
 routes, and policy rules. The views are complementary. `lsmod` shows
-loaded modules but not why they are loaded. Snapshots are sensitive point-in-time evidence: they do
-not identify who created an object, whether it is intentional or
-persistent, or whether it is safe to reproduce on another device. Never
-replay them or derive Ansible tasks blindly. Runtime discovery is tracked
-in [issue #53](https://github.com/waja/ansible-openwrt/issues/53).
+loaded modules but not why they are loaded. Snapshots are sensitive
+point-in-time evidence: they do not identify who created an object,
+whether it is intentional or persistent, or whether it is safe to
+reproduce on another device. Never replay them or derive Ansible tasks
+blindly. Runtime discovery is tracked in
+[issue #53](https://github.com/waja/ansible-openwrt/issues/53).
 
 ### Flash and hardware data are not normal Ansible state
 
