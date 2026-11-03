@@ -365,7 +365,8 @@
             tasks_from: build_source_url.yml
           vars:
             router_librenms_source_ref: master
-            router_librenms_source_archive_base_url: http://mirror.example/librenms-agent/archive
+            router_librenms_source_archive_base_url: >-
+              http://mirror.example/librenms-agent/archive
 
         - name: Fail when an insecure archive endpoint was accepted
           ansible.builtin.fail:
@@ -374,7 +375,53 @@
         - name: Confirm the insecure endpoint was rejected
           ansible.builtin.assert:
             that:
-              - ansible_failed_result.msg is search('must be an HTTPS archive endpoint')
+              - >-
+                ansible_failed_result.msg
+                is search('must be an HTTPS archive endpoint')
+
+    - name: Verify the role rejects archive endpoints with query strings
+      block:
+        - name: Build a source URL with a query string
+          ansible.builtin.include_role:
+            name: router_librenms
+            tasks_from: build_source_url.yml
+          vars:
+            router_librenms_source_ref: master
+            router_librenms_source_archive_base_url: >-
+              https://mirror.example/librenms-agent/archive?download=1
+
+        - name: Fail when a query string was accepted
+          ansible.builtin.fail:
+            msg: The role accepted an archive endpoint with a query string.
+      rescue:
+        - name: Confirm the query string was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_result.msg
+                is search('without query parameters or fragments')
+
+    - name: Verify the role rejects archive endpoints with fragments
+      block:
+        - name: Build a source URL with a fragment
+          ansible.builtin.include_role:
+            name: router_librenms
+            tasks_from: build_source_url.yml
+          vars:
+            router_librenms_source_ref: master
+            router_librenms_source_archive_base_url: >-
+              https://mirror.example/librenms-agent/archive#snapshot
+
+        - name: Fail when a fragment was accepted
+          ansible.builtin.fail:
+            msg: The role accepted an archive endpoint with a fragment.
+      rescue:
+        - name: Confirm the fragment was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_result.msg
+                is search('without query parameters or fragments')
 
     - name: Apply LibreNMS integration role with a fully qualified source ref
       tags:

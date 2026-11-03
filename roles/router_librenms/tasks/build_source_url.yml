@@ -4,7 +4,8 @@
   ansible.builtin.assert:
     that:
       - router_librenms_source_archive_base_url is string
-      - router_librenms_source_archive_base_url is match('^https://[^/\s?#]+(?:/[^?#]*)?$')
+      - router_librenms_source_archive_base_url is match('^https://')
+      - router_librenms_source_archive_base_url is not search('[?#]')
     fail_msg: >-
       router_librenms_source_archive_base_url must be an HTTPS archive endpoint
       without query parameters or fragments.
