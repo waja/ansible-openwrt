@@ -27,6 +27,7 @@ case "$*" in
  "address show") echo "lo: <LOOPBACK>" ;;
  "route show table all") echo "default dev eth0" ;;
  "rule show") echo "0: from all lookup local" ;;
+ "-6 rule show") echo "0: from all lookup local" ;;
  *) exit 8 ;;
 esac
 EOF
@@ -38,7 +39,7 @@ chmod 700 "$BIN/"*
 PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/success"
 test "$(stat -c %a "$TMP/success")" = 700 || fail "directory mode"
 test "$(stat -c %a "$TMP/success/status.txt")" = 600 || fail "status mode"
-for f in fw4-ruleset nft-ruleset netifd-interfaces ip-address ip-routes ip-rules loaded-modules; do
+for f in fw4-ruleset nft-ruleset netifd-interfaces ip-address ip-routes ip-rules ip6-rules loaded-modules; do
  test -s "$TMP/success/$f.txt" || fail "missing snapshot $f"
  test "$(stat -c %a "$TMP/success/$f.txt")" = 600 || fail "$f mode"
 done
@@ -62,4 +63,25 @@ if PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/success" >/dev/null 2>&1; then f
 mkdir -m 700 "$TMP/target"
 ln -s "$TMP/target" "$TMP/link"
 if PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/link" >/dev/null 2>&1; then fail "symlink accepted"; fi
+# A failed status append must fail collection rather than report success.
+mkdir -m 700 "$TMP/status-write"
+cat > "$BIN/ip" <<'EOF'
+#!/bin/sh
+case "$*" in
+ "address show") echo "lo: <LOOPBACK>" ;;
+ "route show table all") echo "default dev eth0" ;;
+ "rule show") echo "0: from all lookup local" ;;
+ "-6 rule show")
+  echo "0: from all lookup local"
+  rm -f "$OWRT_TEST_STATUS"
+  mkdir "$OWRT_TEST_STATUS"
+  ;;
+ *) exit 8 ;;
+esac
+EOF
+chmod 700 "$BIN/ip"
+if OWRT_TEST_STATUS="$TMP/status-write/status.txt" PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/status-write" >/dev/null 2>&1; then
+ fail "status append failure reported success"
+fi
+
 echo "All owrt-extra runtime snapshot tests passed."
