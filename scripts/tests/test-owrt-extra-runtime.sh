@@ -64,7 +64,6 @@ mkdir -m 700 "$TMP/target"
 ln -s "$TMP/target" "$TMP/link"
 if PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/link" >/dev/null 2>&1; then fail "symlink accepted"; fi
 # A failed status append must fail collection rather than report success.
-mkdir -m 700 "$TMP/status-write"
 cat > "$BIN/ip" <<'EOF'
 #!/bin/sh
 case "$*" in
@@ -83,5 +82,6 @@ chmod 700 "$BIN/ip"
 if OWRT_TEST_STATUS="$TMP/status-write/status.txt" PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/status-write" >/dev/null 2>&1; then
  fail "status append failure reported success"
 fi
+test -d "$TMP/status-write/status.txt" || fail "ip fixture did not replace status file"
 
 echo "All owrt-extra runtime snapshot tests passed."
