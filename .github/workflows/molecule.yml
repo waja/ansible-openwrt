@@ -2,6 +2,8 @@
 ---
 name: Molecule CI
 
+permissions: {}
+
 "on":
   workflow_dispatch:
   schedule:
@@ -15,6 +17,8 @@ name: Molecule CI
 
 jobs:
   openwrt-versions:
+    permissions:
+      contents: read
     name: Read OpenWrt version matrix
     runs-on: ubuntu-latest
     outputs:
@@ -33,6 +37,8 @@ jobs:
           printf 'versions=%s\n' "$versions" >> "$GITHUB_OUTPUT"
 
   changes:
+    permissions:
+      contents: read
     name: Detect relevant changes
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -91,6 +97,8 @@ jobs:
 
 
   lint:
+    permissions:
+      contents: read
     name: Lint
     runs-on: ubuntu-latest
     steps:
@@ -129,6 +137,8 @@ jobs:
             --exclude collections/ansible_collections/community/openwrt/
 
   check-structure:
+    permissions:
+      contents: read
     name: Check collection structure
     runs-on: ubuntu-latest
     outputs:
@@ -151,6 +161,8 @@ jobs:
           fi
 
   sanity:
+    permissions:
+      contents: read
     name: Sanity
     needs:
       - lint
@@ -184,6 +196,8 @@ jobs:
             --python ${{ steps.python.outputs.python-version }}
 
   units:
+    permissions:
+      contents: read
     name: Units
     needs:
       - lint
