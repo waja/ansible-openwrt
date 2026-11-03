@@ -81,14 +81,13 @@
       become: false
       changed_when: false
 
-    - name: Download LibreNMS agent source archive
-      ansible.builtin.get_url:
-        url: "{{ __router_librenms_source_archive_url }}"
-        dest: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
-        mode: '0600'
-        force: true
-        timeout: 60
-        validate_certs: true
+    - name: Download LibreNMS agent source archive over HTTPS
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ role_path }}/files/download_https_archive.py"
+          - "{{ __router_librenms_source_archive_url }}"
+          - "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
       register: router_librenms_archive_download
       retries: 3
       delay: 2
