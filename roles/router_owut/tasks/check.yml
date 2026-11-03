@@ -51,6 +51,7 @@
   community.openwrt.command:
     cmd: "{{ router_owut_binary }} check"
   register: router_owut_check
+  check_mode: false
   changed_when: false
   failed_when: false
 
