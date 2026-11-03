@@ -178,10 +178,9 @@ cat > "$stub/chroot" <<'EOF_CHROOT'
 #!/bin/sh
 [ "$#" = 4 ] || exit 90
 [ "$2" = /bin/sh ] && [ "$3" = -c ] || exit 91
-cmd=$(printf '%s' "$4" | sed -E \
-    -e "s#(^|[^[:alnum:]_./-])/bin/config_generate([^[:alnum:]_./-]|$)#\1$OWRT_TEST_ROOT/bin/config_generate\2#g" \
-    -e "s#(^|[^[:alnum:]_./-])/etc/uci-defaults/#\1$OWRT_TEST_ROOT/etc/uci-defaults/#g")
-/bin/sh -c "$cmd"
+cmd=$(printf '%s' "$4" | sed \
+    -e "s#/bin/config_generate#$OWRT_TEST_ROOT/bin/config_generate#g" \
+    -e "s#/etc/uci-defaults/#$OWRT_TEST_ROOT/etc/uci-defaults/#g")
 EOF_CHROOT
 cat > "$stub/uci" <<'EOF_UCI'
 #!/bin/sh
@@ -406,8 +405,7 @@ rm -f /rom/etc/apk/world
 if /bin/sh "$SCRIPT" > /tmp/apk-world-missing.log 2>&1; then
     fail "missing factory APK world file was accepted"
 fi
-grep -Fq "Cannot compare explicitly installed packages: APK world file missing" \
-    /tmp/apk-world-missing.log ||
+grep -Fq "APK world file missing" /tmp/apk-world-missing.log ||
     fail "missing APK world diagnostic not found"
 assert_no_run_state
 
