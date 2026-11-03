@@ -159,6 +159,9 @@ cmd=$(printf '%s' "$4" | sed -E \
 EOF_CHROOT
 cat > "$stub/uci" <<'EOF_UCI'
 #!/bin/sh
+for arg do
+    [ "$arg" = show ] && : > "$OWRT_TEST_TMP/uci-show-ran"
+done
 if [ "${1:-}" = commit ]; then
     : > "$OWRT_TEST_TMP/uci-commit-ran"
     case ",${OWRT_TEST_FACTORY_FAIL:-}," in
@@ -286,6 +289,8 @@ run_factory_failure_case() {
         fail "$name did not execute the uci-defaults script"
     [ -f "$TEST_TMP/uci-commit-ran" ] ||
         fail "$name did not execute uci commit after the failure"
+    [ ! -e "$TEST_TMP/uci-show-ran" ] ||
+        fail "$name continued into UCI comparison"
     ! grep -Fq "##### 1. UCI diff" "/tmp/$name.log" ||
         fail "$name continued into comparison reporting"
     assert_no_run_state
