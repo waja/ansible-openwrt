@@ -12,16 +12,16 @@ chmod 600 "$STATUS" || exit 1
 snapshot() {
  name=$1; command_name=$2; shift 2; output=$OUT/$name.txt
  if ! command -v "$command_name" >/dev/null 2>&1; then
-  printf '%s\t%s\t%s\n' "$name" unavailable - >> "$STATUS"
+  printf '%s\t%s\t%s\n' "$name" unavailable - >> "$STATUS" || return 1
   return 0
  fi
  "$@" > "$output" 2>&1
  rc=$?
  chmod 600 "$output" || return 1
  if [ "$rc" -eq 0 ]; then
-  printf '%s\t%s\t%s\n' "$name" ok "$rc" >> "$STATUS"
+  printf '%s\t%s\t%s\n' "$name" ok "$rc" >> "$STATUS" || return 1
  else
-  printf '%s\t%s\t%s\n' "$name" failed "$rc" >> "$STATUS"
+  printf '%s\t%s\t%s\n' "$name" failed "$rc" >> "$STATUS" || return 1
  fi
  return 0
 }
@@ -34,5 +34,6 @@ snapshot netifd-interfaces ubus ubus call network.interface dump || exit 1
 snapshot ip-address ip ip address show || exit 1
 snapshot ip-routes ip ip route show table all || exit 1
 snapshot ip-rules ip ip rule show || exit 1
+snapshot ip6-rules ip ip -6 rule show || exit 1
 snapshot loaded-modules lsmod lsmod || exit 1
 exit 0
