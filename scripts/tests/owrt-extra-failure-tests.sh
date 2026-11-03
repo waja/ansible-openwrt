@@ -147,6 +147,11 @@ esac
 return 0
 EOF_DEFAULT
     chmod 700 "$factory_root/etc/uci-defaults/99-test-failure"
+    cat > "$factory_root/etc/uci-defaults/zz-test-after-failure" <<'EOF_DEFAULT_LATER'
+: > "$OWRT_TEST_TMP/uci-defaults-later-ran"
+return 0
+EOF_DEFAULT_LATER
+    chmod 700 "$factory_root/etc/uci-defaults/zz-test-after-failure"
 }
 cat > "$stub/chroot" <<'EOF_CHROOT'
 #!/bin/sh
@@ -266,7 +271,7 @@ run_factory_failure_case() {
     reset_case
     create_factory_defaults_fixture
     rm -f "$TEST_TMP"/config-generate-ran "$TEST_TMP"/uci-defaults-ran \
-        "$TEST_TMP"/uci-commit-ran
+        "$TEST_TMP"/uci-defaults-later-ran "$TEST_TMP"/uci-commit-ran
     OWRT_TEST_FACTORY_FAIL=$failure
     export OWRT_TEST_FACTORY_FAIL
     if /bin/sh "$SCRIPT" > "/tmp/$name.log" 2>&1; then
@@ -287,6 +292,8 @@ run_factory_failure_case() {
         fail "$name did not execute config_generate"
     [ -f "$TEST_TMP/uci-defaults-ran" ] ||
         fail "$name did not execute the uci-defaults script"
+    [ -f "$TEST_TMP/uci-defaults-later-ran" ] ||
+        fail "$name did not execute the later uci-defaults script"
     [ -f "$TEST_TMP/uci-commit-ran" ] ||
         fail "$name did not execute uci commit after the failure"
     [ ! -e "$TEST_TMP/uci-show-ran" ] ||
