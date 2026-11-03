@@ -671,8 +671,7 @@ else
 fi
 
 # --- Runtime-only state snapshots ----------------------------------------
-RUNTIME_HELPER=$(dirname "$0")/owrt-extra-runtime.sh
-[ -r "$RUNTIME_HELPER" ] || RUNTIME_HELPER=/usr/libexec/owrt-extra-runtime.sh
+RUNTIME_HELPER=/usr/libexec/owrt-extra-runtime.sh
 if [ -r "$RUNTIME_HELPER" ]; then
     print_section "10. Runtime-only state (point-in-time snapshots)"
     if sh "$RUNTIME_HELPER" "$OUT/runtime" 2> "$OUT/runtime-collector.log"; then
