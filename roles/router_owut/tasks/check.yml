@@ -1,0 +1,104 @@
+# roles/router_owut/tasks/check.yml
+---
+- name: Read the OpenWrt release information
+  community.openwrt.slurp:
+    src: /etc/openwrt_release
+  register: router_owut_release
+  changed_when: false
+
+- name: Extract the OpenWrt release version
+  ansible.builtin.set_fact:
+    router_owut_release_version: >-
+      {{
+        router_owut_release.content
+        | b64decode
+        | regex_findall("(?m)^DISTRIB_RELEASE='([0-9]+[.][0-9]+)")
+        | first
+        | default('')
+      }}
+  changed_when: false
+
+- name: Require OpenWrt 25.12 or newer
+  ansible.builtin.assert:
+    that:
+      - router_owut_release_version | length > 0
+      - router_owut_release_version is version('25.12', '>=')
+    fail_msg: >-
+      router_owut requires OpenWrt 25.12 or newer. Detected release:
+      {{ router_owut_release_version | default('unknown', true) }}.
+      No update check was performed.
+
+- name: Inspect the configured OWUT executable
+  community.openwrt.stat:
+    path: "{{ router_owut_binary }}"
+    get_checksum: false
+    get_md5: false
+    get_mime: false
+  register: router_owut_binary_stat
+  changed_when: false
+
+- name: Require the OWUT executable
+  ansible.builtin.assert:
+    that:
+      - router_owut_binary_stat.stat.exists | default(false)
+      - router_owut_binary_stat.stat.executable | default(false)
+    fail_msg: >-
+      OWUT was not found at {{ router_owut_binary }} or is not executable.
+      Install the OpenWrt owut package separately; router_owut does not
+      install or upgrade packages.
+
+- name: Run the read-only OWUT update check
+  community.openwrt.command:
+    cmd: "{{ router_owut_binary }} check"
+  register: router_owut_check
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Classify the OWUT check result
+  ansible.builtin.set_fact:
+    router_owut_check_output: >-
+      {{ router_owut_check.stdout | default('') }}
+      {{ router_owut_check.stderr | default('') }}
+    router_owut_status: >-
+      {%- set output =
+        (router_owut_check.stdout | default(''))
+        ~ '\n' ~ (router_owut_check.stderr | default('')) -%}
+      {%- if output is search('Checks reveal package downgrades') -%}
+      downgrade
+      {%- elif router_owut_check.rc | default(1) != 0 -%}
+      error
+      {%- elif output is search(
+        'There are no changes, upgrade not necessary'
+      ) -%}
+      up_to_date
+      {%- elif output is search(
+        'It is safe to proceed with an upgrade'
+      ) -%}
+      update_available
+      {%- else -%}
+      unknown
+      {%- endif -%}
+  changed_when: false
+
+- name: Report the OWUT update check result
+  ansible.builtin.debug:
+    msg: >-
+      {%- if router_owut_status == 'up_to_date' -%}
+      OWUT: The router is up to date; no firmware image update is required.
+      {%- elif router_owut_status == 'update_available' -%}
+      WARNING: OWUT found package updates and considers an upgrade safe
+      to attempt. No image was built or installed.
+      {%- elif router_owut_status == 'downgrade' -%}
+      WARNING: OWUT reports package downgrades. An upgrade would require
+      --force and needs manual review. No force option was used.
+      {%- elif router_owut_status == 'error' -%}
+      WARNING: OWUT update check failed (rc={{ router_owut_check.rc }}).
+      {{ router_owut_check.stderr | default(router_owut_check.stdout, true) }}
+      {%- else -%}
+      WARNING: OWUT returned an unrecognized result (rc={{
+        router_owut_check.rc | default('unknown')
+      }}). Review the command output before relying on this check.
+      {{ router_owut_check_output }}
+      {%- endif -%}
+  changed_when: false

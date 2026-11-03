@@ -1175,3 +1175,233 @@
       ansible.builtin.assert:
         that:
           - router_packages_install_list == ['busybox', 'snmpd']
+
+    - name: Test OWUT update-check behavior
+      tags:
+        - molecule-idempotence-notest
+      block:
+        - name: Create a mock OWUT executable for update-check tests
+          community.openwrt.copy:
+            content: |
+              #!/bin/sh
+              mode="$(cat /tmp/ansible-molecule-owut-mode)" || exit 2
+              case "$mode" in
+                update)
+                  echo "It is safe to proceed with an upgrade"
+                  ;;
+                current)
+                  echo "There are no changes, upgrade not necessary"
+                  ;;
+                downgrade)
+                  echo "Checks reveal package downgrades," \
+                    "upgrade still possible with '--force'" >&2
+                  ;;
+                error)
+                  echo "Checks reveal errors, do not upgrade" >&2
+                  exit 1
+                  ;;
+                unknown)
+                  echo "OWUT returned an unexpected result"
+                  ;;
+                *)
+                  echo "Unknown test mode" >&2
+                  exit 2
+                  ;;
+              esac
+            dest: /tmp/ansible-molecule-owut
+            mode: '0755'
+
+        - name: Select a mock OWUT result
+          community.openwrt.copy:
+            content: current
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Verify the OWUT role is disabled by default
+          ansible.builtin.include_role:
+            name: router_owut
+
+        - name: Assert the disabled OWUT role performs no check
+          ansible.builtin.assert:
+            that:
+              - router_owut_status is not defined
+
+        - name: Select an update-available OWUT result
+          community.openwrt.copy:
+            content: update
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Detect an available firmware update
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert OWUT reports an available firmware update
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'update_available'
+
+        - name: Select an up-to-date OWUT result
+          community.openwrt.copy:
+            content: current
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Detect an up-to-date firmware image
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert OWUT reports that no update is needed
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'up_to_date'
+
+        - name: Select a downgrade OWUT result
+          community.openwrt.copy:
+            content: downgrade
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Detect package downgrades without forcing an upgrade
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert OWUT classifies downgrades separately
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'downgrade'
+              - router_owut_check.rc == 0
+            fail_msg: >-
+              Expected a successful OWUT downgrade warning, got status
+              {{ router_owut_status }} (rc={{ router_owut_check.rc }}).
+              stdout={{ router_owut_check.stdout | to_json }},
+              stderr={{ router_owut_check.stderr | to_json }}
+
+        - name: Select a failing OWUT result
+          community.openwrt.copy:
+            content: error
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Capture an OWUT command failure without aborting configuration
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert OWUT command failures are reported
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'error'
+
+        - name: Select an unknown OWUT result
+          community.openwrt.copy:
+            content: unknown
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Capture an unrecognized OWUT result
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert unknown OWUT output is not treated as success
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'unknown'
+
+
+        - name: Capture a missing OWUT executable prerequisite
+          block:
+            - name: Run OWUT with a missing executable
+              ansible.builtin.include_role:
+                name: router_owut
+              vars:
+                router_owut_enabled: true
+                router_owut_binary: /tmp/owut-does-not-exist
+          rescue:
+            - name: Record the missing OWUT executable rejection
+              ansible.builtin.set_fact:
+                router_owut_missing_binary_seen: >-
+                  {{
+                    'Install the OpenWrt owut package separately'
+                    in ansible_failed_result.msg
+                  }}
+
+        - name: Assert missing OWUT is reported as a prerequisite error
+          ansible.builtin.assert:
+            that:
+              - router_owut_missing_binary_seen | default(false) | bool
+
+        - name: Reject an unsupported OpenWrt release in the OWUT role
+          block:
+            - name: Save the original OpenWrt release file
+              community.openwrt.slurp:
+                src: /etc/openwrt_release
+              register: router_owut_release_backup
+              changed_when: false
+
+            - name: Provide an older OpenWrt release fixture
+              community.openwrt.copy:
+                content: |
+                  DISTRIB_RELEASE='24.10.5'
+                  DISTRIB_REVISION='r0'
+                dest: /etc/openwrt_release
+                mode: '0644'
+
+            - name: Run OWUT against the unsupported release fixture
+              ansible.builtin.include_role:
+                name: router_owut
+              vars:
+                router_owut_enabled: true
+                router_owut_binary: /tmp/ansible-molecule-owut
+          rescue:
+            - name: Record unsupported release rejection
+              ansible.builtin.set_fact:
+                router_owut_unsupported_seen: >-
+                  {{
+                    'requires OpenWrt 25.12 or newer'
+                    in ansible_failed_result.msg
+                  }}
+          always:
+            - name: Restore the original OpenWrt release file
+              community.openwrt.copy:
+                content: "{{ router_owut_release_backup.content | b64decode }}"
+                dest: /etc/openwrt_release
+                mode: '0644'
+
+        - name: Assert unsupported OpenWrt releases are rejected clearly
+          ansible.builtin.assert:
+            that:
+              - router_owut_unsupported_seen | default(false) | bool
+
+        - name: Verify OWUT checks never stage UCI changes
+          community.openwrt.command:
+            cmd: uci changes
+          register: router_owut_uci_changes
+          changed_when: false
+
+        - name: Assert the OWUT role did not change UCI configuration
+          ansible.builtin.assert:
+            that:
+              - router_owut_uci_changes.stdout | trim == ''
+
+        - name: Remove mocked OWUT test files
+          community.openwrt.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /tmp/ansible-molecule-owut
+            - /tmp/ansible-molecule-owut-mode

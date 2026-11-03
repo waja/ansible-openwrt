@@ -17,7 +17,8 @@ inventory and customize variables there.
 
 - `playbooks/site.yml` runs the standard configuration:
   `community.openwrt.init`, `router_packages`, `router_base`, and
-  `router_network`, and the opt-in SNMP, LibreNMS, and Tailscale roles.
+  `router_network`, and the opt-in SNMP, LibreNMS, Tailscale, and OWUT
+  update-check roles.
 - `playbooks/audit_packages.yml` compares the installed packages on each
   router against a saved package-list baseline. It reports differences but
   does not install or remove packages to reconcile them.
@@ -36,8 +37,9 @@ to the individual [system](docs/roles/router_system.md),
 [SNMP](docs/roles/router_snmpd.md),
 [LibreNMS](docs/roles/router_librenms.md),
 [Tailscale](docs/roles/router_tailscale.md),
-[package audit](docs/roles/router_package_audit.md), and
-[storage](docs/roles/router_storage.md) guides.
+the [package audit](docs/roles/router_package_audit.md),
+[storage](docs/roles/router_storage.md), and
+[OWUT update checks](docs/roles/router_owut.md) guides.
 
 ## Requirements
 
@@ -225,6 +227,7 @@ See the [router configuration overview](docs/configuration.md) for playbook usag
 - `roles/router_tailscale/` — optional Tailscale daemon and tailnet setup
 - `roles/router_package_audit/` — package baseline comparison
 - `roles/router_storage/` — root storage detection and optional expansion
+- `roles/router_owut/` — optional, read-only firmware update checks
 - `requirements.yml` — pinned Ansible role and collection dependencies
 - `extensions/molecule/default/` — Molecule test scenario
 - `extensions/molecule/network-static/` — static network configuration tests

@@ -1,0 +1,5 @@
+# roles/router_owut/tasks/main.yml
+---
+- name: Check for OpenWrt firmware updates with OWUT
+  ansible.builtin.include_tasks: check.yml
+  when: router_owut_enabled | bool
