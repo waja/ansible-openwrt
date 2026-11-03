@@ -265,13 +265,16 @@ The collector invokes the optional helper next to the script (or at
 - `ubus call network.interface dump` — netifd's logical interface status.
 - `ip address show` — current addresses and link state from the kernel.
 - `ip route show table all` — routing tables.
-- `ip rule show` — policy-routing rules.
+- `ip rule show` — IPv4 policy-routing rules.
+- `ip -6 rule show` — IPv6 policy-routing rules.
 - `lsmod` — currently loaded modules.
 
 Each command is optional, including `fw4`, `nft`, `ubus`, `ip`, and
-`lsmod`; the collector does not install packages. `status.txt` records
-`ok`, `failed`, or `unavailable` and the exit status. Failed commands
-retain partial output for diagnosis; one failure does not prevent later snapshots. Raw output is
+`lsmod`; the collector does not install packages. `status.txt` records `ok` or `failed` together with the command's numeric
+process exit code when it executes. If a command is unavailable, its status
+is `unavailable` and the exit-status field is `-` (no process was started).
+Failed commands retain partial output for diagnosis; one failure does not
+prevent later snapshots. Raw output is
 not printed to the terminal. The helper is read-only and refuses to
 overwrite an existing output path. Files and directory permissions are
 restricted (0700/0600).
