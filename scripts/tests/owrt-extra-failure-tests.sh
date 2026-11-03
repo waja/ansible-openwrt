@@ -17,7 +17,8 @@ fail() {
 }
 reset_case() {
     rm -rf /tmp/owrt-diff /tmp/owrt-extra.lock /tmp/ref
-    rm -f "$TEST_TMP"/*-ran "$TEST_TMP"/uci-commit-ran "$TEST_TMP"/factory-failed
+    rm -f "$TEST_TMP"/*-ran "$TEST_TMP"/uci-commit-ran "$TEST_TMP"/factory-failed \
+        "$TEST_TMP"/factory-order
 }
 assert_no_run_state() {
     [ ! -e /tmp/owrt-extra.lock ] || fail "lock left behind"
@@ -125,6 +126,7 @@ mkdir -p "$factory_root/bin" "$factory_root/etc/uci-defaults"
 cat > "$factory_root/bin/config_generate" <<'EOF_CONFIG'
 #!/bin/sh
 : > "$OWRT_TEST_TMP/config-generate-ran"
+printf 'config_generate\\n' >> "$OWRT_TEST_TMP/factory-order"
 case ",${OWRT_TEST_FACTORY_FAIL:-}," in
     *,config-generate,*)
         : > "$OWRT_TEST_TMP/factory-failed"
@@ -138,6 +140,7 @@ chmod 700 "$factory_root/bin/config_generate"
 create_factory_defaults_fixture() {
     cat > "$factory_root/etc/uci-defaults/99-test-failure" <<'EOF_DEFAULT'
 : > "$OWRT_TEST_TMP/uci-defaults-ran"
+printf 'uci-defaults\\n' >> "$OWRT_TEST_TMP/factory-order"
 case ",${OWRT_TEST_FACTORY_FAIL:-}," in
     *,uci-defaults,*)
         echo "simulated uci-defaults failure" >&2
@@ -149,6 +152,7 @@ EOF_DEFAULT
     chmod 700 "$factory_root/etc/uci-defaults/99-test-failure"
     cat > "$factory_root/etc/uci-defaults/zz-test-after-failure" <<'EOF_DEFAULT_LATER'
 : > "$OWRT_TEST_TMP/uci-defaults-later-ran"
+printf 'uci-defaults-later\\n' >> "$OWRT_TEST_TMP/factory-order"
 return 0
 EOF_DEFAULT_LATER
     chmod 700 "$factory_root/etc/uci-defaults/zz-test-after-failure"
@@ -169,6 +173,7 @@ for arg do
 done
 if [ "${1:-}" = commit ]; then
     : > "$OWRT_TEST_TMP/uci-commit-ran"
+printf 'uci-commit\\n' >> "$OWRT_TEST_TMP/factory-order"
     case ",${OWRT_TEST_FACTORY_FAIL:-}," in
         *,uci-commit,*)
             echo "simulated uci commit failure" >&2
@@ -296,6 +301,10 @@ run_factory_failure_case() {
         fail "$name did not execute the later uci-defaults script"
     [ -f "$TEST_TMP/uci-commit-ran" ] ||
         fail "$name did not execute uci commit after the failure"
+    printf 'config_generate\\nuci-defaults\\nuci-defaults-later\\nuci-commit\\n' > \
+        "$TEST_TMP/factory-order.expected"
+    cmp -s "$TEST_TMP/factory-order.expected" "$TEST_TMP/factory-order" ||
+        { cat "$TEST_TMP/factory-order" >&2; fail "$name factory stages ran out of order"; }
     [ ! -e "$TEST_TMP/uci-show-ran" ] ||
         fail "$name continued into UCI comparison"
     ! grep -Fq "##### 1. UCI diff" "/tmp/$name.log" ||
