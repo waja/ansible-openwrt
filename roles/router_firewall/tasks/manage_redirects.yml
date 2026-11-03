@@ -483,7 +483,7 @@
     that:
       - >-
         item.0.value.state | default('present') == 'absent' or
-        item.0.value.enabled is false or
+        item.0.value.enabled | default(true) == false or
         (
           item.0.value.target is not defined and
           (
