@@ -257,8 +257,8 @@ appropriate to manage as desired state.
 
 ### Runtime-only state snapshots
 
-The collector invokes the optional helper next to the script (or at
-`/usr/libexec/owrt-extra-runtime.sh`) and stores its output under
+The collector invokes the optional helper only from
+`/usr/libexec/owrt-extra-runtime.sh` and stores its output under
 `/tmp/owrt-diff/runtime/`. The helper records separate snapshots for:
 
 - `fw4 print` — ruleset generated from current firewall4/UCI configuration.
@@ -376,7 +376,7 @@ script's guarded cleanup mode, then remove the copied script:
 
 ```sh
 sh /tmp/owrt-extra.sh -c
-rm -f /tmp/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh
+rm -f /tmp/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh /usr/libexec/owrt-extra-runtime.sh
 ```
 
 Do not replace the guarded cleanup with a manual `rm -rf`: the `-c`
