@@ -201,6 +201,18 @@ status() {
     else
         backup_state=absent
     fi
+    if [ "$file_state" = present ]; then
+        tmp_status_ruleset=$(mktemp)
+        write_ruleset "$tmp_status_ruleset"
+        if cmp -s "$tmp_status_ruleset" "$NFT_FILE"; then
+            ruleset_state=correct
+        else
+            ruleset_state=incorrect
+        fi
+        rm -f "$tmp_status_ruleset"
+    else
+        ruleset_state=absent
+    fi
     if is_active; then active_state=present; else active_state=absent; fi
     firewall_backend=none
     command -v fw4 >/dev/null 2>&1 && firewall_backend=fw4
@@ -209,8 +221,8 @@ status() {
        /etc/init.d/firewall enabled >/dev/null 2>&1; then
         firewall_service_enabled=yes
     fi
-    printf 'file=%s\ninclude=%s\nsysupgrade=%s\nactive=%s\n' \
-        "$file_state" "$include_state" "$backup_state" "$active_state"
+    printf 'file=%s\nruleset=%s\ninclude=%s\nsysupgrade=%s\nactive=%s\n' \
+        "$file_state" "$ruleset_state" "$include_state" "$backup_state" "$active_state"
     printf 'firewall_backend=%s\nfirewall_service_enabled=%s\n' \
         "$firewall_backend" "$firewall_service_enabled"
 }
