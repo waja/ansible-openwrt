@@ -3,8 +3,8 @@
 For a router that already has manual changes, use the read-only discovery
 script `scripts/owrt-extra.sh` to compare the live system with a
 reconstructed factory reference and collect likely Ansible candidates.
-Copy it to the router and run it there as root on OpenWrt; it is not an
-Ansible playbook.
+Install both collector scripts at their trusted paths and run the main
+script there as root on OpenWrt; they are not an Ansible playbook.
 
 See the [owrt-extra.sh user guide](owrt-extra.md) for prerequisites,
 options, report sections, retained files, security precautions, migration
