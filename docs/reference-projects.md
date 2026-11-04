@@ -204,12 +204,13 @@ the design:
   perform rollback or mutate router state.
 
 These decisions preserve the scope of #53. They do not require another
-runtime data source or a broader system inventory. The collector was
-subsequently validated on a booted OpenWrt 25.12.5 x86/64 VM: all seven
+runtime data source or a broader system inventory. The seven-command collector
+was subsequently validated on a booted OpenWrt 25.12.5 x86/64 VM: all seven
 snapshots succeeded, restrictive permissions and overwrite protection were
 verified, and the full discovery run cleaned up its temporary mounts and lock.
-See [PR #149](https://github.com/waja/ansible-openwrt/pull/149) for the
-validation record.
+The two IPv6 snapshots added later were not part of that validation. See
+[PR #149](https://github.com/waja/ansible-openwrt/pull/149) for the validation
+record.
 
 ## Official documentation
 
