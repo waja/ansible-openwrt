@@ -70,7 +70,7 @@ jobs:
           markdown=false
           while IFS= read -r path; do
             case "$path" in
-              scripts/*|roles/router_cve_2026_98432/files/*.sh|.shellcheckrc)
+              scripts/*|roles/router_cve_2026_98432/files/*|.shellcheckrc)
                 scripts=true
                 ;;
               *.md|.markdownlint-cli2.jsonc|.codespellrc)
