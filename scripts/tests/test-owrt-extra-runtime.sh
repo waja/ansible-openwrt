@@ -26,6 +26,7 @@ cat > "$BIN/ip" <<'EOF'
 case "$*" in
  "address show") echo "lo: <LOOPBACK>" ;;
  "route show table all") echo "default dev eth0" ;;
+ "-6 route show table all") echo "default dev eth0" ;;
  "rule show") echo "0: from all lookup local" ;;
  "-6 rule show") echo "0: from all lookup local" ;;
  *) exit 8 ;;
@@ -44,7 +45,7 @@ fi
 PATH="$BIN:/usr/bin:/bin" sh "$HELPER" "$TMP/success"
 test "$(stat -c %a "$TMP/success")" = 700 || fail "directory mode"
 test "$(stat -c %a "$TMP/success/status.txt")" = 600 || fail "status mode"
-for f in fw4-ruleset nft-ruleset netifd-interfaces ip-address ip-routes ip-rules ip6-rules loaded-modules; do
+for f in fw4-ruleset nft-ruleset netifd-interfaces ip-address ip-routes ip6-routes ip-rules ip6-rules loaded-modules; do
  test -s "$TMP/success/$f.txt" || fail "missing snapshot $f"
  test "$(stat -c %a "$TMP/success/$f.txt")" = 600 || fail "$f mode"
 done
