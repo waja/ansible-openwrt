@@ -189,6 +189,7 @@ cat > "$stub/chroot" <<'EOF_CHROOT'
 [ "$#" = 4 ] || exit 90
 [ "$1" = /tmp/ref/merged ] || exit 92
 [ "$2" = /bin/sh ] && [ "$3" = -c ] || exit 91
+: > "$OWRT_TEST_TMP/reference-mounted"
 cmd=$(printf '%s' "$4" | sed \
     -e "s#/bin/config_generate#$OWRT_TEST_ROOT/bin/config_generate#g" \
     -e "s#/etc/uci-defaults/#$OWRT_TEST_ROOT/etc/uci-defaults/#g")
@@ -305,7 +306,7 @@ run_factory_failure_case() {
     expected2=${4:-}
     reset_case
     create_factory_defaults_fixture
-    : > "$TEST_TMP/reference-mounted"
+    rm -f "$TEST_TMP"/reference-mounted
     rm -f "$TEST_TMP"/config-generate-ran "$TEST_TMP"/uci-defaults-ran \
         "$TEST_TMP"/uci-defaults-later-ran "$TEST_TMP"/uci-commit-ran
     OWRT_TEST_FACTORY_FAIL=$failure
