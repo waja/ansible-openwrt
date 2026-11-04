@@ -8,6 +8,7 @@ export LC_ALL
 
 TEST_TMP=$(mktemp -d "/tmp/owrt-extra-tests.XXXXXX")
 export OWRT_TEST_TMP="$TEST_TMP"
+unset OWRT_TEST_FACTORY_FAIL
 cleanup() {
     rm -rf "$TEST_TMP"
 }
@@ -177,6 +178,7 @@ EOF_DEFAULT_LATER
 cat > "$stub/chroot" <<'EOF_CHROOT'
 #!/bin/sh
 [ "$#" = 4 ] || exit 90
+[ "$1" = /tmp/ref/merged ] || exit 92
 [ "$2" = /bin/sh ] && [ "$3" = -c ] || exit 91
 cmd=$(printf '%s' "$4" | sed \
     -e "s#/bin/config_generate#$OWRT_TEST_ROOT/bin/config_generate#g" \
