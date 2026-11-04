@@ -14,6 +14,68 @@
       vars:
         router_storage_expand_root: false
 
+    - name: Detect CVE-2026-98432 kernel status without applying mitigation
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_manage: false
+
+    - name: Verify CVE kernel detection returns a supported status
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_effective_kernel_status in [
+              'patched', 'vulnerable', 'unknown'
+            ]
+          - router_cve_2026_98432_kernel_probe.stdout
+            is search('(?m)^kernel_release=')
+          - router_cve_2026_98432_kernel_probe.stdout
+            is search('(?m)^kernel_package=')
+          - router_cve_2026_98432_status_probe.stdout
+            is search('(?m)^file=')
+          - router_cve_2026_98432_status_probe.stdout
+            is search('(?m)^active=')
+
+    - name: Verify vulnerable and fixed kernel version boundaries
+      ansible.builtin.raw: >-
+        CVE_ACTION=classify CVE_VERSION={{ item.version }} sh -c {{
+          lookup(
+            'ansible.builtin.file',
+            playbook_dir ~
+            '/../../../roles/router_cve_2026_98432/files/manage.sh'
+          ) | quote
+        }}
+      loop:
+        - version: 6.12.112
+          expected: vulnerable
+        - version: 6.12.113
+          expected: patched
+        - version: 5.15.222
+          expected: vulnerable
+        - version: 5.15.223
+          expected: patched
+        - version: 6.6.158
+          expected: vulnerable
+        - version: 6.6.159
+          expected: patched
+        - version: 7.3-rc6
+          expected: vulnerable
+        - version: 7.3-rc7
+          expected: patched
+        - version: 7.3.0-rc6
+          expected: vulnerable
+        - version: 7.3.0-rc7
+          expected: patched
+      register: router_cve_2026_98432_version_tests
+      changed_when: false
+
+    - name: Assert kernel version boundary results
+      ansible.builtin.assert:
+        that:
+          - item.stdout | trim == item.item.expected
+      loop: "{{ router_cve_2026_98432_version_tests.results }}"
+      loop_control:
+        label: "{{ item.item.version }} -> {{ item.item.expected }}"
+
     - name: Verify container storage is not treated as expandable SquashFS
       ansible.builtin.assert:
         that:
