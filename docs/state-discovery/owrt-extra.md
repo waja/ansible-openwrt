@@ -270,7 +270,8 @@ The collector invokes the optional helper only from
 - `ubus call network.interface dump` — netifd's logical interface
   status.
 - `ip address show` — current addresses and link state from the kernel.
-- `ip route show table all` — routing tables.
+- `ip route show table all` — IPv4 routing tables (`ip-routes.txt`).
+- `ip -6 route show table all` — IPv6 routing tables (`ip6-routes.txt`).
 - `ip rule show` — IPv4 policy-routing rules.
 - `ip -6 rule show` — IPv6 policy-routing rules.
 - `lsmod` — currently loaded modules.
