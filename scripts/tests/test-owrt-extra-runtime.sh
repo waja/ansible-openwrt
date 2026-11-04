@@ -62,7 +62,7 @@ grep -Fx "nft-ruleset	failed	7" "$TMP/failure/status.txt" >/dev/null || fail "fa
 grep -Fq "partial ruleset" "$TMP/failure/nft-ruleset.txt" || fail "partial output"
 grep -Fx "ip-address	ok	0" "$TMP/failure/status.txt" >/dev/null || fail "later snapshot skipped"
 mkdir -m 700 "$TMP/no-stat-bin"
-if PATH="$TMP/no-stat-bin" sh "$HELPER" "$TMP/no-stat" >"$TMP/no-stat.log" 2>&1; then
+if PATH="$TMP/no-stat-bin" /bin/sh "$HELPER" "$TMP/no-stat" >"$TMP/no-stat.log" 2>&1; then
  fail "missing stat accepted"
 fi
 grep -F "stat is required to inspect the output parent." "$TMP/no-stat.log" >/dev/null ||
