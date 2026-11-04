@@ -11,11 +11,14 @@ options, report sections, retained files, security precautions, migration
 guidance, and known limitations.
 
 ```sh
-scp scripts/owrt-extra.sh root@router1:/tmp/
-scp scripts/owrt-extra-runtime.sh \\
+scp scripts/owrt-extra.sh \
+  root@router1:/usr/libexec/owrt-extra.sh
+scp scripts/owrt-extra-runtime.sh \
   root@router1:/usr/libexec/owrt-extra-runtime.sh
-ssh root@router1 'chmod 600 /usr/libexec/owrt-extra-runtime.sh'
-ssh root@router1 'sh /tmp/owrt-extra.sh'
+ssh root@router1 \
+  'chmod 600 /usr/libexec/owrt-extra.sh \
+   /usr/libexec/owrt-extra-runtime.sh'
+ssh root@router1 'sh /usr/libexec/owrt-extra.sh'
 ```
 
 The report is written to `/tmp/owrt-diff/` in RAM. Treat it as sensitive:
@@ -24,15 +27,15 @@ UCI options, but raw evidence can still contain secrets. Host-key export
 is opt-in (`-H`); with `-H`, private keys are copied in plaintext under
 `/tmp/owrt-diff/secrets/`. A new run refuses to overwrite an existing
 report. After securely retrieving what you need, remove the report with
-`sh /tmp/owrt-extra.sh -c`, then remove the copied script.
+`sh /usr/libexec/owrt-extra.sh -c`, then remove the installed scripts with\n`rm -f /usr/libexec/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh`.
 
 Options: `-k` keeps the temporary factory reference mounted for
 inspection, `-f` rebuilds that reference, `-H` exports host keys, and
 `-c` explicitly removes an existing report without touching the reference
 mount. Use `-c` on its own. To review an existing raw UCI diff with the
 terminal redaction filter, use
-`sh /tmp/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
-Read the script's help (`sh /tmp/owrt-extra.sh -h`) before using these
+`sh /usr/libexec/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
+Read the script's help (`sh /usr/libexec/owrt-extra.sh -h`) before using these
 options.
 
 The report includes a UCI diff, overlay-file candidates, package and
