@@ -9,6 +9,7 @@ export LC_ALL
 TEST_TMP=$(mktemp -d "/tmp/owrt-extra-tests.XXXXXX")
 export OWRT_TEST_TMP="$TEST_TMP"
 unset OWRT_TEST_FACTORY_FAIL
+unset OWRT_TEST_UNMOUNT_FAIL
 cleanup() {
     rm -rf "$TEST_TMP"
 }
