@@ -22,6 +22,10 @@ esac
 # All subsequent output paths are relative to this directory, so a rename or
 # replacement of the original pathname cannot redirect status/snapshot writes.
 cd -P "$parent" || { echo "Cannot access output parent: $parent" >&2; exit 1; }
+if ! command -v stat >/dev/null 2>&1; then
+ echo "stat is required to inspect the output parent." >&2
+ exit 1
+fi
 parent_metadata=$(stat -c '%u %a' .) || {
  echo "Cannot inspect output parent directory." >&2
  exit 1
