@@ -1,0 +1,139 @@
+# roles/router_cve_2026_98432/tasks/main.yml
+---
+- name: Validate CVE mitigation state and kernel override
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_state in ['auto', 'present', 'absent']
+      - router_cve_2026_98432_kernel_status in [
+          'auto', 'patched', 'vulnerable'
+        ]
+      - router_cve_2026_98432_manage is boolean
+    fail_msg: >-
+      CVE mitigation state must be auto, present, or absent; kernel status
+      must be auto, patched, or vulnerable; manage must be a boolean.
+
+- name: Detect running and installed kernel patch status
+  ansible.builtin.script: "{{ (role_path ~ '/files/manage.sh') | quote }}"
+  environment:
+    CVE_ACTION: detect
+  register: router_cve_2026_98432_kernel_probe
+  changed_when: false
+  check_mode: false
+
+- name: Derive effective running kernel status
+  ansible.builtin.set_fact:
+    router_cve_2026_98432_effective_kernel_status: >-
+      {{
+        router_cve_2026_98432_kernel_status
+        if router_cve_2026_98432_kernel_status != 'auto'
+        else (
+          router_cve_2026_98432_kernel_probe.stdout
+          | regex_findall('(?m)^kernel_status=(.*)$')
+          | first
+          | trim
+          | default('unknown', true)
+        )
+      }}
+  changed_when: false
+
+- name: Select desired mitigation state
+  ansible.builtin.set_fact:
+    router_cve_2026_98432_desired_state: >-
+      {{
+        'absent' if router_cve_2026_98432_state == 'absent'
+        else (
+          'present' if router_cve_2026_98432_state == 'present'
+          else (
+            'absent'
+            if router_cve_2026_98432_effective_kernel_status == 'patched'
+            else 'present'
+          )
+        )
+      }}
+  changed_when: false
+
+- name: Manage CVE mitigation independently of other roles
+  ansible.builtin.script: "{{ (role_path ~ '/files/manage.sh') | quote }}"
+  environment:
+    CVE_ACTION: >-
+      {{ 'install' if router_cve_2026_98432_desired_state == 'present'
+         else 'remove' }}
+  register: router_cve_2026_98432_apply
+  changed_when: "'changed=yes' in router_cve_2026_98432_apply.stdout"
+  when: router_cve_2026_98432_manage | bool
+
+- name: Inspect current mitigation state in detection-only mode
+  ansible.builtin.script: "{{ (role_path ~ '/files/manage.sh') | quote }}"
+  environment:
+    CVE_ACTION: status
+  register: router_cve_2026_98432_status_probe
+  changed_when: >-
+    (
+      router_cve_2026_98432_desired_state == 'present'
+      and (
+        'file=present' not in router_cve_2026_98432_status_probe.stdout
+        or 'ruleset=correct' not in router_cve_2026_98432_status_probe.stdout
+        or 'include=present' not in router_cve_2026_98432_status_probe.stdout
+        or 'sysupgrade=present' not in router_cve_2026_98432_status_probe.stdout
+        or 'active=present' not in router_cve_2026_98432_status_probe.stdout
+      )
+    ) or (
+      router_cve_2026_98432_desired_state == 'absent'
+      and (
+        'file=absent' not in router_cve_2026_98432_status_probe.stdout
+        or 'ruleset=absent' not in router_cve_2026_98432_status_probe.stdout
+        or 'include=absent' not in router_cve_2026_98432_status_probe.stdout
+        or 'sysupgrade=absent' not in router_cve_2026_98432_status_probe.stdout
+        or 'active=absent' not in router_cve_2026_98432_status_probe.stdout
+      )
+    )
+  check_mode: false
+  when: not router_cve_2026_98432_manage | bool or ansible_check_mode
+
+- name: Report mitigation and kernel detection
+  ansible.builtin.debug:
+    msg:
+      running_kernel: >-
+        {{
+          router_cve_2026_98432_kernel_probe.stdout
+          | regex_findall('(?m)^kernel_release=(.*)$')
+          | first
+          | default('unknown', true)
+        }}
+      installed_kernel_package: >-
+        {{
+          router_cve_2026_98432_kernel_probe.stdout
+          | regex_findall('(?m)^kernel_package=(.*)$')
+          | first
+          | default('unknown', true)
+        }}
+      installed_kernel_version: >-
+        {{
+          router_cve_2026_98432_kernel_probe.stdout
+          | regex_findall('(?m)^installed_kernel_version=(.*)$')
+          | first
+          | default('unknown', true)
+        }}
+      installed_kernel_status: >-
+        {{
+          router_cve_2026_98432_kernel_probe.stdout
+          | regex_findall('(?m)^installed_kernel_status=(.*)$')
+          | first
+          | default('unknown', true)
+        }}
+      kernel_package_suggests_fixed_update: >-
+        {{
+          router_cve_2026_98432_kernel_probe.stdout
+          | regex_findall('(?m)^kernel_package_suggests_fixed_update=(.*)$')
+          | first
+          | default('unknown', true)
+        }}
+      kernel_status: "{{ router_cve_2026_98432_effective_kernel_status }}"
+      desired_mitigation: "{{ router_cve_2026_98432_desired_state }}"
+      mitigation_status: >-
+        {{
+          router_cve_2026_98432_status_probe.stdout
+          | default('managed by this role')
+        }}
+      apply_result: >-
+        {{ router_cve_2026_98432_apply.stdout | default('not managed') }}
