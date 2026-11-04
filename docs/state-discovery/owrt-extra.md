@@ -56,7 +56,8 @@ if later commands succeed.
 
 ## Run the discovery
 
-Install both collector scripts at their trusted paths on the router, then run the main script as root:
+Install both collector scripts at their trusted paths on the router, then
+run the main script as root:
 
 ```sh
 scp scripts/owrt-extra.sh \
