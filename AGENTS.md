@@ -14,6 +14,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
 - `playbooks/site.yml` – standard configuration for all OpenWrt routers
 - `playbooks/audit_packages.yml` – optional installed-package comparison
 - `playbooks/storage.yml` – optional root storage inspection and expansion
+- `playbooks/cve-2026-98432.yml` – standalone CVE mitigation
 - `docs/configuration.md` – router configuration overview, playbook usage,
   inventory organization, and links to role-specific guides
 - `docs/roles/<role_name>.md` – detailed configuration guide for each
@@ -45,6 +46,7 @@ warns on PRs that target `master` and adds the `needs-rebase` label.
   non-interactive tailnet authentication
 - `roles/router_package_audit/` – optional comparison with a saved baseline
 - `roles/router_storage/` – read-only root storage detection and opt-in expansion
+- `roles/router_cve_2026_98432/` – standalone temporary CVE mitigation and running-kernel detection
 - `roles/router_owut/` – optional read-only firmware update checks for
   OpenWrt 25.12+
 - `roles/<role_name>/` – roles with `tasks/main.yml` and

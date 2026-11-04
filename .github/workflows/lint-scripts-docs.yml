@@ -70,7 +70,7 @@ jobs:
           markdown=false
           while IFS= read -r path; do
             case "$path" in
-              scripts/*|.shellcheckrc)
+              scripts/*|roles/router_cve_2026_98432/files/*|.shellcheckrc)
                 scripts=true
                 ;;
               *.md|.markdownlint-cli2.jsonc|.codespellrc)
@@ -133,6 +133,20 @@ jobs:
           version: v0.11.0
         env:
           SHELLCHECK_OPTS: --external-sources
+
+      - name: Lint role POSIX shell scripts
+        if: >-
+          needs.changes.result != 'success'
+          || needs.changes.outputs.scripts == 'true'
+          || github.event_name == 'workflow_dispatch'
+        # v2
+        uses: >-
+          step-security/action-shellcheck@93e3a10f8992244473b1c679f7736a92f197445b
+        with:
+          scandir: ./roles/router_cve_2026_98432/files
+          version: v0.11.0
+        env:
+          SHELLCHECK_OPTS: --shell=sh
 
       - name: Lint Markdown syntax
         if: >-

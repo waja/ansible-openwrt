@@ -1,0 +1,5 @@
+# roles/router_cve_2026_98432/defaults/main.yml
+---
+router_cve_2026_98432_state: auto
+router_cve_2026_98432_kernel_status: auto
+router_cve_2026_98432_manage: true
