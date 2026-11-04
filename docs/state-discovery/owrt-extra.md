@@ -26,7 +26,7 @@ that arbitrary factory scripts are side-effect free.
   and `apk`. On installations without the required applets, install the
   OpenWrt packages `coreutils-comm` and `diffutils`. The script performs
   a command preflight before creating a report; `stat` and `fw_printenv`
-  are optional.
+  are optional for the main collector. The runtime helper requires `stat`.
 
 The reference reconstruction uses the router's own board data and
 factory files. It copies `/etc/board.json` and the device's
@@ -59,11 +59,14 @@ if later commands succeed.
 Copy the script to the router and run it as root:
 
 ```sh
-scp scripts/owrt-extra.sh scripts/owrt-extra-runtime.sh root@router1:/tmp/
-ssh root@router1 \\
-  'cp /tmp/owrt-extra-runtime.sh /usr/libexec/owrt-extra-runtime.sh && \\
-   chmod 600 /usr/libexec/owrt-extra-runtime.sh'
-ssh root@router1 'sh /tmp/owrt-extra.sh'
+scp scripts/owrt-extra.sh \
+  root@router1:/usr/libexec/owrt-extra.sh
+scp scripts/owrt-extra-runtime.sh \
+  root@router1:/usr/libexec/owrt-extra-runtime.sh
+ssh root@router1 \
+  'chmod 600 /usr/libexec/owrt-extra.sh \
+   /usr/libexec/owrt-extra-runtime.sh'
+ssh root@router1 'sh /usr/libexec/owrt-extra.sh'
 ```
 
 The report and retained evidence are written below
@@ -76,7 +79,7 @@ RAM on a normal OpenWrt system. Retrieve only the files you need over
 a protected connection.
 
 After retrieving or securely preserving the report, remove it explicitly
-with `sh /tmp/owrt-extra.sh -c`. This cleanup mode acquires and releases
+with `sh /usr/libexec/owrt-extra.sh -c`. This cleanup mode acquires and releases
 the normal run lock, refuses a pre-existing lock, symlink, or mounted
 report path, removes only `/tmp/owrt-diff/`, and exits without touching
 `/tmp/ref/`. It is safe to repeat when no report exists. A normal
@@ -340,7 +343,7 @@ SSH keys and ordinary public certificates are not classified as private-key
 material merely because they are key/certificate files. The path classifier
 is explicit and best-effort; it does not inspect file contents or identify
 arbitrary secrets stored under unexpected names.
-Use `sh /tmp/owrt-extra.sh --is-sensitive-path RELATIVE_PATH` to check the
+Use `sh /usr/libexec/owrt-extra.sh --is-sensitive-path RELATIVE_PATH` to check the
 script's current path rules.
 
 The filter is deliberately heuristic: it cannot identify every secret,
@@ -359,8 +362,8 @@ reviewed before external sharing. The filter does not alter or sanitize
 persisted evidence.
 
 Review the report before sharing it. For an existing raw text file, use
-`sh /tmp/owrt-extra.sh --redact-text FILE`; for a UCI diff,
-`sh /tmp/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
+`sh /usr/libexec/owrt-extra.sh --redact-text FILE`; for a UCI diff,
+`sh /usr/libexec/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
 Both commands write only to stdout and leave the input byte-for-byte
 unchanged. Raw files such as `factory.show`, `current.show`, `uci.diff`,
 `apk-audit-system.txt`, `uboot.env`, and optional host-key exports are
@@ -380,11 +383,11 @@ permissions before the relevant service starts for the first time, or
 restart that service afterwards.
 
 After retrieving the evidence you need, remove the report through the
-script's guarded cleanup mode, then remove the copied script:
+script's guarded cleanup mode, then remove the installed scripts:
 
 ```sh
-sh /tmp/owrt-extra.sh -c
-rm -f /tmp/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh
+sh /usr/libexec/owrt-extra.sh -c
+rm -f /usr/libexec/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh
 ```
 
 Do not replace the guarded cleanup with a manual `rm -rf`: the `-c`
