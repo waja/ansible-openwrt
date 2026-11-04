@@ -79,6 +79,7 @@ snapshot nft-ruleset nft nft list ruleset || exit 1
 snapshot netifd-interfaces ubus ubus call network.interface dump || exit 1
 snapshot ip-address ip ip address show || exit 1
 snapshot ip-routes ip ip route show table all || exit 1
+snapshot ip6-routes ip ip -6 route show table all || exit 1
 snapshot ip-rules ip ip rule show || exit 1
 snapshot ip6-rules ip ip -6 rule show || exit 1
 snapshot loaded-modules lsmod lsmod || exit 1
