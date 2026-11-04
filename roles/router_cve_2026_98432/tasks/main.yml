@@ -67,7 +67,26 @@
   environment:
     CVE_ACTION: status
   register: router_cve_2026_98432_status_probe
-  changed_when: false
+  changed_when: >-
+    (
+      router_cve_2026_98432_desired_state == 'present'
+      and (
+        'file=present' not in router_cve_2026_98432_status_probe.stdout
+        or 'ruleset=correct' not in router_cve_2026_98432_status_probe.stdout
+        or 'include=present' not in router_cve_2026_98432_status_probe.stdout
+        or 'sysupgrade=present' not in router_cve_2026_98432_status_probe.stdout
+        or 'active=present' not in router_cve_2026_98432_status_probe.stdout
+      )
+    ) or (
+      router_cve_2026_98432_desired_state == 'absent'
+      and (
+        'file=absent' not in router_cve_2026_98432_status_probe.stdout
+        or 'ruleset=absent' not in router_cve_2026_98432_status_probe.stdout
+        or 'include=absent' not in router_cve_2026_98432_status_probe.stdout
+        or 'sysupgrade=absent' not in router_cve_2026_98432_status_probe.stdout
+        or 'active=absent' not in router_cve_2026_98432_status_probe.stdout
+      )
+    )
   check_mode: false
   when: not router_cve_2026_98432_manage | bool or ansible_check_mode
 
