@@ -26,7 +26,7 @@ that arbitrary factory scripts are side-effect free.
   and `apk`. On installations without the required applets, install the
   OpenWrt packages `coreutils-comm` and `diffutils`. The script performs
   a command preflight before creating a report; `stat` and `fw_printenv`
-  are optional.
+  are optional for the main collector. The runtime helper requires `stat`.
 
 The reference reconstruction uses the router's own board data and
 factory files. It copies `/etc/board.json` and the device's
@@ -56,11 +56,18 @@ if later commands succeed.
 
 ## Run the discovery
 
-Copy the script to the router and run it as root:
+Install both collector scripts at their trusted paths on the router, then
+run the main script as root:
 
 ```sh
-scp scripts/owrt-extra.sh root@router1:/tmp/owrt-extra.sh
-ssh root@router1 'sh /tmp/owrt-extra.sh'
+scp scripts/owrt-extra.sh \
+  root@router1:/usr/libexec/owrt-extra.sh
+scp scripts/owrt-extra-runtime.sh \
+  root@router1:/usr/libexec/owrt-extra-runtime.sh
+ssh root@router1 \
+  'chmod 600 /usr/libexec/owrt-extra.sh \
+   /usr/libexec/owrt-extra-runtime.sh'
+ssh root@router1 'sh /usr/libexec/owrt-extra.sh'
 ```
 
 The report and retained evidence are written below
@@ -73,7 +80,7 @@ RAM on a normal OpenWrt system. Retrieve only the files you need over
 a protected connection.
 
 After retrieving or securely preserving the report, remove it explicitly
-with `sh /tmp/owrt-extra.sh -c`. This cleanup mode acquires and releases
+with `sh /usr/libexec/owrt-extra.sh -c`. This cleanup mode acquires and releases
 the normal run lock, refuses a pre-existing lock, symlink, or mounted
 report path, removes only `/tmp/owrt-diff/`, and exits without touching
 `/tmp/ref/`. It is safe to repeat when no report exists. A normal
@@ -254,34 +261,55 @@ service's supported configuration interface rather than copying generated
 files. Keep only files that are genuinely required, reproducible, and
 appropriate to manage as desired state.
 
-### Runtime-only state needs separate inspection
+### Runtime-only state snapshots
 
-The script primarily discovers persistent configuration and filesystem
-differences. It does not comprehensively capture changes made directly
-to the running kernel or network stack. Examples include manually added
-nftables rules, IP addresses and routes, policy-routing rules,
-`sysctl -w` changes, loaded kernel modules, and manually started
-processes.
+The collector invokes the optional helper only from
+`/usr/libexec/owrt-extra-runtime.sh` and stores its output under
+`/tmp/owrt-diff/runtime/`. The helper records separate snapshots for:
 
-For a manual, read-only snapshot, collect the relevant state separately:
+- `fw4 print` — ruleset generated from current firewall4/UCI
+  configuration.
+- `nft list ruleset` — effective kernel rules, including rules added
+  outside fw4.
+- `ubus call network.interface dump` — netifd's logical interface
+  status.
+- `ip address show` — current addresses and link state from the kernel.
+- `ip route show table all` — IPv4 routing tables (`ip-routes.txt`).
+- `ip -6 route show table all` — IPv6 routing tables (`ip6-routes.txt`).
+- `ip rule show` — IPv4 policy-routing rules.
+- `ip -6 rule show` — IPv6 policy-routing rules.
+- `lsmod` — currently loaded modules.
 
-```sh
-nft list ruleset
-ip address show
-ip route show table all
-ip rule show
-sysctl -a
-lsmod
-ps w
-```
+Each command is optional, including `fw4`, `nft`, `ubus`, `ip`, and
+`lsmod`; the collector does not install packages. `status.txt` records
+`ok` or `failed` together with the command's numeric process exit code
+when it executes. If a command is unavailable, its status is
+`unavailable` and the exit-status field is `-` (no process was
+started). Failed commands retain partial output for diagnosis; one
+failure does not prevent later snapshots. Raw output is not printed to
+the terminal. The helper is read-only and refuses to overwrite an
+existing output path. Files and directory permissions are restricted
+(0700/0600).
 
-Compare these observations with persistent configuration and service
-state, for example firewall UCI configuration, `/etc/config/network`,
-and the services that are enabled. A snapshot shows what is active now;
-it does not establish how the state was created, whether it is intended,
-or whether it will survive a reboot. Do not replay runtime output as
-Ansible tasks. Any persistent change must be designed and reviewed
-explicitly. Runtime discovery is tracked separately in
+No unrestricted `sysctl -a` or process listing is collected: both can
+create large/noisy output, process arguments can contain credentials,
+and neither reliably distinguishes manual changes from service-managed
+state. A future narrowly scoped sysctl allowlist would need a concrete
+migration use case.
+
+Compare `fw4-ruleset.txt` with `nft-ruleset.txt` and firewall UCI:
+`fw4 print` shows what fw4 generates from configuration, while the nft
+snapshot shows the effective kernel rules, including included and
+runtime-added rules. A difference is a clue for investigation, not proof
+of a manual change. Compare `netifd-interfaces.txt` with
+`/etc/config/network` and the `ip` snapshots: ubus reports netifd's
+logical interface state, while `ip` reports the kernel's addresses,
+routes, and policy rules. The views are complementary. `lsmod` shows
+loaded modules but not why they are loaded. Snapshots are sensitive
+point-in-time evidence: they do not identify who created an object,
+whether it is intentional or persistent, or whether it is safe to
+reproduce on another device. Never replay them or derive Ansible tasks
+blindly. Runtime discovery is tracked in
 [issue #53](https://github.com/waja/ansible-openwrt/issues/53).
 
 ### Flash and hardware data are not normal Ansible state
@@ -316,8 +344,11 @@ SSH keys and ordinary public certificates are not classified as private-key
 material merely because they are key/certificate files. The path classifier
 is explicit and best-effort; it does not inspect file contents or identify
 arbitrary secrets stored under unexpected names.
-Use `sh /tmp/owrt-extra.sh --is-sensitive-path RELATIVE_PATH` to check the
-script's current path rules.
+Use the following command to check the script's current path rules:
+
+```sh
+sh /usr/libexec/owrt-extra.sh --is-sensitive-path RELATIVE_PATH
+```
 
 The filter is deliberately heuristic: it cannot identify every secret,
 especially opaque values under innocuous names, arbitrary binary data,
@@ -335,8 +366,8 @@ reviewed before external sharing. The filter does not alter or sanitize
 persisted evidence.
 
 Review the report before sharing it. For an existing raw text file, use
-`sh /tmp/owrt-extra.sh --redact-text FILE`; for a UCI diff,
-`sh /tmp/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
+`sh /usr/libexec/owrt-extra.sh --redact-text FILE`; for a UCI diff,
+`sh /usr/libexec/owrt-extra.sh --redact-uci-diff /tmp/owrt-diff/uci.diff`.
 Both commands write only to stdout and leave the input byte-for-byte
 unchanged. Raw files such as `factory.show`, `current.show`, `uci.diff`,
 `apk-audit-system.txt`, `uboot.env`, and optional host-key exports are
@@ -356,11 +387,11 @@ permissions before the relevant service starts for the first time, or
 restart that service afterwards.
 
 After retrieving the evidence you need, remove the report through the
-script's guarded cleanup mode, then remove the copied script:
+script's guarded cleanup mode, then remove the installed scripts:
 
 ```sh
-sh /tmp/owrt-extra.sh -c
-rm -f /tmp/owrt-extra.sh
+sh /usr/libexec/owrt-extra.sh -c
+rm -f /usr/libexec/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh
 ```
 
 Do not replace the guarded cleanup with a manual `rm -rf`: the `-c`
