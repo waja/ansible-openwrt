@@ -343,8 +343,11 @@ SSH keys and ordinary public certificates are not classified as private-key
 material merely because they are key/certificate files. The path classifier
 is explicit and best-effort; it does not inspect file contents or identify
 arbitrary secrets stored under unexpected names.
-Use `sh /usr/libexec/owrt-extra.sh --is-sensitive-path RELATIVE_PATH` to check the
-script's current path rules.
+Use the following command to check the script's current path rules:
+
+```sh
+sh /usr/libexec/owrt-extra.sh --is-sensitive-path RELATIVE_PATH
+```
 
 The filter is deliberately heuristic: it cannot identify every secret,
 especially opaque values under innocuous names, arbitrary binary data,
