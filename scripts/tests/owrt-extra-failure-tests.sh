@@ -11,6 +11,12 @@ export OWRT_TEST_TMP="$TEST_TMP"
 unset OWRT_TEST_FACTORY_FAIL
 unset OWRT_TEST_UNMOUNT_FAIL
 cleanup() {
+    if [ -e /tmp/board.json.saved ]; then
+        mv /tmp/board.json.saved /etc/board.json
+    fi
+    if [ -e /tmp/board_name.saved ]; then
+        mv /tmp/board_name.saved /tmp/sysinfo/board_name
+    fi
     rm -rf "$TEST_TMP"
 }
 trap cleanup EXIT
@@ -29,7 +35,8 @@ fail() {
 reset_case() {
     rm -rf /tmp/owrt-diff /tmp/owrt-extra.lock /tmp/ref
     rm -f "$TEST_TMP"/*-ran "$TEST_TMP"/uci-commit-ran \
-        "$TEST_TMP"/factory-failed "$TEST_TMP"/factory-order
+        "$TEST_TMP"/factory-failed "$TEST_TMP"/factory-order \
+        "$TEST_TMP"/reference-mounted "$TEST_TMP"/reference-unmount-attempted
 }
 assert_no_run_state() {
     [ ! -e /tmp/owrt-extra.lock ] || fail "lock left behind"
@@ -120,7 +127,7 @@ EOF_MOUNT
 real_grep=$(command -v grep)
 cat > "$stub/grep" <<EOF_GREP
 #!/bin/sh
-if [ -f "$OWRT_TEST_TMP/factory-failed" ] &&
+if [ -f "$OWRT_TEST_TMP/reference-mounted" ] &&
    [ "\${1:-}" = -Fq ] &&
    [ "\${2:-}" = " /tmp/ref/merged " ] &&
    [ "\${3:-}" = /proc/mounts ]; then
@@ -130,6 +137,7 @@ exec "$real_grep" "\$@"
 EOF_GREP
 cat > "$stub/umount" <<'EOF_UMOUNT'
 #!/bin/sh
+: > "$OWRT_TEST_TMP/reference-unmount-attempted"
 if [ "${OWRT_TEST_UNMOUNT_FAIL:-0}" = 1 ]; then
     echo "simulated unmount failure: $*" >&2
     exit 1
@@ -297,6 +305,7 @@ run_factory_failure_case() {
     expected2=${4:-}
     reset_case
     create_factory_defaults_fixture
+    : > "$TEST_TMP/reference-mounted"
     rm -f "$TEST_TMP"/config-generate-ran "$TEST_TMP"/uci-defaults-ran \
         "$TEST_TMP"/uci-defaults-later-ran "$TEST_TMP"/uci-commit-ran
     OWRT_TEST_FACTORY_FAIL=$failure
@@ -343,6 +352,8 @@ run_factory_failure_case() {
         fail "$name continued into UCI comparison"
     ! grep -Fq "##### 1. UCI diff" "/tmp/$name.log" ||
         fail "$name continued into comparison reporting"
+    [ -f "$TEST_TMP/reference-unmount-attempted" ] ||
+        fail "$name did not unmount the mounted reference"
     assert_no_run_state
     [ -d /tmp/owrt-diff ] || fail "$name did not preserve its diagnostic report"
     unset OWRT_TEST_FACTORY_FAIL
