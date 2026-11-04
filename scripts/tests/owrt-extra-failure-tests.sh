@@ -10,12 +10,18 @@ TEST_TMP=$(mktemp -d "/tmp/owrt-extra-tests.XXXXXX")
 export OWRT_TEST_TMP="$TEST_TMP"
 unset OWRT_TEST_FACTORY_FAIL
 unset OWRT_TEST_UNMOUNT_FAIL
+had_board=0
+had_board_name=0
 cleanup() {
     if [ -e /tmp/board.json.saved ]; then
         mv /tmp/board.json.saved /etc/board.json
+    elif [ "$had_board" = 0 ]; then
+        rm -f /etc/board.json
     fi
     if [ -e /tmp/board_name.saved ]; then
         mv /tmp/board_name.saved /tmp/sysinfo/board_name
+    elif [ "$had_board_name" = 0 ]; then
+        rm -f /tmp/sysinfo/board_name
     fi
     rm -rf "$TEST_TMP"
 }
@@ -91,7 +97,7 @@ grep -Fq "/etc/board.json is missing" /tmp/missing-board.log ||
     }
 [ ! -e /tmp/owrt-diff ] || fail "report created before board preflight"
 assert_no_run_state
-if [ "$had_board" = 1 ]; then mv /tmp/board.json.saved /etc/board.json; fi
+# Keep the original backup until EXIT cleanup; use fixture metadata meanwhile.
 
 # Supply minimal board metadata for the remaining tests.
 printf '{}\n' > /etc/board.json
@@ -108,9 +114,7 @@ grep -Fq "/tmp/sysinfo/board_name is missing" /tmp/missing-board-name.log ||
     fail "missing board_name diagnostic not found"
 [ ! -e /tmp/owrt-diff ] || fail "report created before board_name preflight"
 assert_no_run_state
-if [ "$had_board_name" = 1 ]; then
-    mv /tmp/board_name.saved /tmp/sysinfo/board_name
-fi
+# Keep the original backup until EXIT cleanup; use fixture metadata meanwhile.
 printf 'test-board\n' > /tmp/sysinfo/board_name
 
 # Stub only the operations that would require a real OpenWrt overlay/chroot.
@@ -119,6 +123,11 @@ stub=$TEST_TMP/stubs
 mkdir -p "$stub"
 cat > "$stub/mount" <<'EOF_MOUNT'
 #!/bin/sh
+[ "$#" = 6 ] || exit 90
+[ "$1" = -t ] && [ "$2" = overlay ] || exit 91
+[ "$3" = overlay ] && [ "$4" = -o ] || exit 92
+[ "$6" = /tmp/ref/merged ] || exit 93
+: > "$OWRT_TEST_TMP/reference-mounted"
 exit 0
 EOF_MOUNT
 # Simulate a still-mounted reference overlay and a failed unmount.
@@ -189,7 +198,7 @@ cat > "$stub/chroot" <<'EOF_CHROOT'
 [ "$#" = 4 ] || exit 90
 [ "$1" = /tmp/ref/merged ] || exit 92
 [ "$2" = /bin/sh ] && [ "$3" = -c ] || exit 91
-: > "$OWRT_TEST_TMP/reference-mounted"
+[ -f "$OWRT_TEST_TMP/reference-mounted" ] || exit 93
 cmd=$(printf '%s' "$4" | sed \
     -e "s#/bin/config_generate#$OWRT_TEST_ROOT/bin/config_generate#g" \
     -e "s#/etc/uci-defaults/#$OWRT_TEST_ROOT/etc/uci-defaults/#g")
