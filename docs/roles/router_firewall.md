@@ -535,7 +535,8 @@ router_firewall_zones:
 
 The role resolves the target using the same named-section precedence and
 unique anonymous-zone matching as updates. Before staging any writes, it
-checks rule, redirect, and forwarding `src` and `dest` references.
+checks rule and forwarding `src` and `dest` references, as well as redirect
+`src`, `dest`, and `reflection_zone` references.
 Removal is rejected while any of those objects still references the zone.
 Dependent objects are never cascade-deleted. Remove or update those
 references first. Removing a zone that no longer exists is a no-op.
