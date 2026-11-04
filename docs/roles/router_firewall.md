@@ -156,8 +156,20 @@ translated destination. For SNAT, `dest` is the egress zone,
 a translated source port. Reflection options apply only to DNAT.
 
 Existing redirects support partial updates: omitted options, including
-`src` and `target`, remain unchanged. The role does not infer routing,
-policy, or address assignments.
+`src` and `target`, remain unchanged. For an existing redirect with
+`state: present` (the default), omitting `target` is allowed only when the
+update does not add `src_mac`, `helper`, or reflection options (`reflection`,
+`reflection_src`, or `reflection_zone`), and does not remove `src`, `dest`, or
+`src_dip` with `null`. These changes require an explicit `target` so the role
+can validate DNAT/SNAT compatibility.
+
+When an enabled `state: present` operation explicitly declares `target`, it
+must also declare that target's required zone/address fields in the same
+mapping: DNAT requires a specific, non-wildcard `src`; SNAT requires a
+specific, non-wildcard `dest` and `src_dip`. Stored values do not satisfy
+these requirements for an explicitly targeted update. The exception is a
+new redirect: when `target` is omitted, it defaults to DNAT and requires
+`src`. The role does not infer routing, policy, or address assignments.
 
 All redirect operations are staged with zones and rules, then committed
 once and followed by at most one firewall reload. As with other firewall
