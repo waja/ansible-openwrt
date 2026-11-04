@@ -1,8 +1,8 @@
 # Firewall role
 
 The `router_firewall` role manages the firewall default policies,
-explicitly declared firewall zones and filter rules, and an optional WAN
-rule for additional Dropbear SSH listeners. Redirects and inter-zone
+explicitly declared firewall zones, filter rules, and DNAT/SNAT redirects,
+and an optional WAN rule for additional Dropbear SSH listeners. Inter-zone
 forwardings are not currently managed.
 
 ## Requirements and execution
@@ -24,9 +24,9 @@ timed rollback.
 ## Default policies
 
 The role manages the input, forward, and output policies in the first
-firewall defaults section. `router_firewall_zones` and `router_firewall_rules` default to empty
-mappings (`{}`), so no additional zones or filter rules are managed unless
-you declare them.
+firewall defaults section. `router_firewall_zones`, `router_firewall_rules`, and
+`router_firewall_redirects` default to empty mappings (`{}`), so no
+additional zones, filter rules, or redirects are managed unless declared.
 
 | Variable | Default | Accepted values |
 | --- | --- | --- |
@@ -65,9 +65,10 @@ router_firewall_rules:
 ```
 
 The mapping key is the stable UCI section ID and may contain only letters,
-digits, and underscores. The optional `name` is the human-readable rule label and defaults
-to the mapping key for newly created named sections. Anonymous UCI rules
-are adopted only when `name` is explicitly supplied; the mapping key is
+digits, and underscores. The optional `name` is the human-readable rule
+label and defaults to the mapping key for newly created named sections.
+Anonymous UCI rules are adopted only when `name` is explicitly supplied;
+the mapping key is
 not an implicit adoption identity. Adoption is refused if more than one
 candidate exists. An existing named section with the requested ID takes
 precedence.
@@ -90,6 +91,89 @@ New rules are appended in declaration order. Existing rules are not
 automatically reordered. The role validates the complete rule input and
 identities before applying UCI operations, and shares the existing single
 firewall commit and reload lifecycle.
+
+## Declarative firewall redirects (DNAT and SNAT)
+
+Declare redirects as a mapping keyed by the desired UCI section ID:
+
+```yaml
+router_firewall_redirects:
+  https_to_server:
+    name: HTTPS to internal server
+    src: wan
+    src_dport: "443"
+    dest: lan
+    dest_ip: 192.0.2.20
+    dest_port: "443"
+    proto:
+      - tcp
+    target: DNAT
+```
+
+A redirect is a NAT mapping, not a filter rule. Use `target: DNAT` for
+destination NAT, including ordinary port forwarding. Use `target: SNAT`
+for source NAT. The mapping key is the stable UCI section ID and may contain
+only letters, digits, and underscores. The optional `name` is a descriptive
+label and defaults to the mapping key.
+
+The role prefers an existing named UCI section with the requested ID. If
+none exists, it adopts an anonymous redirect only when exactly one
+redirect has the explicitly supplied `name`. Multiple matches are rejected.
+An existing section of another UCI type is a conflict and is rejected.
+
+Use `state: absent` to remove a redirect and `enabled: false` to retain
+but disable its section. Omitted options remain unchanged; explicit
+`null` removes an option. Empty lists are rejected; use `null` to remove
+list-valued options.
+
+Supported options are `src`, `src_ip`, `src_mac`, `src_port`, `src_dip`,
+`src_dport`, `dest`, `dest_ip`, `dest_port`, `proto`, `family`, `target`,
+`mark`, `reflection`, `reflection_src`, `reflection_zone`, `limit`,
+`limit_burst`, `start_date`, `start_time`, `stop_date`, `stop_time`,
+`weekdays`, `utc_time`, and `helper`. `proto`, `src_mac`, and
+`reflection_zone` accept non-empty lists where supported. `weekdays` is a
+whitespace-separated string, for example `mon wed`. Zone references must
+resolve to existing zones or zones declared as present in the same role
+invocation.
+
+The role intentionally does not expose `ipset`, `monthdays`, or legacy
+`extra` redirect options because they are unsupported by the target fw4
+implementation.
+
+DNAT normally specifies the destination host in `dest_ip`; optional
+`src_dport` and `dest_port` define the external and translated ports.
+SNAT uses optional `src_ip` to match the original source and required
+`src_dip` to rewrite it, with `dest` identifying the egress zone.
+New redirects default to DNAT when `target` is omitted and require
+`src` (a specific source zone, not `*`). Explicit SNAT redirects require
+`dest` (a specific destination zone, not `*`) and `src_dip` (the
+translated source address); `src_ip` is an optional source match. SNAT
+does not support `src_mac`, `helper`, or reflection options. For DNAT,
+`src_dip` matches the incoming destination address, `src_dport` matches
+the incoming destination port, and `dest_ip`/`dest_port` specify the
+translated destination. For SNAT, `dest` is the egress zone,
+`dest_ip`/`dest_port` are destination matches, and `src_dport` specifies
+a translated source port. Reflection options apply only to DNAT.
+
+Existing redirects support partial updates: omitted options, including
+`src` and `target`, remain unchanged. For an existing redirect with
+`state: present` (the default), omitting `target` is allowed only when the
+update does not add `src_mac`, `helper`, or reflection options (`reflection`,
+`reflection_src`, or `reflection_zone`), and does not remove `src`, `dest`, or
+`src_dip` with `null`. These changes require an explicit `target` so the role
+can validate DNAT/SNAT compatibility.
+
+When an enabled `state: present` operation explicitly declares `target`, it
+must also declare that target's required zone/address fields in the same
+mapping: DNAT requires a specific, non-wildcard `src`; SNAT requires a
+specific, non-wildcard `dest` and `src_dip`. Stored values do not satisfy
+these requirements for an explicitly targeted update. The exception is a
+new redirect: when `target` is omitted, it defaults to DNAT and requires
+`src`. The role does not infer routing, policy, or address assignments.
+
+All redirect operations are staged with zones and rules, then committed
+once and followed by at most one firewall reload. As with other firewall
+changes, applying them over SSH can interrupt the management session.
 
 ## Declarative zones
 
@@ -451,7 +535,8 @@ router_firewall_zones:
 
 The role resolves the target using the same named-section precedence and
 unique anonymous-zone matching as updates. Before staging any writes, it
-checks rule, redirect, and forwarding `src` and `dest` references.
+checks rule and forwarding `src` and `dest` references, as well as redirect
+`src`, `dest`, and `reflection_zone` references.
 Removal is rejected while any of those objects still references the zone.
 Dependent objects are never cascade-deleted. Remove or update those
 references first. Removing a zone that no longer exists is a no-op.
@@ -504,9 +589,9 @@ when your network design permits.
 | --- | --- | --- |
 | `router_firewall_apply_runtime_changes` | `true` | Reload fw4 after changes |
 
-Default policies, declared zones and rules, and the optional Dropbear WAN
-rule are staged together and committed once. The firewall is reloaded
-once only when the UCI configuration changes. Set
+Default policies, declared zones, rules and redirects, and the optional
+Dropbear WAN rule are staged together and committed once. The firewall is
+reloaded once only when the UCI configuration changes. Set
 `router_firewall_apply_runtime_changes: false` for configuration-only
 runs where the runtime reload must be deferred. The UCI configuration is
 still committed.

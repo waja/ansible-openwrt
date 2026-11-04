@@ -307,6 +307,7 @@
       [
         ['rule', 'src'], ['rule', 'dest'],
         ['redirect', 'src'], ['redirect', 'dest'],
+        ['redirect', 'reflection_zone'],
         ['forwarding', 'src'], ['forwarding', 'dest']
       ]
       | product(
@@ -345,6 +346,17 @@
   ansible.builtin.assert:
     that:
       - item.1.result_list | default([]) | length == 0
+      - >-
+        item.0.option != 'reflection_zone' or
+        (
+          router_firewall_uci_show.result
+          | regex_findall(
+              "(?m)^firewall\\..*\\.reflection_zone='"
+              ~ (item.0.zone_name | regex_escape)
+              ~ "'$"
+            )
+          | length == 0
+        )
     fail_msg: >-
       Cannot remove firewall zone '{{ item.0.zone_name }}': it is still
       referenced by {{ item.0.type }} section(s) through option
@@ -470,6 +482,9 @@
 
 - name: Add declarative firewall rule operations
   ansible.builtin.include_tasks: manage_rules.yml
+
+- name: Add declarative firewall redirect operations
+  ansible.builtin.include_tasks: manage_redirects.yml
 
 - name: Add optional additional Dropbear WAN firewall rule
   ansible.builtin.set_fact:

@@ -1449,3 +1449,586 @@
             router_firewall_order_show.result.find(
               'firewall.molecule_order_second=rule'
             )
+
+    - name: Create declarative DNAT and SNAT redirects
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_https_dnat:
+            name: Molecule HTTPS DNAT [regex].1
+            src: wan
+            src_dport: "443"
+            dest: guest_test
+            dest_ip: 192.0.2.20
+            dest_port: "443"
+            proto:
+              - tcp
+            src_mac:
+              - "02:00:00:00:00:01"
+            reflection_zone:
+              - guest_test
+            weekdays: mon wed
+            limit: "3/second"
+            limit_burst: 5
+            target: DNAT
+          molecule_snat:
+            name: Molecule SNAT
+            src: guest_test
+            src_ip: 192.0.2.250
+            src_dip: 192.0.2.10
+            dest: wan
+            proto:
+              - icmp
+            target: SNAT
+
+    - name: Read declarative firewall redirects
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_redirect_show
+      changed_when: false
+
+    - name: Verify DNAT and SNAT redirect configuration
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_https_dnat=redirect'
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.target='DNAT'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.dest_ip='192.0.2.20'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.src_dport='443'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.reflection_zone='guest_test'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.src_mac='02:00:00:00:00:01'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.weekdays='mon wed'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.limit='3/second'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.limit_burst='5'"
+            in router_firewall_redirect_show.result
+          - >-
+            'firewall.molecule_snat=redirect'
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_snat.target='SNAT'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_snat.src_dip='192.0.2.10'"
+            in router_firewall_redirect_show.result
+
+    - name: Verify DNAT and SNAT redirects are persisted and committed
+      ansible.builtin.raw: |
+        dnat_config="$(sed -n \
+          "/^config redirect 'molecule_https_dnat'$/,/^config /p" \
+          /etc/config/firewall)"
+        snat_config="$(sed -n \
+          "/^config redirect 'molecule_snat'$/,/^config /p" \
+          /etc/config/firewall)"
+        printf '%s\n' "$dnat_config" | \
+          grep -F "option target 'DNAT'" >/dev/null || {
+            echo "Missing persisted DNAT target"
+            exit 1
+          }
+        printf '%s\n' "$dnat_config" | \
+          grep -F "option dest_ip '192.0.2.20'" >/dev/null || {
+            echo "Missing persisted DNAT destination address"
+            exit 1
+          }
+        printf '%s\n' "$dnat_config" | \
+          grep -F "list proto 'tcp'" >/dev/null || {
+            echo "Missing persisted DNAT protocol"
+            exit 1
+          }
+        printf '%s\n' "$snat_config" | \
+          grep -F "option target 'SNAT'" >/dev/null || {
+            echo "Missing persisted SNAT target"
+            exit 1
+          }
+        printf '%s\n' "$snat_config" | \
+          grep -F "option src_dip '192.0.2.10'" >/dev/null || {
+            echo "Missing persisted SNAT translated address"
+            exit 1
+          }
+        printf '%s\n' "$snat_config" | \
+          grep -F "list proto 'icmp'" >/dev/null || {
+            echo "Missing persisted SNAT protocol"
+            exit 1
+          }
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
+      changed_when: false
+
+    - name: Reject a redirect name already owned by another section ID
+      block:
+        - name: Attempt to create a duplicate named redirect
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_duplicate_redirect_id:
+                name: Molecule HTTPS DNAT [regex].1
+                src: wan
+                dest_ip: 192.0.2.21
+                target: DNAT
+      rescue:
+        - name: Record duplicate redirect identity rejection
+          ansible.builtin.set_fact:
+            router_firewall_duplicate_redirect_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify duplicate redirect names are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_duplicate_redirect_failure
+            == 'Reject redirects already assigned to a different named section'
+
+    - name: Verify duplicate redirect section was not created
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_duplicate_redirect_id
+      register: router_firewall_duplicate_redirect
+      changed_when: false
+      failed_when: false
+
+    - name: Assert duplicate redirect input left UCI unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_duplicate_redirect.result | default('') == ''
+
+    - name: Require target for target-specific partial updates
+      block:
+        - name: Attempt partial SNAT update without target
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_snat:
+                reflection: true
+      rescue:
+        - name: Record missing target validation for partial redirect update
+          ansible.builtin.set_fact:
+            router_firewall_missing_partial_target_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify target is required for target-specific partial updates
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_missing_partial_target_failure
+            == (
+              'Require an explicit target for target-specific '
+              ~ 'partial redirect updates'
+            )
+
+    - name: Disable SNAT and remove its translated address option
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_snat:
+            target: SNAT
+            enabled: false
+            src_dip: null
+            proto: null
+
+    - name: Read updated SNAT redirect
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_snat_updated
+      changed_when: false
+
+    - name: Verify redirect disable and null option removal
+      ansible.builtin.assert:
+        that:
+          - >-
+            "firewall.molecule_snat.enabled='0'"
+            in router_firewall_snat_updated.result
+          - >-
+            'firewall.molecule_snat.src_dip='
+            not in router_firewall_snat_updated.result
+          - >-
+            'firewall.molecule_snat.proto='
+            not in router_firewall_snat_updated.result
+          - >-
+            'firewall.molecule_snat=redirect'
+            in router_firewall_snat_updated.result
+          - >-
+            "firewall.molecule_snat.name='Molecule SNAT'"
+            in router_firewall_snat_updated.result
+
+    - name: Verify redirect disable and null removals are persisted
+      ansible.builtin.raw: |
+        redirect_config="$(sed -n \
+          "/^config redirect 'molecule_snat'$/,/^config /p" \
+          /etc/config/firewall)"
+        printf '%s\n' "$redirect_config" | \
+          grep -F "option enabled '0'" >/dev/null || {
+            echo "Missing persisted disabled redirect option"
+            exit 1
+          }
+        if printf '%s\n' "$redirect_config" | \
+          grep -E "^[[:space:]]*(option|list) (src_dip|proto) "; then
+          echo "Explicitly null redirect option remains persisted"
+          exit 1
+        fi
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
+      changed_when: false
+
+    - name: Reapply the same redirect configuration
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_snat:
+            enabled: false
+
+    - name: Verify redirect application is idempotent
+      ansible.builtin.assert:
+        that:
+          - not router_firewall_apply_result.changed
+
+    - name: Remove declarative firewall redirects
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_https_dnat:
+            state: absent
+          molecule_snat:
+            state: absent
+
+    - name: Verify declarative firewall redirects were removed
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_redirect_removed
+      changed_when: false
+
+    - name: Assert DNAT and SNAT redirects are absent
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_https_dnat=redirect'
+            not in router_firewall_redirect_removed.result
+          - >-
+            'firewall.molecule_snat=redirect'
+            not in router_firewall_redirect_removed.result
+
+    - name: Reject non-string scalar redirect options
+      block:
+        - name: Attempt to create a redirect with an integer port
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_invalid_redirect_type:
+                src: wan
+                src_dport: 443
+                dest_ip: 192.0.2.22
+      rescue:
+        - name: Record invalid redirect option type validation
+          ansible.builtin.set_fact:
+            router_firewall_invalid_redirect_type_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify scalar redirect options require strings
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_redirect_type_failure
+            == 'Validate firewall redirect definitions'
+
+    - name: Verify invalid redirect option type did not create a section
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_invalid_redirect_type
+      register: router_firewall_invalid_redirect_type
+      changed_when: false
+      failed_when: false
+
+    - name: Assert invalid redirect option type left UCI unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_invalid_redirect_type.result | default('') == ''
+
+    - name: Reject a new default-DNAT redirect without a source zone
+      block:
+        - name: Attempt to create default DNAT without src
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_missing_dnat_src:
+                dest_ip: 192.0.2.60
+      rescue:
+        - name: Record missing DNAT source validation
+          ansible.builtin.set_fact:
+            router_firewall_missing_dnat_src_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify default DNAT requires a source zone
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_missing_dnat_src_failure
+            == 'Validate target-specific options for firewall redirects'
+
+    - name: Reject an SNAT redirect without its translated source address
+      block:
+        - name: Attempt to create SNAT without src_dip
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_missing_snat_src_dip:
+                target: SNAT
+                dest: wan
+      rescue:
+        - name: Record missing SNAT translated address validation
+          ansible.builtin.set_fact:
+            router_firewall_missing_snat_src_dip_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify SNAT requires src_dip
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_missing_snat_src_dip_failure
+            == 'Validate target-specific options for firewall redirects'
+
+    - name: Reject SNAT-only incompatible source MAC and helper options
+      block:
+        - name: Attempt SNAT with a source MAC match
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_snat_src_mac:
+                target: SNAT
+                dest: wan
+                src_dip: 192.0.2.10
+                src_mac:
+                  - "02:00:00:00:00:02"
+      rescue:
+        - name: Record unsupported SNAT source MAC validation
+          ansible.builtin.set_fact:
+            router_firewall_snat_src_mac_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify SNAT rejects src_mac
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_snat_src_mac_failure
+            == 'Validate target-specific options for firewall redirects'
+
+    - name: Reject DNAT and SNAT wildcard zone references
+      block:
+        - name: Attempt DNAT with wildcard source zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_dnat_wildcard_src:
+                src: "*"
+                dest_ip: 192.0.2.70
+      rescue:
+        - name: Record wildcard source validation
+          ansible.builtin.set_fact:
+            router_firewall_dnat_wildcard_src_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify DNAT rejects wildcard source zone
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_dnat_wildcard_src_failure
+            == 'Validate firewall redirect zone references'
+
+    - name: Reject a redirect that references an unknown zone
+      block:
+        - name: Attempt to create a redirect with an invalid zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_invalid_redirect:
+                src: unknown_zone
+                dest_ip: 192.0.2.30
+                target: DNAT
+      rescue:
+        - name: Record invalid redirect zone validation
+          ansible.builtin.set_fact:
+            router_firewall_invalid_redirect_zone_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify invalid redirect zone input was rejected before writes
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_redirect_zone_failure
+            == 'Validate firewall redirect zone references'
+
+    - name: Read firewall configuration after invalid redirect validation
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_invalid_redirect_show
+      changed_when: false
+
+    - name: Assert invalid redirect did not create a UCI section
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_invalid_redirect='
+            not in router_firewall_invalid_redirect_show.result
+
+    - name: Create an anonymous firewall redirect for adoption
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: redirect
+          - command: set
+            key: firewall.@redirect[-1].name
+            value: molecule_anonymous_redirect
+          - command: set
+            key: firewall.@redirect[-1].src
+            value: wan
+          - command: set
+            key: firewall.@redirect[-1].dest_ip
+            value: 192.0.2.40
+          - command: set
+            key: firewall.@redirect[-1].target
+            value: DNAT
+
+    - name: Adopt an anonymous firewall redirect by its explicit name
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_redirect_adopted:
+            name: molecule_anonymous_redirect
+            dest_port: "8443"
+
+    - name: Read firewall configuration after redirect adoption
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_redirect_adoption_show
+      changed_when: false
+
+    - name: Find the adopted firewall redirect by name
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: redirect
+        option: name
+        find: molecule_anonymous_redirect
+      register: router_firewall_redirect_adoption_matches
+      changed_when: false
+
+    - name: Verify anonymous redirect adoption
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_redirect_adopted=redirect'
+            in router_firewall_redirect_adoption_show.result
+          - >-
+            "firewall.molecule_redirect_adopted.name="
+            ~ "'molecule_anonymous_redirect'"
+            in router_firewall_redirect_adoption_show.result
+          - >-
+            "firewall.molecule_redirect_adopted.dest_ip="
+            ~ "'192.0.2.40'"
+            in router_firewall_redirect_adoption_show.result
+          - >-
+            "firewall.molecule_redirect_adopted.dest_port="
+            ~ "'8443'"
+            in router_firewall_redirect_adoption_show.result
+          - >-
+            router_firewall_redirect_adoption_matches.result_list | length
+            == 1
+
+    - name: Create two anonymous redirects with an ambiguous name
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: redirect
+          - command: set
+            key: firewall.@redirect[-1].name
+            value: molecule_ambiguous_redirect
+          - command: set
+            key: firewall.@redirect[-1].target
+            value: DNAT
+          - command: add
+            config: firewall
+            type: redirect
+          - command: set
+            key: firewall.@redirect[-1].name
+            value: molecule_ambiguous_redirect
+          - command: set
+            key: firewall.@redirect[-1].target
+            value: DNAT
+
+    - name: Reject ambiguous anonymous redirect adoption
+      block:
+        - name: Attempt to adopt ambiguous anonymous redirects
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_ambiguous_redirect_id:
+                name: molecule_ambiguous_redirect
+                src: wan
+                dest_ip: 192.0.2.50
+                target: DNAT
+      rescue:
+        - name: Record ambiguous redirect validation failure
+          ansible.builtin.set_fact:
+            router_firewall_ambiguous_redirect_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify ambiguous redirect adoption was rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_ambiguous_redirect_failure
+            == 'Reject ambiguous anonymous firewall redirect matches'
