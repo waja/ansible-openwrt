@@ -61,7 +61,7 @@ def extract_archive(archive, destination):
                     "Archive extension metadata exceeds maximum size of "
                     f"{MAX_EXTENSION_METADATA_SIZE} bytes"
                 )
-            size = self._block(self.size)
+            size = tarfile.BLOCKSIZE + self._block(self.size)
             reserve_metadata(source, size)
             try:
                 return parser(source)
