@@ -21,15 +21,20 @@ class FakeResponse:
             self.headers["Content-Length"] = str(content_length)
 
     def __enter__(self):
+        """Return this response as a context manager."""
         return self
 
     def __exit__(self, *args):
+        """Leave response cleanup to the test fixture."""
         return False
 
     def geturl(self):
+        """Return the HTTPS URL associated with this fake response."""
         return "https://example.invalid/archive.tar.gz"
 
     def read(self, size=-1):
+        """Return the next configured response chunk."""
+
         try:
             chunk = next(self.chunks)
         except StopIteration:
