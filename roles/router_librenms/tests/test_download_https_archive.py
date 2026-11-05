@@ -48,27 +48,34 @@ class DownloadArchiveTests(unittest.TestCase):
             destination = Path(temporary) / "archive.tar.gz"
             response = FakeResponse([b"must not be read"], content_length=11)
             with (
-                mock.patch.object(download_https_archive, "MAX_ARCHIVE_SIZE", 10),
+                mock.patch.object(
+                    download_https_archive, "MAX_ARCHIVE_SIZE", 10
+                ),
                 mock.patch.object(
                     download_https_archive,
                     "build_opener",
-                    return_value=mock.Mock(open=mock.Mock(return_value=response)),
+                    return_value=mock.Mock(
+                        open=mock.Mock(return_value=response)
+                    ),
                 ),
             ):
                 with self.assertRaisesRegex(ValueError, "exceeds maximum size"):
                     download_https_archive.download(
-                        "https://example.invalid/archive.tar.gz", destination
+                        "https://example.invalid/archive.tar.gz",
+                        destination,
                     )
             self.assertFalse(destination.exists())
 
-    def test_rejects_stream_larger_than_limit_without_replacing_destination(self):
+    def test_rejects_stream_larger_than_limit(self):
         """Stop writing as soon as a streamed response exceeds the limit."""
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / "archive.tar.gz"
             destination.write_bytes(b"previous archive")
             response = FakeResponse([b"123456", b"78901"])
             with (
-                mock.patch.object(download_https_archive, "MAX_ARCHIVE_SIZE", 10),
+                mock.patch.object(
+                    download_https_archive, "MAX_ARCHIVE_SIZE", 10
+                ),
                 mock.patch.object(
                     download_https_archive,
                     "DOWNLOAD_CHUNK_SIZE",
@@ -77,15 +84,21 @@ class DownloadArchiveTests(unittest.TestCase):
                 mock.patch.object(
                     download_https_archive,
                     "build_opener",
-                    return_value=mock.Mock(open=mock.Mock(return_value=response)),
+                    return_value=mock.Mock(
+                        open=mock.Mock(return_value=response)
+                    ),
                 ),
             ):
                 with self.assertRaisesRegex(ValueError, "exceeds maximum size"):
                     download_https_archive.download(
-                        "https://example.invalid/archive.tar.gz", destination
+                        "https://example.invalid/archive.tar.gz",
+                        destination,
                     )
             self.assertEqual(destination.read_bytes(), b"previous archive")
-            self.assertEqual(list(Path(temporary).glob(".librenms-archive-*")), [])
+            temporary_files = list(
+                Path(temporary).glob(".librenms-archive-*")
+            )
+            self.assertEqual(temporary_files, [])
 
     def test_accepts_response_at_size_limit(self):
         """Accept a response whose complete body fits the configured limit."""
@@ -93,7 +106,9 @@ class DownloadArchiveTests(unittest.TestCase):
             destination = Path(temporary) / "archive.tar.gz"
             response = FakeResponse([b"12345", b"67890"])
             with (
-                mock.patch.object(download_https_archive, "MAX_ARCHIVE_SIZE", 10),
+                mock.patch.object(
+                    download_https_archive, "MAX_ARCHIVE_SIZE", 10
+                ),
                 mock.patch.object(
                     download_https_archive,
                     "DOWNLOAD_CHUNK_SIZE",
@@ -102,11 +117,14 @@ class DownloadArchiveTests(unittest.TestCase):
                 mock.patch.object(
                     download_https_archive,
                     "build_opener",
-                    return_value=mock.Mock(open=mock.Mock(return_value=response)),
+                    return_value=mock.Mock(
+                        open=mock.Mock(return_value=response)
+                    ),
                 ),
             ):
                 download_https_archive.download(
-                    "https://example.invalid/archive.tar.gz", destination
+                    "https://example.invalid/archive.tar.gz",
+                    destination,
                 )
             self.assertEqual(destination.read_bytes(), b"1234567890")
 
