@@ -10,6 +10,27 @@ from pathlib import Path, PurePosixPath
 MAX_ARCHIVE_SIZE = 64 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 10_000
 MAX_EXPANDED_SIZE = 256 * 1024 * 1024
+MAX_EXTENSION_METADATA_SIZE = 1024 * 1024
+
+
+class BoundedTarInfo(tarfile.TarInfo):
+    """Reject oversized extension metadata before tarfile reads its payload."""
+
+    def _proc_pax(self, source):
+        if self.size > MAX_EXTENSION_METADATA_SIZE:
+            raise ValueError(
+                "Archive extension metadata exceeds maximum size of "
+                f"{MAX_EXTENSION_METADATA_SIZE} bytes"
+            )
+        return super()._proc_pax(source)
+
+    def _proc_gnulong(self, source):
+        if self.size > MAX_EXTENSION_METADATA_SIZE:
+            raise ValueError(
+                "Archive extension metadata exceeds maximum size of "
+                f"{MAX_EXTENSION_METADATA_SIZE} bytes"
+            )
+        return super()._proc_gnulong(source)
 
 
 def extract_archive(archive, destination):
@@ -26,7 +47,7 @@ def extract_archive(archive, destination):
             f"Archive exceeds maximum size of {MAX_ARCHIVE_SIZE} bytes"
         )
 
-    with tarfile.open(archive, mode="r:*") as source:
+    with tarfile.open(archive, mode="r:*", tarinfo=BoundedTarInfo) as source:
         members = []
         expanded_size = 0
         while True:
