@@ -3,6 +3,7 @@
 import io
 import sys
 import tarfile
+import tracemalloc
 import tempfile
 import unittest
 from pathlib import Path
@@ -211,6 +212,30 @@ class ExtractArchiveTests(unittest.TestCase):
                 ValueError, "^Hard links are not supported:"
             ):
                 extract_archive(archive, destination)
+
+    def test_rejects_oversized_pax_metadata_before_buffering(self):
+        """Reject oversized PAX metadata without buffering its full payload."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar.gz"
+            destination = root / "destination"
+            destination.mkdir()
+            with tarfile.open(archive, "w:gz", format=tarfile.PAX_FORMAT) as source:
+                member = tarfile.TarInfo("agent-main/snmp/distro")
+                member.pax_headers = {"comment": "x" * (8 * 1024 * 1024)}
+                source.addfile(member)
+
+            tracemalloc.start()
+            try:
+                with self.assertRaisesRegex(
+                    ValueError, "extension metadata exceeds maximum size"
+                ):
+                    extract_archive(archive, destination)
+                _, peak_memory = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+
+            self.assertLess(peak_memory, 4 * 1024 * 1024)
 
     def test_rejects_archive_exceeding_size_limit(self):
         """Reject archives larger than the compressed-size limit."""
