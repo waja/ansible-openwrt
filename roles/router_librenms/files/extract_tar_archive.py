@@ -28,35 +28,106 @@ def extract_archive(archive, destination):
             f"Archive exceeds maximum size of {MAX_ARCHIVE_SIZE} bytes"
         )
 
-    metadata_budget = [0]
+    metadata_budget = {"total": 0}
+
+    def reserve_metadata(source, size):
+        """Reserve metadata bytes before reading an extension payload."""
+        pending = getattr(source, "_pending_extension_metadata", 0) + size
+        total = metadata_budget["total"] + size
+        if total > MAX_EXTENSION_METADATA_TOTAL_SIZE:
+            raise ValueError(
+                "Archive cumulative extension metadata exceeds "
+                f"{MAX_EXTENSION_METADATA_TOTAL_SIZE} bytes"
+            )
+        if pending > MAX_EXTENSION_METADATA_TOTAL_SIZE:
+            raise ValueError(
+                "Archive chained extension metadata exceeds "
+                f"{MAX_EXTENSION_METADATA_TOTAL_SIZE} bytes"
+            )
+        metadata_budget["total"] = total
+        source._pending_extension_metadata = pending
+
+    def release_metadata(source, size):
+        """Release metadata retained by a completed or failed parser."""
+        source._pending_extension_metadata -= size
 
     class BoundedTarInfo(tarfile.TarInfo):
         """Bound individual and cumulative extension metadata."""
 
-        def _account_extension_metadata(self):
-            block_size = tarfile.BLOCKSIZE
-            padded_size = (
-                (self.size + block_size - 1) // block_size
-            ) * block_size
-            metadata_budget[0] += block_size + padded_size
+        def _bounded(self, source, parser):
+            """Run an extension parser while its payload remains accounted."""
             if self.size > MAX_EXTENSION_METADATA_SIZE:
                 raise ValueError(
                     "Archive extension metadata exceeds maximum size of "
                     f"{MAX_EXTENSION_METADATA_SIZE} bytes"
                 )
-            if metadata_budget[0] > MAX_EXTENSION_METADATA_TOTAL_SIZE:
-                raise ValueError(
-                    "Archive cumulative extension metadata exceeds "
-                    f"{MAX_EXTENSION_METADATA_TOTAL_SIZE} bytes"
-                )
+            size = self._block(self.size)
+            reserve_metadata(source, size)
+            try:
+                return parser(source)
+            finally:
+                release_metadata(source, size)
 
         def _proc_pax(self, source):
-            self._account_extension_metadata()
-            return super()._proc_pax(source)
+            """Process PAX headers within the shared metadata budget."""
+            return self._bounded(source, super()._proc_pax)
 
         def _proc_gnulong(self, source):
-            self._account_extension_metadata()
-            return super()._proc_gnulong(source)
+            """Process GNU long-name headers within the metadata budget."""
+            return self._bounded(source, super()._proc_gnulong)
+
+        def _proc_sparse(self, source):
+            """Process GNU sparse headers with bounded extension blocks."""
+            structs, isextended, origsize = self._sparse_structs
+            del self._sparse_structs
+            reserved = 0
+            try:
+                while isextended:
+                    reserve_metadata(source, tarfile.BLOCKSIZE)
+                    reserved += tarfile.BLOCKSIZE
+                    buf = source.fileobj.read(tarfile.BLOCKSIZE)
+                    pos = 0
+                    for _ in range(21):
+                        try:
+                            offset = tarfile.nti(buf[pos:pos + 12])
+                            numbytes = tarfile.nti(buf[pos + 12:pos + 24])
+                        except ValueError:
+                            break
+                        if offset and numbytes:
+                            structs.append((offset, numbytes))
+                        pos += 24
+                    isextended = bool(buf[504])
+                self.sparse = structs
+                self.offset_data = source.fileobj.tell()
+                source.offset = self.offset_data + self._block(self.size)
+                self.size = origsize
+                return self
+            finally:
+                if reserved:
+                    release_metadata(source, reserved)
+
+        def _proc_gnusparse_10(self, next_member, pax_headers, source):
+            """Read GNU sparse 1.0 maps within the shared metadata budget."""
+            sparse = []
+            reserved = 0
+            try:
+                reserve_metadata(source, tarfile.BLOCKSIZE)
+                reserved += tarfile.BLOCKSIZE
+                buf = source.fileobj.read(tarfile.BLOCKSIZE)
+                fields, buf = buf.split(b"\\n", 1)
+                fields = int(fields)
+                while len(sparse) < fields * 2:
+                    if b"\\n" not in buf:
+                        reserve_metadata(source, tarfile.BLOCKSIZE)
+                        reserved += tarfile.BLOCKSIZE
+                        buf += source.fileobj.read(tarfile.BLOCKSIZE)
+                    number, buf = buf.split(b"\\n", 1)
+                    sparse.append(int(number))
+                next_member.offset_data = source.fileobj.tell()
+                next_member.sparse = list(zip(sparse[::2], sparse[1::2]))
+            finally:
+                if reserved:
+                    release_metadata(source, reserved)
 
     with tarfile.open(archive, mode="r:*", tarinfo=BoundedTarInfo) as source:
         members = []
