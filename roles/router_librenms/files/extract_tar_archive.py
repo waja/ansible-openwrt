@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Safely extract a single-root gzip-compressed tar archive."""
+"""Safely extract a single-root tar archive within resource limits."""
 
 import os
 import sys
 import tarfile
 from pathlib import Path, PurePosixPath
+
+
+MAX_ARCHIVE_SIZE = 64 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 10_000
+MAX_EXPANDED_SIZE = 256 * 1024 * 1024
 
 
 def extract_archive(archive, destination):
@@ -15,8 +20,26 @@ def extract_archive(archive, destination):
     if any(destination.iterdir()):
         raise ValueError("Destination directory must be empty")
 
-    with tarfile.open(archive, mode="r:gz") as source:
+    archive_size = Path(archive).stat().st_size
+    if archive_size > MAX_ARCHIVE_SIZE:
+        raise ValueError(
+            f"Archive exceeds maximum size of {MAX_ARCHIVE_SIZE} bytes"
+        )
+
+    with tarfile.open(archive, mode="r:*") as source:
         members = source.getmembers()
+        if len(members) > MAX_ARCHIVE_MEMBERS:
+            raise ValueError(
+                f"Archive exceeds maximum of {MAX_ARCHIVE_MEMBERS} members"
+            )
+
+        expanded_size = sum(member.size for member in members)
+        if expanded_size > MAX_EXPANDED_SIZE:
+            raise ValueError(
+                "Archive exceeds maximum expanded size of "
+                f"{MAX_EXPANDED_SIZE} bytes"
+            )
+
         roots = set()
 
         for member in members:
