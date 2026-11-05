@@ -3,8 +3,8 @@
 import io
 import sys
 import tarfile
-import tracemalloc
 import tempfile
+import tracemalloc
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -223,6 +223,33 @@ class ExtractArchiveTests(unittest.TestCase):
             with tarfile.open(archive, "w:gz", format=tarfile.PAX_FORMAT) as source:
                 member = tarfile.TarInfo("agent-main/snmp/distro")
                 member.pax_headers = {"comment": "x" * (8 * 1024 * 1024)}
+                source.addfile(member)
+
+            tracemalloc.start()
+            try:
+                with self.assertRaisesRegex(
+                    ValueError, "extension metadata exceeds maximum size"
+                ):
+                    extract_archive(archive, destination)
+                _, peak_memory = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+
+            self.assertLess(peak_memory, 4 * 1024 * 1024)
+
+    def test_rejects_oversized_gnu_longname_metadata(self):
+        """Reject oversized GNU long-name metadata before buffering it."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar.gz"
+            destination = root / "destination"
+            destination.mkdir()
+            with tarfile.open(
+                archive, "w:gz", format=tarfile.GNU_FORMAT
+            ) as source:
+                member = tarfile.TarInfo(
+                    "agent-main/" + ("x" * (1024 * 1024 + 1))
+                )
                 source.addfile(member)
 
             tracemalloc.start()
