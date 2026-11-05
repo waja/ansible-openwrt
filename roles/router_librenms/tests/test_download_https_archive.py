@@ -15,6 +15,7 @@ class FakeResponse:
     """Provide a small in-memory HTTP response for download tests."""
 
     def __init__(self, chunks, content_length=None):
+        """Initialize a fake response from chunks and an optional length."""
         self.chunks = iter(chunks)
         self.headers = {}
         if content_length is not None:
