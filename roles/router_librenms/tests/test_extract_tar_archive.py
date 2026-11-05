@@ -6,6 +6,7 @@ import tempfile
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "files"))
 
@@ -15,9 +16,9 @@ from extract_tar_archive import extract_archive
 class ExtractArchiveTests(unittest.TestCase):
     """Exercise safe extraction of LibreNMS source archives."""
 
-    def create_archive(self, archive_path, entries):
-        """Create a gzip-compressed tar archive from test entries."""
-        with tarfile.open(archive_path, "w:gz") as archive:
+    def create_archive(self, archive_path, entries, mode="w:gz"):
+        """Create a tar archive from test entries."""
+        with tarfile.open(archive_path, mode) as archive:
             for name, content, kind, linkname in entries:
                 info = tarfile.TarInfo(name)
                 if kind == "directory":
@@ -25,6 +26,10 @@ class ExtractArchiveTests(unittest.TestCase):
                     archive.addfile(info)
                 elif kind == "symlink":
                     info.type = tarfile.SYMTYPE
+                    info.linkname = linkname
+                    archive.addfile(info)
+                elif kind == "hardlink":
+                    info.type = tarfile.LNKTYPE
                     info.linkname = linkname
                     archive.addfile(info)
                 else:
