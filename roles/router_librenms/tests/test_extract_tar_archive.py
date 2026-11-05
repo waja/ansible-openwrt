@@ -24,6 +24,7 @@ class ExtractArchiveTests(unittest.TestCase):
                 info = tarfile.TarInfo(name)
                 if kind == "directory":
                     info.type = tarfile.DIRTYPE
+                    info.mode = 0o755
                     archive.addfile(info)
                 elif kind == "symlink":
                     info.type = tarfile.SYMTYPE
@@ -220,7 +221,9 @@ class ExtractArchiveTests(unittest.TestCase):
             archive = root / "source.tar.gz"
             destination = root / "destination"
             destination.mkdir()
-            with tarfile.open(archive, "w:gz", format=tarfile.PAX_FORMAT) as source:
+            with tarfile.open(
+                archive, "w:gz", format=tarfile.PAX_FORMAT
+            ) as source:
                 member = tarfile.TarInfo("agent-main/snmp/distro")
                 member.pax_headers = {"comment": "x" * (8 * 1024 * 1024)}
                 source.addfile(member)
@@ -236,6 +239,32 @@ class ExtractArchiveTests(unittest.TestCase):
                 tracemalloc.stop()
 
             self.assertLess(peak_memory, 4 * 1024 * 1024)
+
+    def test_rejects_cumulative_extension_metadata(self):
+        """Reject many individually small extension records cumulatively."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar.gz"
+            destination = root / "destination"
+            destination.mkdir()
+            with tarfile.open(
+                archive, "w:gz", format=tarfile.PAX_FORMAT
+            ) as source:
+                for index in range(3):
+                    member = tarfile.TarInfo(
+                        f"agent-main/snmp/file-{index}"
+                    )
+                    member.pax_headers = {"comment": "small"}
+                    source.addfile(member, io.BytesIO(b""))
+
+            with mock.patch(
+                "extract_tar_archive.MAX_EXTENSION_METADATA_TOTAL_SIZE",
+                1024,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError, "cumulative extension metadata"
+                ):
+                    extract_archive(archive, destination)
 
     def test_rejects_oversized_gnu_longname_metadata(self):
         """Reject oversized GNU long-name metadata before buffering it."""
