@@ -18,7 +18,6 @@ def extract_archive(archive, destination):
     with tarfile.open(archive, mode="r:gz") as source:
         members = source.getmembers()
         roots = set()
-        root_directories = set()
 
         for member in members:
             path = PurePosixPath(member.name)
@@ -31,10 +30,11 @@ def extract_archive(archive, destination):
                 raise ValueError(f"Unsafe archive path: {member.name!r}")
 
             roots.add(parts[0])
-            if len(parts) == 1 and member.isdir():
-                root_directories.add(parts[0])
 
-        if len(roots) != 1 or roots != root_directories:
+        if len(roots) != 1 or any(
+            len(PurePosixPath(member.name).parts) == 1 and not member.isdir()
+            for member in members
+        ):
             raise ValueError(
                 "Archive must contain exactly one top-level directory"
             )
