@@ -142,7 +142,7 @@ class ExtractArchiveTests(unittest.TestCase):
                 ],
             )
 
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "^Unsafe archive path:"):
                 extract_archive(archive, destination)
 
             self.assertFalse(outside.exists())
@@ -260,6 +260,33 @@ class ExtractArchiveTests(unittest.TestCase):
             with mock.patch(
                 "extract_tar_archive.MAX_EXTENSION_METADATA_TOTAL_SIZE",
                 2048,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError, "cumulative extension metadata"
+                ):
+                    extract_archive(archive, destination)
+
+    def test_rejects_chained_pax_metadata_over_budget(self):
+        """Reject nested PAX headers before reading the next payload."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar"
+            destination = root / "destination"
+            destination.mkdir()
+            payload = b"13 comment=x\\n" + b"\\0" * (1024 - 13)
+            with tarfile.open(archive, "w:") as source:
+                for index in range(2):
+                    header = tarfile.TarInfo(f"PaxHeaders/{index}")
+                    header.type = tarfile.XHDTYPE
+                    header.size = len(payload)
+                    source.addfile(header, io.BytesIO(payload))
+                member = tarfile.TarInfo("agent-main/snmp/file")
+                member.size = 0
+                source.addfile(member, io.BytesIO(b""))
+
+            with mock.patch(
+                "extract_tar_archive.MAX_EXTENSION_METADATA_TOTAL_SIZE",
+                1500,
             ):
                 with self.assertRaisesRegex(
                     ValueError, "cumulative extension metadata"
