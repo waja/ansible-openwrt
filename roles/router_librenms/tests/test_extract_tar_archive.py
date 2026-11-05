@@ -13,7 +13,10 @@ from extract_tar_archive import extract_archive
 
 
 class ExtractArchiveTests(unittest.TestCase):
+    """Exercise safe extraction of LibreNMS source archives."""
+
     def create_archive(self, archive_path, entries):
+        """Create a gzip-compressed tar archive from test entries."""
         with tarfile.open(archive_path, "w:gz") as archive:
             for name, content, kind, linkname in entries:
                 info = tarfile.TarInfo(name)
@@ -30,6 +33,7 @@ class ExtractArchiveTests(unittest.TestCase):
                     archive.addfile(info, io.BytesIO(data))
 
     def test_extracts_files_without_top_level_directory(self):
+        """Verify extraction strips the sole top-level directory."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive = root / "source.tar.gz"
@@ -38,7 +42,6 @@ class ExtractArchiveTests(unittest.TestCase):
             self.create_archive(
                 archive,
                 [
-                    ("agent-main", "", "directory", ""),
                     ("agent-main/snmp", "", "directory", ""),
                     ("agent-main/snmp/distro", "distro script", "file", ""),
                 ],
@@ -52,7 +55,24 @@ class ExtractArchiveTests(unittest.TestCase):
             )
             self.assertFalse((destination / "agent-main").exists())
 
+    def test_accepts_archive_without_explicit_root_entry(self):
+        """Accept members beneath a root absent from the archive entries."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar.gz"
+            destination = root / "destination"
+            destination.mkdir()
+            self.create_archive(
+                archive,
+                [("agent-main/snmp/distro", "script", "file", "")],
+            )
+
+            extract_archive(archive, destination)
+
+            self.assertEqual((destination / "snmp/distro").read_text(), "script")
+
     def test_allows_safe_relative_symlinks(self):
+        """Verify safe relative symbolic links are preserved."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive = root / "source.tar.gz"
@@ -79,6 +99,7 @@ class ExtractArchiveTests(unittest.TestCase):
             self.assertEqual((destination / "snmp/link").read_text(), "data")
 
     def test_rejects_parent_directory_traversal(self):
+        """Verify parent-directory traversal is rejected."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive = root / "source.tar.gz"
@@ -99,6 +120,7 @@ class ExtractArchiveTests(unittest.TestCase):
             self.assertFalse(outside.exists())
 
     def test_rejects_absolute_paths(self):
+        """Verify absolute archive paths are rejected explicitly."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive = root / "source.tar.gz"
@@ -107,15 +129,15 @@ class ExtractArchiveTests(unittest.TestCase):
             self.create_archive(
                 archive,
                 [
-                    ("agent-main", "", "directory", ""),
                     ("/tmp/outside", "bad", "file", ""),
                 ],
             )
 
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "^Unsafe archive path:"):
                 extract_archive(archive, destination)
 
     def test_rejects_symlinks_escaping_destination(self):
+        """Verify symbolic links cannot escape the destination."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive = root / "source.tar.gz"
@@ -138,6 +160,7 @@ class ExtractArchiveTests(unittest.TestCase):
                 extract_archive(archive, destination)
 
     def test_requires_empty_destination(self):
+        """Verify extraction refuses a non-empty destination."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive = root / "source.tar.gz"
