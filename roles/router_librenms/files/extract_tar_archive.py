@@ -11,26 +11,7 @@ MAX_ARCHIVE_SIZE = 64 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 10_000
 MAX_EXPANDED_SIZE = 256 * 1024 * 1024
 MAX_EXTENSION_METADATA_SIZE = 1024 * 1024
-
-
-class BoundedTarInfo(tarfile.TarInfo):
-    """Reject oversized extension metadata before tarfile reads its payload."""
-
-    def _proc_pax(self, source):
-        if self.size > MAX_EXTENSION_METADATA_SIZE:
-            raise ValueError(
-                "Archive extension metadata exceeds maximum size of "
-                f"{MAX_EXTENSION_METADATA_SIZE} bytes"
-            )
-        return super()._proc_pax(source)
-
-    def _proc_gnulong(self, source):
-        if self.size > MAX_EXTENSION_METADATA_SIZE:
-            raise ValueError(
-                "Archive extension metadata exceeds maximum size of "
-                f"{MAX_EXTENSION_METADATA_SIZE} bytes"
-            )
-        return super()._proc_gnulong(source)
+MAX_EXTENSION_METADATA_TOTAL_SIZE = 8 * 1024 * 1024
 
 
 def extract_archive(archive, destination):
@@ -46,6 +27,36 @@ def extract_archive(archive, destination):
         raise ValueError(
             f"Archive exceeds maximum size of {MAX_ARCHIVE_SIZE} bytes"
         )
+
+    metadata_budget = [0]
+
+    class BoundedTarInfo(tarfile.TarInfo):
+        """Bound individual and cumulative extension metadata."""
+
+        def _account_extension_metadata(self):
+            block_size = tarfile.BLOCKSIZE
+            padded_size = (
+                (self.size + block_size - 1) // block_size
+            ) * block_size
+            metadata_budget[0] += block_size + padded_size
+            if self.size > MAX_EXTENSION_METADATA_SIZE:
+                raise ValueError(
+                    "Archive extension metadata exceeds maximum size of "
+                    f"{MAX_EXTENSION_METADATA_SIZE} bytes"
+                )
+            if metadata_budget[0] > MAX_EXTENSION_METADATA_TOTAL_SIZE:
+                raise ValueError(
+                    "Archive cumulative extension metadata exceeds "
+                    f"{MAX_EXTENSION_METADATA_TOTAL_SIZE} bytes"
+                )
+
+        def _proc_pax(self, source):
+            self._account_extension_metadata()
+            return super()._proc_pax(source)
+
+        def _proc_gnulong(self, source):
+            self._account_extension_metadata()
+            return super()._proc_gnulong(source)
 
     with tarfile.open(archive, mode="r:*", tarinfo=BoundedTarInfo) as source:
         members = []
