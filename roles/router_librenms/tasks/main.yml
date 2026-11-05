@@ -105,7 +105,8 @@
     - name: Upload LibreNMS source archive to the router
       community.openwrt.copy:
         src: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
-        dest: "{{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz"
+        dest: >-
+          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz"
         owner: root
         group: root
         mode: '0600'
@@ -115,18 +116,17 @@
         cmd: >-
           busybox tar -tzf
           {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
+      register: router_librenms_archive_listing
       changed_when: false
 
     - name: Reject absolute paths and parent-directory traversal in archive
-      community.openwrt.shell:
-        cmd: >-
-          if busybox tar -tzf
-          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
-          | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
-            echo "Unsafe path in LibreNMS source archive" >&2
-            exit 1
-          fi
-      changed_when: false
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_librenms_archive_listing.stdout_lines
+            | select('match', '(^/|(^|/)\\.\\.(/|$))')
+            | list | length == 0
+        fail_msg: Unsafe path in LibreNMS source archive
 
     - name: Extract LibreNMS agent source archive with BusyBox tar
       community.openwrt.command:
