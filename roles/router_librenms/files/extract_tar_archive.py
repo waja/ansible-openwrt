@@ -121,7 +121,7 @@ def extract_archive(archive, destination):
                         reserve_metadata(source, tarfile.BLOCKSIZE)
                         reserved += tarfile.BLOCKSIZE
                         buf += source.fileobj.read(tarfile.BLOCKSIZE)
-                    number, buf = buf.split(b"\\n", 1)
+                    number, buf = buf.split(b"\n", 1)
                     sparse.append(int(number))
                 next_member.offset_data = source.fileobj.tell()
                 next_member.sparse = list(zip(sparse[::2], sparse[1::2]))
