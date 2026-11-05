@@ -96,16 +96,45 @@
       become: false
       changed_when: false
 
-    - name: Extract LibreNMS agent source archive
-      ansible.builtin.unarchive:
-        src: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
-        dest: "{{ router_librenms_download_dir.path }}/src"
-        remote_src: true
-        extra_opts:
-          - --strip-components=1
-      delegate_to: localhost
-      become: false
+    - name: Create temporary LibreNMS extraction directory on the router
+      community.openwrt.command:
+        cmd: mktemp -d /tmp/ansible-librenms.XXXXXX
+      register: router_librenms_remote_dir
       changed_when: false
+
+    - name: Upload LibreNMS source archive to the router
+      community.openwrt.copy:
+        src: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
+        dest: "{{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Validate LibreNMS archive with BusyBox tar
+      community.openwrt.command:
+        cmd: >-
+          busybox tar -tzf
+          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
+      changed_when: false
+
+    - name: Reject absolute paths and parent-directory traversal in archive
+      community.openwrt.shell:
+        cmd: >-
+          if busybox tar -tzf
+          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
+          | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+            echo "Unsafe path in LibreNMS source archive" >&2
+            exit 1
+          fi
+      changed_when: false
+
+    - name: Extract LibreNMS agent source archive with BusyBox tar
+      community.openwrt.command:
+        cmd: >-
+          busybox tar -xzf
+          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
+          -C {{ router_librenms_remote_dir.stdout | trim }}
+          --strip-components=1
 
     - name: Create LibreNMS script directory
       community.openwrt.file:
@@ -115,7 +144,8 @@
 
     - name: Deploy downloaded LibreNMS scripts
       community.openwrt.copy:
-        src: "{{ router_librenms_download_dir.path }}/src/{{ item.path }}"
+        src: "{{ router_librenms_remote_dir.stdout | trim }}/{{ item.path }}"
+        remote_src: true
         dest: "/etc/librenms/{{ item.name }}"
         owner: root
         group: root
@@ -146,6 +176,15 @@
         mode: '0755'
       notify: Restart SNMP daemon
   always:
+    - name: Remove temporary LibreNMS extraction directory from the router
+      community.openwrt.file:
+        path: "{{ router_librenms_remote_dir.stdout | trim }}"
+        state: absent
+      when:
+        - router_librenms_remote_dir is defined
+        - router_librenms_remote_dir.stdout is defined
+      changed_when: false
+
     - name: Remove temporary LibreNMS download directory from the controller
       ansible.builtin.file:
         path: "{{ router_librenms_download_dir.path }}"
