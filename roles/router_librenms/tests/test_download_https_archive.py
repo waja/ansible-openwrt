@@ -1,13 +1,12 @@
 """Tests for bounded HTTPS archive downloads."""
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-sys_path = Path(__file__).parents[1] / "files"
-import sys
-sys.path.insert(0, str(sys_path))
+sys.path.insert(0, str(Path(__file__).parents[1] / "files"))
 
 import download_https_archive
 
