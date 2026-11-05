@@ -71,13 +71,23 @@ router_packages_list:
 ## Managed files and SNMP configuration
 
 The role downloads one source archive from the configured archive endpoint
-to the Ansible controller during each run, then deploys the required scripts
-under `/etc/librenms`. Downloading one archive ensures all scripts come from
-the same repository snapshot and avoids depending on the GitHub REST API.
+to the Ansible controller during each run, copies it to the router, and
+extracts it there with `busybox tar`. Downloading one archive ensures all
+scripts come from the same repository snapshot and avoids depending on the
+GitHub REST API. The router must have BusyBox tar with gzip and
+`--strip-components` support. The role checks the archive listing and rejects
+absolute paths and parent-directory traversal before extraction.
 `wlInterfaces.txt` is rendered locally from the configured interface
 mappings and is not downloaded. The router itself does not need Internet
 access. The controller must be able to reach the configured endpoint over
 HTTPS; `codeload.github.com` is required only when using the default endpoint.
+
+Archive extraction is performed by the target's BusyBox implementation rather
+than Python's `tarfile` module. This reduces controller-side code and runtime
+requirements, but BusyBox tar does not provide the same explicit per-member,
+expanded-size, and metadata resource limits as the Python extractor. Treat
+this implementation as an alternative with a different security/resource
+trade-off; use a trusted archive source.
 
 `router_librenms_source_ref` selects the upstream branch, tag, or commit
 (default: `master`). Each host downloads its own archive, so a moving ref can
