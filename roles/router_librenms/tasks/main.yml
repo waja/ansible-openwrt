@@ -182,7 +182,7 @@
         state: absent
       when:
         - router_librenms_remote_dir is defined
-        - router_librenms_remote_dir.stdout is defined
+        - router_librenms_remote_dir.stdout | default('') | trim | length > 0
       changed_when: false
 
     - name: Remove temporary LibreNMS download directory from the controller
