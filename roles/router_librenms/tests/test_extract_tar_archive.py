@@ -3,9 +3,9 @@
 import io
 import tarfile
 import tempfile
+import sys
 import unittest
 from pathlib import Path
-import sys
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "files"))
 
@@ -69,7 +69,10 @@ class ExtractArchiveTests(unittest.TestCase):
 
             extract_archive(archive, destination)
 
-            self.assertEqual((destination / "snmp/distro").read_text(), "script")
+            self.assertEqual(
+                (destination / "snmp/distro").read_text(),
+                "script",
+            )
 
     def test_allows_safe_relative_symlinks(self):
         """Verify safe relative symbolic links are preserved."""
@@ -133,7 +136,9 @@ class ExtractArchiveTests(unittest.TestCase):
                 ],
             )
 
-            with self.assertRaisesRegex(ValueError, "^Unsafe archive path:"):
+            with self.assertRaisesRegex(
+                ValueError, "^Unsafe archive path:"
+            ):
                 extract_archive(archive, destination)
 
     def test_rejects_symlinks_escaping_destination(self):
