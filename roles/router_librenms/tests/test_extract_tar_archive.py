@@ -259,7 +259,7 @@ class ExtractArchiveTests(unittest.TestCase):
 
             with mock.patch(
                 "extract_tar_archive.MAX_EXTENSION_METADATA_TOTAL_SIZE",
-                1024,
+                2048,
             ):
                 with self.assertRaisesRegex(
                     ValueError, "cumulative extension metadata"
