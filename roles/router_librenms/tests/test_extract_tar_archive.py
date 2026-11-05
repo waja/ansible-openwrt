@@ -207,6 +207,60 @@ class ExtractArchiveTests(unittest.TestCase):
             ):
                 extract_archive(archive, destination)
 
+    def test_rejects_archive_exceeding_size_limit(self):
+        """Reject archives larger than the compressed-size limit."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar.gz"
+            destination = root / "destination"
+            destination.mkdir()
+            self.create_archive(
+                archive, [("agent-main/file", "data", "file", "")]
+            )
+
+            with mock.patch(
+                "extract_tar_archive.MAX_ARCHIVE_SIZE",
+                archive.stat().st_size - 1,
+            ):
+                with self.assertRaisesRegex(ValueError, "maximum size"):
+                    extract_archive(archive, destination)
+
+    def test_rejects_too_many_archive_members(self):
+        """Reject archives exceeding the configured member-count limit."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar.gz"
+            destination = root / "destination"
+            destination.mkdir()
+            self.create_archive(
+                archive,
+                [
+                    ("agent-main/a", "a", "file", ""),
+                    ("agent-main/b", "b", "file", ""),
+                ],
+            )
+
+            with mock.patch("extract_tar_archive.MAX_ARCHIVE_MEMBERS", 1):
+                with self.assertRaisesRegex(ValueError, "maximum of 1 members"):
+                    extract_archive(archive, destination)
+
+    def test_rejects_excessive_expanded_size(self):
+        """Reject archives exceeding the configured expanded-size limit."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar.gz"
+            destination = root / "destination"
+            destination.mkdir()
+            self.create_archive(
+                archive, [("agent-main/file", "payload", "file", "")]
+            )
+
+            with mock.patch("extract_tar_archive.MAX_EXPANDED_SIZE", 1):
+                with self.assertRaisesRegex(
+                    ValueError, "maximum expanded size"
+                ):
+                    extract_archive(archive, destination)
+
     def test_requires_empty_destination(self):
         """Verify extraction refuses a non-empty destination."""
         with tempfile.TemporaryDirectory() as temporary:
