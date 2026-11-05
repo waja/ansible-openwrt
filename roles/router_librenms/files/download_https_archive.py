@@ -19,6 +19,7 @@ class HTTPSOnlyRedirectHandler(HTTPRedirectHandler):
     def redirect_request(
         self, request, file_pointer, code, message, headers, new_url
     ):
+        """Reject redirects to URLs that do not use HTTPS."""
         if urlsplit(new_url).scheme.lower() != "https":
             raise URLError("Refusing redirect to a non-HTTPS URL")
         return super().redirect_request(
