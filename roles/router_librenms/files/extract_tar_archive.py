@@ -27,18 +27,23 @@ def extract_archive(archive, destination):
         )
 
     with tarfile.open(archive, mode="r:*") as source:
-        members = source.getmembers()
-        if len(members) > MAX_ARCHIVE_MEMBERS:
-            raise ValueError(
-                f"Archive exceeds maximum of {MAX_ARCHIVE_MEMBERS} members"
-            )
-
-        expanded_size = sum(member.size for member in members)
-        if expanded_size > MAX_EXPANDED_SIZE:
-            raise ValueError(
-                "Archive exceeds maximum expanded size of "
-                f"{MAX_EXPANDED_SIZE} bytes"
-            )
+        members = []
+        expanded_size = 0
+        while True:
+            member = source.next()
+            if member is None:
+                break
+            members.append(member)
+            if len(members) > MAX_ARCHIVE_MEMBERS:
+                raise ValueError(
+                    f"Archive exceeds maximum of {MAX_ARCHIVE_MEMBERS} members"
+                )
+            expanded_size += member.size
+            if expanded_size > MAX_EXPANDED_SIZE:
+                raise ValueError(
+                    "Archive exceeds maximum expanded size of "
+                    f"{MAX_EXPANDED_SIZE} bytes"
+                )
 
         roots = set()
 
