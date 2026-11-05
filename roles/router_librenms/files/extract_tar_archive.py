@@ -114,10 +114,10 @@ def extract_archive(archive, destination):
                 reserve_metadata(source, tarfile.BLOCKSIZE)
                 reserved += tarfile.BLOCKSIZE
                 buf = source.fileobj.read(tarfile.BLOCKSIZE)
-                fields, buf = buf.split(b"\\n", 1)
+                fields, buf = buf.split(b"\n", 1)
                 fields = int(fields)
                 while len(sparse) < fields * 2:
-                    if b"\\n" not in buf:
+                    if b"\n" not in buf:
                         reserve_metadata(source, tarfile.BLOCKSIZE)
                         reserved += tarfile.BLOCKSIZE
                         buf += source.fileobj.read(tarfile.BLOCKSIZE)

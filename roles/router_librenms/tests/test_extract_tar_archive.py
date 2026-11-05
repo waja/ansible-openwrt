@@ -273,7 +273,7 @@ class ExtractArchiveTests(unittest.TestCase):
             archive = root / "source.tar"
             destination = root / "destination"
             destination.mkdir()
-            payload = b"13 comment=x\\n" + b"\\0" * (1024 - 13)
+            payload = b"13 comment=x\n" + b"\0" * (1024 - 13)
             with tarfile.open(archive, "w:") as source:
                 for index in range(2):
                     header = tarfile.TarInfo(f"PaxHeaders/{index}")
