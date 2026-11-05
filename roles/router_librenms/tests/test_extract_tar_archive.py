@@ -74,6 +74,24 @@ class ExtractArchiveTests(unittest.TestCase):
                 "script",
             )
 
+    def test_accepts_uncompressed_tar_archive(self):
+        """Accept uncompressed tar archives supported by unarchive."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar"
+            destination = root / "destination"
+            destination.mkdir()
+            self.create_archive(
+                archive,
+                [("agent-main/snmp/distro", "script", "file", "")],
+                mode="w:",
+            )
+            extract_archive(archive, destination)
+            self.assertEqual(
+                (destination / "snmp/distro").read_text(),
+                "script",
+            )
+
     def test_allows_safe_relative_symlinks(self):
         """Verify safe relative symbolic links are preserved."""
         with tempfile.TemporaryDirectory() as temporary:
@@ -162,6 +180,31 @@ class ExtractArchiveTests(unittest.TestCase):
             )
 
             with self.assertRaises(tarfile.FilterError):
+                extract_archive(archive, destination)
+
+    def test_rejects_hard_links(self):
+        """Reject hard links even when their target is inside the archive."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.tar.gz"
+            destination = root / "destination"
+            destination.mkdir()
+            self.create_archive(
+                archive,
+                [
+                    ("agent-main", "", "directory", ""),
+                    ("agent-main/snmp/target", "data", "file", ""),
+                    (
+                        "agent-main/snmp/link",
+                        "",
+                        "hardlink",
+                        "agent-main/snmp/target",
+                    ),
+                ],
+            )
+            with self.assertRaisesRegex(
+                ValueError, "^Hard links are not supported:"
+            ):
                 extract_archive(archive, destination)
 
     def test_requires_empty_destination(self):
