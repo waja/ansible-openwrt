@@ -16,7 +16,9 @@ DOWNLOAD_CHUNK_SIZE = 64 * 1024
 class HTTPSOnlyRedirectHandler(HTTPRedirectHandler):
     """Reject redirects that would send the request over a non-HTTPS scheme."""
 
-    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+    def redirect_request(
+        self, request, file_pointer, code, message, headers, new_url
+    ):
         if urlsplit(new_url).scheme.lower() != "https":
             raise URLError("Refusing redirect to a non-HTTPS URL")
         return super().redirect_request(
@@ -55,9 +57,9 @@ def download(url, destination):
 
                 downloaded = 0
                 while True:
-                    chunk = response.read(
-                        min(DOWNLOAD_CHUNK_SIZE, MAX_ARCHIVE_SIZE - downloaded + 1)
-                    )
+                    remaining = MAX_ARCHIVE_SIZE - downloaded + 1
+                    chunk_size = min(DOWNLOAD_CHUNK_SIZE, remaining)
+                    chunk = response.read(chunk_size)
                     if not chunk:
                         break
                     downloaded += len(chunk)
