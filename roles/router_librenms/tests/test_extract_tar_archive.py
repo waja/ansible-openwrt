@@ -1,9 +1,9 @@
 """Tests for the LibreNMS archive extractor."""
 
 import io
+import sys
 import tarfile
 import tempfile
-import sys
 import unittest
 from pathlib import Path
 from unittest import mock
