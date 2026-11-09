@@ -70,6 +70,10 @@ ssh root@router1 \
 ssh root@router1 'sh /usr/libexec/owrt-extra.sh'
 ```
 
+The uploaded scripts are collector artifacts, not configuration to migrate.
+They may appear in the overlay report; do not treat them as Ansible
+candidates when reviewing it.
+
 The report and retained evidence are written below
 `/tmp/owrt-diff/`. Each run obtains a lock at `/tmp/owrt-extra.lock`;
 concurrent runs are refused because the reference mount and report path
@@ -80,9 +84,10 @@ RAM on a normal OpenWrt system. Retrieve only the files you need over
 a protected connection.
 
 After retrieving or securely preserving the report, remove it explicitly
-with `sh /usr/libexec/owrt-extra.sh -c`. This cleanup mode acquires and releases
-the normal run lock, refuses a pre-existing lock, symlink, or mounted
-report path, removes only `/tmp/owrt-diff/`, and exits without touching
+with `ssh root@router1 'sh /usr/libexec/owrt-extra.sh -c'`. This cleanup
+mode acquires and releases the normal run lock, refuses a pre-existing
+lock, symlink, or mounted report path, removes only `/tmp/owrt-diff/`,
+and exits without touching
 `/tmp/ref/`. It is safe to repeat when no report exists. A normal
 discovery run can then be started again. The `-c` option must be used
 on its own.
@@ -390,8 +395,8 @@ After retrieving the evidence you need, remove the report through the
 script's guarded cleanup mode, then remove the installed scripts:
 
 ```sh
-sh /usr/libexec/owrt-extra.sh -c
-rm -f /usr/libexec/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh
+ssh root@router1 'sh /usr/libexec/owrt-extra.sh -c' &&
+ssh root@router1 'rm -f /usr/libexec/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh'
 ```
 
 Do not replace the guarded cleanup with a manual `rm -rf`: the `-c`

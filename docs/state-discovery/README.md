@@ -26,11 +26,12 @@ the terminal summary masks common password hashes and credential-named
 UCI options, but raw evidence can still contain secrets. Host-key export
 is opt-in (`-H`); with `-H`, private keys are copied in plaintext under
 `/tmp/owrt-diff/secrets/`. A new run refuses to overwrite an existing
-report. After securely retrieving what you need, remove the report with
-`sh /usr/libexec/owrt-extra.sh -c`, then remove the installed scripts:
+report. After securely retrieving what you need, remove the report and
+then the installed scripts from the router:
 
 ```sh
-rm -f /usr/libexec/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh
+ssh root@router1 'sh /usr/libexec/owrt-extra.sh -c' &&
+ssh root@router1 'rm -f /usr/libexec/owrt-extra.sh /usr/libexec/owrt-extra-runtime.sh'
 ```
 
 Options: `-k` keeps the temporary factory reference mounted for
