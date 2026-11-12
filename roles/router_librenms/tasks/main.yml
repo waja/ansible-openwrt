@@ -106,7 +106,7 @@
       community.openwrt.copy:
         src: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
         dest: >-
-          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz"
+          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
         owner: root
         group: root
         mode: '0600'
