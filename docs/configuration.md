@@ -53,7 +53,7 @@ roles that may be prerequisites; review the selected tasks before execution.
 | --- | --- | --- |
 | `router_network` | Explicit IPv4 interface addressing and per-interface DHCP server status | [Network](roles/router_network.md) |
 | `router_system` | Hostname, timezone, NTP, logging, ASU client, and additional Dropbear listeners | [System](roles/router_system.md) |
-| `router_firewall` | Default policies, declarative zones, and optional Dropbear WAN access | [Firewall](roles/router_firewall.md) |
+| `router_firewall` | Default policies, declarative zones, rules and DNAT/SNAT redirects, plus optional Dropbear WAN access | [Firewall](roles/router_firewall.md) |
 | `router_packages` | Requested packages and packages required by managed services | [Packages](roles/router_packages.md) |
 | `router_base` | Core service enablement and obsolete configuration cleanup | [Base services](roles/router_base.md) |
 | `router_snmpd` | Optional SNMP community replacement | [SNMP daemon](roles/router_snmpd.md) |
