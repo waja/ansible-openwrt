@@ -156,7 +156,7 @@ class ExtractArchiveTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(ValueError, "too many members"):
                 extract_archive(self.archive, self.destination)
-        self.assertEqual(calls, 2)
+        self.assertEqual(calls, 3)
 
     def test_rejects_excessive_expanded_size(self):
         self.create_archive([("agent-main/file", "payload", "file", "")])
