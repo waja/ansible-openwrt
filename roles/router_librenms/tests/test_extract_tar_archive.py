@@ -136,14 +136,27 @@ class ExtractArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "compressed size"):
                 extract_archive(self.archive, self.destination)
 
-    def test_rejects_too_many_members(self):
+    def test_rejects_too_many_members_before_scanning_the_archive(self):
         self.create_archive([
             ("agent-main/one", "1", "file", ""),
             ("agent-main/two", "2", "file", ""),
+            ("agent-main/three", "3", "file", ""),
         ])
-        with mock.patch("extract_tar_archive.MAX_ARCHIVE_MEMBERS", 1):
+        original_next = tarfile.TarFile.next
+        calls = 0
+
+        def counting_next(archive):
+            nonlocal calls
+            calls += 1
+            return original_next(archive)
+
+        with (
+            mock.patch("extract_tar_archive.MAX_ARCHIVE_MEMBERS", 1),
+            mock.patch.object(tarfile.TarFile, "next", counting_next),
+        ):
             with self.assertRaisesRegex(ValueError, "too many members"):
                 extract_archive(self.archive, self.destination)
+        self.assertEqual(calls, 2)
 
     def test_rejects_excessive_expanded_size(self):
         self.create_archive([("agent-main/file", "payload", "file", "")])
