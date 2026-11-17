@@ -217,8 +217,8 @@ See the [router configuration overview](docs/configuration.md) for playbook usag
 - `roles/router_system/` — hostname, timezone, NTP, logging, ASU settings,
   and optional additional Dropbear listeners
 - `roles/router_firewall/` — firewall default policies, typed declarative
-  zones with safe adoption/removal and explicit option removal, and optional
-  WAN access for additional Dropbear ports
+  zones, rules and DNAT/SNAT redirects with safe adoption/removal and explicit
+  option removal, plus optional WAN access for additional Dropbear ports
 - `roles/router_packages/` — package installation and restart handling
 - `roles/router_base/` — base service configuration
 - `roles/router_network/` — IPv4 interface addressing and per-interface DHCP server settings

@@ -1,0 +1,44 @@
+# roles/router_firewall/tasks/add_redirect_null_option_operations.yml
+---
+- name: Add operation to remove an explicitly null firewall redirect option
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + (
+          [{
+            'command': 'absent',
+            'key': 'firewall.' ~ router_firewall_redirect.key ~ '.' ~ item.key
+          }]
+          if router_firewall_named_redirects.results[
+            router_firewall_redirect_index
+          ].result == 'redirect'
+          else [{
+            'command': 'absent',
+            'config': 'firewall',
+            'type': 'redirect',
+            'find': {
+              'name': router_firewall_redirect.value.name
+                      | default(router_firewall_redirect.key)
+            },
+            'value': [item.key]
+          }]
+        )
+      }}
+  loop: "{{ router_firewall_redirect.value | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - router_firewall_redirect.value.state | default('present') == 'present'
+    - item.key not in ['name', 'state']
+    - item.value is none
+    - >-
+      router_firewall_named_redirects.results[
+        router_firewall_redirect_index
+      ].result == 'redirect' or
+      (
+        router_firewall_redirect.value.name is defined and
+        router_firewall_matching_redirects.results[
+          router_firewall_redirect_index
+        ].result_list | length == 1
+      )
+  changed_when: false
