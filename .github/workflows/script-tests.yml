@@ -87,6 +87,9 @@ jobs:
           while IFS= read -r path; do
             case "$path" in
               scripts/*|\
+                roles/router_librenms/files/*|\
+                roles/router_librenms/tasks/*|\
+                docs/roles/router_librenms.md|\
                 roles/router_storage/files/*|\
                 roles/router_storage/tasks/*|\
                 roles/router_storage/defaults/*|\
@@ -134,6 +137,12 @@ jobs:
         with:
           version: ${{ matrix.openwrt_version }}
           snapshot: 'false'
+
+      - name: Test LibreNMS archive validation
+        run: |
+          python -m unittest discover \
+            -s roles/router_librenms/files \
+            -p 'test_validate_archive.py'
 
       - name: Verify APK system audit behavior on OpenWrt
         run: |
