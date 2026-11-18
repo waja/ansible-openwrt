@@ -205,6 +205,9 @@ jobs:
             "$RUNNER_TEMP/owrt-test/test.sh"
           cp scripts/tests/test-owrt-extra-cli.sh \
             "$RUNNER_TEMP/owrt-test/cli-tests.sh"
+          cp scripts/owrt-extra-runtime.sh "$RUNNER_TEMP/owrt-test/runtime.sh"
+          cp scripts/tests/test-owrt-extra-runtime.sh \
+            "$RUNNER_TEMP/owrt-test/runtime-tests.sh"
           docker run --rm \
             -v "$RUNNER_TEMP/owrt-test:/opt/owrt-test:ro" \
             --entrypoint busybox \
@@ -507,6 +510,10 @@ jobs:
               busybox ash -n /opt/owrt-test/cli-tests.sh
               busybox ash /opt/owrt-test/cli-tests.sh \
                 /tmp/owrt-extra-test.sh
+              busybox ash -n /opt/owrt-test/runtime.sh
+              busybox ash -n /opt/owrt-test/runtime-tests.sh
+              busybox ash /opt/owrt-test/runtime-tests.sh \
+                /opt/owrt-test/runtime.sh
             '
 
       - name: Test discovery failure handling
