@@ -3,7 +3,7 @@
   community.openwrt.command:
     cmd: >-
       cmp -s
-      {{ router_librenms_source_dir.stdout | trim }}/{{ router_librenms_script.path }}
+      {{ router_librenms_source_file }}
       /etc/librenms/{{ router_librenms_script.name }}
   register: router_librenms_script_comparison
   failed_when: false
@@ -13,7 +13,7 @@
   community.openwrt.command:
     cmd: >-
       cp
-      {{ router_librenms_source_dir.stdout | trim }}/{{ router_librenms_script.path }}
+      {{ router_librenms_source_file }}
       /etc/librenms/{{ router_librenms_script.name }}
   when: router_librenms_script_comparison.rc != 0
   changed_when: true
