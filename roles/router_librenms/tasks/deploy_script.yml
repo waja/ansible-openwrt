@@ -38,6 +38,7 @@
       fi
     uses_shell: true
   register: router_librenms_script_permissions
-  changed_when: "'permissions-updated' in router_librenms_script_permissions.stdout"
+  changed_when: >-
+    'permissions-updated' in router_librenms_script_permissions.stdout
   ignore_unreachable: true
   notify: Restart SNMP daemon
