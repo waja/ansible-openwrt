@@ -355,13 +355,13 @@
         owner: root
         group: root
         mode: '0644'
-      when: router_cve_2026_98432_file_exists.rc == 0
+      when: router_cve_2026_98432_file_exists.stdout | trim == 'regular'
 
     - name: Remove the mitigation file created by the failed run
       community.openwrt.file:
         path: /etc/cve_2026_98432.nft
         state: absent
-      when: router_cve_2026_98432_file_exists.rc != 0
+      when: router_cve_2026_98432_file_exists.stdout | trim == 'missing'
 
     - name: Restore the previous sysupgrade configuration
       community.openwrt.copy:
