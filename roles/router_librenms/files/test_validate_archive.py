@@ -11,7 +11,6 @@ from pathlib import Path
 
 from validate_archive import (
     ArchiveValidationError,
-    MAX_DECOMPRESSED_BYTES,
     MAX_MEMBERS,
     MAX_UNPACKED_BYTES,
     validate_archive,
@@ -200,7 +199,7 @@ class ArchiveValidationTests(unittest.TestCase):
                 archive.addfile(member, io.BytesIO(b"x"))
             member = tarfile.TarInfo("source-root/extra")
             member.size = 1
-            member.pax_headers = {"comment": "x" * (MAX_DECOMPRESSED_BYTES + 1)}
+            member.pax_headers = {"comment": "x" * 16384}
             archive.addfile(member, io.BytesIO(b"x"))
 
         with patch("validate_archive.MAX_DECOMPRESSED_BYTES", 8192):
