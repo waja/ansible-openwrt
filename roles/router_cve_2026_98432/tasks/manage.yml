@@ -146,6 +146,13 @@
   failed_when: false
   check_mode: false
 
+- name: Initialize the mitigation table probe result
+  ansible.builtin.set_fact:
+    router_cve_2026_98432_active_table:
+      rc: 1
+      stdout: ''
+      stderr: Runtime table inspection was skipped.
+
 - name: Check for an existing mitigation table
   community.openwrt.command:
     cmd: nft list table ip cve_2026_98432
@@ -153,6 +160,7 @@
   changed_when: false
   failed_when: false
   check_mode: false
+  when: router_cve_2026_98432_apply_runtime_changes | bool
 
 - name: Validate the mitigation table probe result
   ansible.builtin.assert:
@@ -163,6 +171,7 @@
            is search('No such file or directory')
     fail_msg: >-
       Unable to inspect the mitigation table. Refusing to assume it is absent.
+  when: router_cve_2026_98432_apply_runtime_changes | bool
 
 - name: Refuse conflicting or unmanaged state
   ansible.builtin.assert:
@@ -432,13 +441,13 @@
         owner: root
         group: root
         mode: '0644'
-      when: router_cve_2026_98432_file_exists.stdout | trim == 'regular'
+      when: router_cve_2026_98432_file_exists.rc == 0 and router_cve_2026_98432_file_is_regular.rc == 0
 
     - name: Remove the mitigation file created by the failed run
       community.openwrt.file:
         path: /etc/cve_2026_98432.nft
         state: absent
-      when: router_cve_2026_98432_file_exists.stdout | trim == 'missing'
+      when: router_cve_2026_98432_file_exists.rc != 0
 
     - name: Restore only the owned sysupgrade preservation entry
       community.openwrt.lineinfile:
