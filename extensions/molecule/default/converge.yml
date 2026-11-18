@@ -1442,7 +1442,9 @@
     - name: Assert CVE mitigation is configured
       ansible.builtin.assert:
         that:
-          - router_cve_2026_98432_test_include.result == '/etc/cve_2026_98432.nft'
+          - >-
+            router_cve_2026_98432_test_include.result
+            == '/etc/cve_2026_98432.nft'
 
     - name: Verify the installed ruleset and sysupgrade entry
       ansible.builtin.raw: |

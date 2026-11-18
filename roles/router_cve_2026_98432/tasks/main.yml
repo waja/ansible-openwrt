@@ -5,7 +5,8 @@
     that:
       - router_cve_2026_98432_state in ['present', 'absent']
       - router_cve_2026_98432_apply_runtime_changes is boolean
-    fail_msg: State must be present or absent and runtime changes must be boolean.
+    fail_msg: >-
+      State must be present or absent and runtime changes must be boolean.
 
 - name: Check firewall4 availability and current configuration
   community.openwrt.command:
@@ -240,7 +241,8 @@
   rescue:
     - name: Restore the previous firewall UCI configuration
       community.openwrt.copy:
-        content: "{{ router_cve_2026_98432_firewall_backup.content | b64decode }}"
+        content: >-
+          {{ router_cve_2026_98432_firewall_backup.content | b64decode }}
         dest: /etc/config/firewall
         owner: root
         group: root
@@ -248,7 +250,8 @@
 
     - name: Restore the previous mitigation file
       community.openwrt.copy:
-        content: "{{ router_cve_2026_98432_ruleset_backup.content | b64decode }}"
+        content: >-
+          {{ router_cve_2026_98432_ruleset_backup.content | b64decode }}
         dest: /etc/cve_2026_98432.nft
         owner: root
         group: root
@@ -263,7 +266,8 @@
 
     - name: Restore the previous sysupgrade configuration
       community.openwrt.copy:
-        content: "{{ router_cve_2026_98432_sysupgrade_backup.content | b64decode }}"
+        content: >-
+          {{ router_cve_2026_98432_sysupgrade_backup.content | b64decode }}
         dest: /etc/sysupgrade.conf
         owner: root
         group: root
