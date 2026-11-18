@@ -1430,7 +1430,7 @@
         name: router_cve_2026_98432
       vars:
         router_cve_2026_98432_state: present
-        router_cve_2026_98432_apply_runtime_changes: false
+        router_cve_2026_98432_apply_runtime_changes: true
 
     - name: Verify standalone CVE mitigation UCI include
       community.openwrt.uci:
