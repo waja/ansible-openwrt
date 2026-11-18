@@ -1448,7 +1448,26 @@
 
     - name: Verify the installed ruleset and sysupgrade entry
       ansible.builtin.raw: |
-        grep -Eq '^[[:space:]]*ip protocol tcp ip hdrlength 6-15 counter drop[[:space:]]* \
-          /etc/cve_2026_98432.nft &&
+        grep -Eq '^[[:space:]]*ip protocol tcp ip hdrlength 6-15 counter drop[[:space:]]*$' /etc/cve_2026_98432.nft &&
           grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf
       changed_when: false
+
+    - name: Read the active CVE mitigation table
+      community.openwrt.command:
+        cmd: nft list table ip cve_2026_98432
+      register: router_cve_2026_98432_runtime_table
+      changed_when: false
+
+    - name: Verify the mitigation is loaded in the active prerouting chain
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_runtime_table.rc == 0
+          - >-
+            router_cve_2026_98432_runtime_table.stdout is search(
+              '(?s)chain pre\\s*\\{[^}]*type filter hook prerouting '
+              ~ 'priority (-310|raw - 10);[^}]*'
+              ~ 'ip protocol tcp ip hdrlength 6-15 counter.*drop'
+            )
+          - >-
+            router_cve_2026_98432_runtime_table.stdout
+            is not search('flags.*dormant')
