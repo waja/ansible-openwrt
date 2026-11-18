@@ -6,8 +6,6 @@ platforms:
   - name: openwrt-${OPENWRT_VERSION}-${MOLECULE_SCENARIO_NAME}
     image: ${OPENWRT_IMAGE}
     command: /sbin/init
-    capabilities:
-      - NET_ADMIN
     pre_build_image: true
     tmpfs:
       - /tmp:exec,mode=1777
