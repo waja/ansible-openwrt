@@ -15,6 +15,7 @@
       tmp=$(mktemp "${dest}.XXXXXX");
       trap 'rm -f "$tmp"' EXIT;
       cp "$src" "$tmp";
+      if [ -L "$dest" ]; then rm -f "$dest"; fi;
       mv -f "$tmp" "$dest";
       echo deployed;
     uses_shell: true
