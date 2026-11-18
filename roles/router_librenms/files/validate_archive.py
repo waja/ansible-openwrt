@@ -25,6 +25,19 @@ class ArchiveValidationError(ValueError):
     """Raised when an archive is unsafe or incomplete."""
 
 
+class StrictTarInfo(tarfile.TarInfo):
+    """Reject malformed headers even after valid members were parsed."""
+
+    @classmethod
+    def frombuf(cls, buf, encoding, errors):
+        try:
+            return super().frombuf(buf, encoding, errors)
+        except tarfile.InvalidHeaderError as error:
+            raise ArchiveValidationError(
+                f"Invalid tar header: {error}"
+            ) from error
+
+
 class BoundedReader:
     """Limit bytes read from a decompressed archive stream."""
 
@@ -60,7 +73,9 @@ def validate_archive(archive_path):
     try:
         with gzip.open(archive_path, "rb") as compressed:
             bounded = BoundedReader(compressed, MAX_DECOMPRESSED_BYTES)
-            with tarfile.open(fileobj=bounded, mode="r|") as archive:
+            with tarfile.open(
+                fileobj=bounded, mode="r|", tarinfo=StrictTarInfo
+            ) as archive:
                 root = None
                 unpacked_size = 0
                 member_count = 0
