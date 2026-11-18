@@ -61,9 +61,28 @@
         router_system_asu_upgrade_packages: 1
         router_system_log_ip: 192.0.2.234
 
+    - name: Seed an additional Dropbear WAN firewall rule
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: rule
+        name: ansible_router_firewall_dropbear_extra_wan
+        value:
+          name: Ansible managed Dropbear extra ports WAN
+          src: wan
+          proto: tcp
+          dest_port: '2222 2223'
+          target: ACCEPT
+        autocommit: true
+      tags:
+        - molecule-idempotence-notest
+
     - name: Apply router firewall role with defaults
       ansible.builtin.include_role:
         name: router_firewall
+        apply:
+          tags:
+            - molecule-idempotence-notest
       vars:
         router_firewall_input: ACCEPT
         router_firewall_forward: ACCEPT
@@ -79,9 +98,9 @@
           echo "Unexpected additional Dropbear WAN firewall rule"
           exit 1
         fi
+        echo "Verified: no extra Dropbear WAN firewall rule by default"
       changed_when: false
-      tags:
-        - molecule-idempotence-notest
+      when: "'molecule-idempotence-notest' not in ansible_skip_tags"
 
     - name: Apply router firewall role with WAN access enabled
       ansible.builtin.include_role:
