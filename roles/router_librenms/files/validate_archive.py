@@ -74,7 +74,10 @@ def validate_archive(archive_path):
         with gzip.open(archive_path, "rb") as compressed:
             bounded = BoundedReader(compressed, MAX_DECOMPRESSED_BYTES)
             with tarfile.open(
-                fileobj=bounded, mode="r|", tarinfo=StrictTarInfo
+                fileobj=bounded,
+                mode="r|",
+                tarinfo=StrictTarInfo,
+                bufsize=tarfile.BLOCKSIZE,
             ) as archive:
                 root = None
                 unpacked_size = 0
