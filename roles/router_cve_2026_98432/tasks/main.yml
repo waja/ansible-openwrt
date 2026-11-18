@@ -8,11 +8,13 @@
     fail_msg: State must be present or absent and runtime changes must be boolean.
 
 - name: Check firewall4 availability and current configuration
-  ansible.builtin.command: fw4 check
+  community.openwrt.command:
+    cmd: fw4 check
   changed_when: false
 
 - name: Check firewall service is enabled
-  ansible.builtin.command: /etc/init.d/firewall enabled
+  community.openwrt.command:
+    cmd: /etc/init.d/firewall enabled
   changed_when: false
 
 - name: Read the owned UCI include
@@ -173,7 +175,8 @@
         - router_cve_2026_98432_include.result | default('') == 'include'
 
     - name: Validate the resulting fw4 ruleset before reload
-      ansible.builtin.command: fw4 check
+      community.openwrt.command:
+        cmd: fw4 check
       changed_when: false
 
     - name: Reload firewall after applying the mitigation
