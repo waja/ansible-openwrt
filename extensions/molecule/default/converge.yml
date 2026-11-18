@@ -1446,11 +1446,25 @@
             router_cve_2026_98432_test_include.result
             == '/etc/cve_2026_98432.nft'
 
-    - name: Verify the installed ruleset and sysupgrade entry
-      ansible.builtin.raw: |
-        grep -Eq '^[[:space:]]*ip protocol tcp ip hdrlength 6-15 counter drop[[:space:]]*$' /etc/cve_2026_98432.nft &&
-          grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf
+    - name: Read the installed CVE mitigation ruleset
+      community.openwrt.slurp:
+        src: /etc/cve_2026_98432.nft
+      register: router_cve_2026_98432_installed_ruleset
       changed_when: false
+
+    - name: Read the CVE mitigation sysupgrade entry
+      community.openwrt.command:
+        cmd: grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+      register: router_cve_2026_98432_installed_sysupgrade
+      changed_when: false
+
+    - name: Verify the installed ruleset and sysupgrade entry
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_cve_2026_98432_installed_ruleset.content | b64decode
+            is search('ip protocol tcp ip hdrlength 6-15 counter drop')
+          - router_cve_2026_98432_installed_sysupgrade.rc == 0
 
     - name: Read the active CVE mitigation table
       community.openwrt.command:
