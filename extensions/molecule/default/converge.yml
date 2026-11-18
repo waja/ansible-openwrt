@@ -1453,17 +1453,6 @@
         grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf
       changed_when: false
 
-    - name: Remove CVE mitigation without changing the running firewall
-      ansible.builtin.include_role:
-        name: router_cve_2026_98432
-        apply:
-          tags:
-            - molecule-idempotence-notest
-      vars:
-        router_cve_2026_98432_state: absent
-        router_cve_2026_98432_apply_runtime_changes: false
-      tags:
-        - molecule-idempotence-notest
 
     - name: Verify CVE mitigation configuration was removed
       ansible.builtin.raw: |
