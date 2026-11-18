@@ -106,17 +106,27 @@
       become: false
       changed_when: false
 
-    - name: Create temporary LibreNMS extraction directory on the router
+    - name: Create temporary LibreNMS staging directory on the router
       community.openwrt.command:
         cmd: mktemp -d /tmp/ansible-librenms.XXXXXX
       register: router_librenms_remote_dir
       changed_when: false
+      ignore_unreachable: true
+
+    - name: Create separate LibreNMS extraction directory on the router
+      community.openwrt.command:
+        cmd: >-
+          mkdir
+          {{ (router_librenms_remote_dir.stdout | trim ~ '/extracted') | quote }}
+      changed_when: false
+      ignore_unreachable: true
 
     - name: Check available router temporary storage
       community.openwrt.command:
         cmd: df -Pk /tmp
       register: router_librenms_tmp_storage
       changed_when: false
+      ignore_unreachable: true
 
     - name: Ensure router temporary storage can hold the validated archive
       ansible.builtin.assert:
@@ -125,9 +135,9 @@
           - router_librenms_tmp_storage.stdout_lines[-1].split() | length >= 4
           - >-
             router_librenms_tmp_storage.stdout_lines[-1].split()[3]
-            | int >= 49152
+            | int >= 65536
         fail_msg: >-
-          At least 48 MiB of free space in /tmp is required to stage and
+          At least 64 MiB of free space in /tmp is required to stage and
           extract the LibreNMS source archive safely.
 
     - name: Upload LibreNMS source archive to the router
@@ -139,22 +149,26 @@
         group: root
         mode: '0600'
       changed_when: false
+      ignore_unreachable: true
 
     - name: Extract LibreNMS agent source archive with BusyBox tar
       community.openwrt.command:
         cmd: >-
           busybox tar -xzf
-          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
-          -C {{ router_librenms_remote_dir.stdout | trim }}
+          {{ (router_librenms_remote_dir.stdout | trim ~ '/librenms-agent.tar.gz') | quote }}
+          -C {{ (router_librenms_remote_dir.stdout | trim ~ '/extracted') | quote }}
       changed_when: false
+      ignore_unreachable: true
 
     - name: Locate extracted LibreNMS source directory
       community.openwrt.command:
         cmd: >-
-          busybox find {{ router_librenms_remote_dir.stdout | trim }}
+          busybox find
+          {{ (router_librenms_remote_dir.stdout | trim ~ '/extracted') | quote }}
           -mindepth 1 -maxdepth 1 -type d
       register: router_librenms_source_dir
       changed_when: false
+      ignore_unreachable: true
 
     - name: Create LibreNMS script directory
       community.openwrt.file:
@@ -202,6 +216,7 @@
         - router_librenms_remote_dir is defined
         - router_librenms_remote_dir.stdout | default('') | trim | length > 0
       changed_when: false
+      ignore_unreachable: true
 
     - name: Remove temporary LibreNMS download directory from the controller
       ansible.builtin.file:
