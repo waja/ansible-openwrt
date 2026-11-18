@@ -1,34 +1,28 @@
 ---
-- name: Check whether the LibreNMS script needs an update
+- name: Deploy LibreNMS script when content or ownership differs
   community.openwrt.command:
     cmd: >-
-      cmp -s
-      {{ router_librenms_source_file | quote }}
-      {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
+      set -eu;
+      src={{ router_librenms_source_file | quote }};
+      dest={{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }};
+      if [ -d "$dest" ] && [ ! -L "$dest" ]; then
+        echo "Script destination is a directory: $dest" >&2;
+        exit 1;
+      fi;
+      if [ -f "$dest" ] && [ ! -L "$dest" ] &&
+         cmp -s "$src" "$dest" &&
+         [ "$(busybox stat -c %u:%g "$dest" 2>/dev/null || echo unknown)" = "0:0" ] &&
+         [ "$(busybox stat -c %a "$dest" 2>/dev/null || echo unknown)" = "755" ]; then
+        exit 0;
+      fi;
+      tmp=$(mktemp "${dest}.XXXXXX");
+      trap 'rm -f "$tmp"' EXIT;
+      cp "$src" "$tmp";
+      chmod 0755 "$tmp";
+      chown root:root "$tmp";
+      mv -f "$tmp" "$dest";
+      echo deployed;
     uses_shell: true
-  register: router_librenms_script_comparison
-  failed_when: false
-  changed_when: false
-  ignore_unreachable: true
-
-- name: Copy updated LibreNMS script on the router
-  community.openwrt.command:
-    cmd: >-
-      cp
-      {{ router_librenms_source_file | quote }}
-      {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
-    uses_shell: true
-  when:
-    - router_librenms_script_comparison.rc is defined
-    - router_librenms_script_comparison.rc != 0
-  changed_when: true
-  ignore_unreachable: true
-  notify: Restart SNMP daemon
-
-- name: Ensure LibreNMS script permissions
-  community.openwrt.file:
-    path: "{{ '/etc/librenms/' ~ router_librenms_script.name }}"
-    state: file
-    mode: '0755'
-  ignore_unreachable: true
+  register: router_librenms_script_deployment
+  changed_when: "'deployed' in router_librenms_script_deployment.stdout"
   notify: Restart SNMP daemon
