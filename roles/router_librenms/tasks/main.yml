@@ -229,26 +229,28 @@
       ignore_unreachable: true
       when: router_librenms_source_dir.stdout is defined
   always:
-    - name: Remove temporary LibreNMS extraction directory from the router
-      community.openwrt.file:
-        path: "{{ router_librenms_remote_dir.stdout | trim }}"
-        state: absent
-      when:
-        - router_librenms_remote_dir is defined
-        - router_librenms_remote_dir.stdout | default('') | trim | length > 0
-      changed_when: false
-      ignore_unreachable: true
-
-    - name: Remove temporary LibreNMS download directory from the controller
-      ansible.builtin.file:
-        path: "{{ router_librenms_download_dir.path }}"
-        state: absent
-      delegate_to: localhost
-      become: false
-      when:
-        - router_librenms_download_dir is defined
-        - router_librenms_download_dir.path is defined
-      changed_when: false
+    - name: Clean up router-side LibreNMS staging
+      block:
+        - name: Remove temporary LibreNMS staging directory from the router
+          community.openwrt.file:
+            path: "{{ router_librenms_remote_dir.stdout | trim }}"
+            state: absent
+          when:
+            - router_librenms_remote_dir is defined
+            - router_librenms_remote_dir.stdout | default('') | trim | length > 0
+          changed_when: false
+          ignore_unreachable: true
+      always:
+        - name: Remove temporary LibreNMS download directory from the controller
+          ansible.builtin.file:
+            path: "{{ router_librenms_download_dir.path }}"
+            state: absent
+          delegate_to: localhost
+          become: false
+          when:
+            - router_librenms_download_dir is defined
+            - router_librenms_download_dir.path is defined
+          changed_when: false
 
 - name: Deploy LibreNMS wireless interface mapping
   community.openwrt.template:
