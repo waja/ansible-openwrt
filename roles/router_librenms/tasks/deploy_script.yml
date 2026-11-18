@@ -40,7 +40,7 @@
     cmd: >-
       chmod 0755
       {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
-  uses_shell: true
+    uses_shell: true
   when:
     - router_librenms_script_mode.rc is defined
     - >-
