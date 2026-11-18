@@ -123,9 +123,9 @@
         that:
           - router_librenms_tmp_storage.stdout_lines | length >= 2
           - router_librenms_tmp_storage.stdout_lines[-1].split() | length >= 4
-          - router_librenms_tmp_storage.stdout_lines[-1].split()[3] | int >= 40960
+          - router_librenms_tmp_storage.stdout_lines[-1].split()[3] | int >= 49152
         fail_msg: >-
-          At least 40 MiB of free space in /tmp is required to stage and
+          At least 48 MiB of free space in /tmp is required to stage and
           extract the LibreNMS source archive safely.
 
     - name: Upload LibreNMS source archive to the router
