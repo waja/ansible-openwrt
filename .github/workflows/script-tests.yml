@@ -87,6 +87,9 @@ jobs:
           while IFS= read -r path; do
             case "$path" in
               scripts/*|\
+                roles/router_librenms/files/*|\
+                roles/router_librenms/tasks/*|\
+                docs/roles/router_librenms.md|\
                 roles/router_storage/files/*|\
                 roles/router_storage/tasks/*|\
                 roles/router_storage/defaults/*|\
@@ -134,6 +137,44 @@ jobs:
         with:
           version: ${{ matrix.openwrt_version }}
           snapshot: 'false'
+
+      - name: Test LibreNMS archive validation
+        run: |
+          python3 -m unittest discover \
+            -s roles/router_librenms/files \
+            -p 'test_validate_archive.py'
+
+      - name: Verify BusyBox tar gzip extraction
+        run: |
+          root="$RUNNER_TEMP/librenms-tar/source-root"
+          mkdir -p "$root/snmp/Openwrt"
+          printf '%s\n' 'test-script' > "$root/snmp/distro"
+          for script in wlClients.sh wlFrequency.sh wlNoiseFloor.sh \
+            wlRate.sh wlSNR.sh; do
+            printf '%s\n' 'test-script' > "$root/snmp/Openwrt/$script"
+          done
+          tar -czf "$RUNNER_TEMP/librenms-tar/archive.tar.gz" \
+            -C "$RUNNER_TEMP/librenms-tar" source-root
+          python3 roles/router_librenms/files/validate_archive.py \
+            "$RUNNER_TEMP/librenms-tar/archive.tar.gz"
+          mkdir -p "$RUNNER_TEMP/librenms-tar/extracted"
+          docker run --rm \
+            -v "$RUNNER_TEMP/librenms-tar:/tmp/librenms-tar" \
+            --entrypoint busybox \
+            "$OPENWRT_IMAGE" \
+            ash -c '
+              set -eu
+              busybox tar -tzf /tmp/librenms-tar/archive.tar.gz >/dev/null
+              busybox tar -xzf /tmp/librenms-tar/archive.tar.gz \
+                -C /tmp/librenms-tar/extracted
+              expected=/tmp/librenms-tar/extracted/source-root
+              script="$expected/snmp/Openwrt/wlClients.sh"
+              test -f "$script"
+              grep -Fx "test-script" "$script"
+              actual=$(busybox find /tmp/librenms-tar/extracted \
+                -mindepth 1 -maxdepth 1 -type d)
+              test "$actual" = "$expected"
+            '
 
       - name: Verify APK system audit behavior on OpenWrt
         run: |
@@ -234,7 +275,7 @@ jobs:
               grep -Eq -- "^[[:space:]#]*-h([[:space:]]|$)" /tmp/help.txt
 
               # Exercise redaction using representative UCI output.
-              printf "%s\\n" \
+              printf "%s\n" \
                 "< wireless.default_radio.key=wifi-secret" \
                 "> network.wg0.private_key=wireguard-secret" \
                 "> network.wg0.psk=psk-secret" \

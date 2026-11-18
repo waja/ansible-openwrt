@@ -2,12 +2,13 @@
 """Download an archive while requiring HTTPS for every redirect."""
 
 import os
-import shutil
 import sys
 import tempfile
 from urllib.error import URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
+
+MAX_ARCHIVE_BYTES = 8 * 1024 * 1024
 
 
 class HTTPSOnlyRedirectHandler(HTTPRedirectHandler):
@@ -36,7 +37,18 @@ def download(url, destination):
             with opener.open(url, timeout=60) as response:
                 if urlsplit(response.geturl()).scheme.lower() != "https":
                     raise URLError("Archive response did not use HTTPS")
-                shutil.copyfileobj(response, output)
+                downloaded = 0
+                while True:
+                    chunk = response.read(64 * 1024)
+                    if not chunk:
+                        break
+                    downloaded += len(chunk)
+                    if downloaded > MAX_ARCHIVE_BYTES:
+                        raise ValueError(
+                            "Archive exceeds the "
+                            f"{MAX_ARCHIVE_BYTES}-byte download limit"
+                        )
+                    output.write(chunk)
         os.replace(temporary_path, destination)
     finally:
         if os.path.exists(temporary_path):

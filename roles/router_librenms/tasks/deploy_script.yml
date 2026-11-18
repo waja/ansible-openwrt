@@ -1,0 +1,32 @@
+---
+- name: Deploy LibreNMS script when content differs
+  community.openwrt.command:
+    cmd: >-
+      set -eu;
+      src={{ router_librenms_source_file | quote }};
+      dest={{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }};
+      if [ -d "$dest" ] && [ ! -L "$dest" ]; then
+        echo "Script destination is a directory: $dest" >&2;
+        exit 1;
+      fi;
+      if [ -f "$dest" ] && [ ! -L "$dest" ] && cmp -s "$src" "$dest"; then
+        exit 0;
+      fi;
+      tmp=$(mktemp "${dest}.XXXXXX");
+      trap 'rm -f "$tmp"' EXIT;
+      cp "$src" "$tmp";
+      mv -f "$tmp" "$dest";
+      echo deployed;
+    uses_shell: true
+  register: router_librenms_script_deployment
+  changed_when: "'deployed' in router_librenms_script_deployment.stdout"
+  notify: Restart SNMP daemon
+
+- name: Ensure LibreNMS script ownership and permissions
+  community.openwrt.file:
+    path: "{{ '/etc/librenms/' ~ router_librenms_script.name }}"
+    state: file
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Restart SNMP daemon
