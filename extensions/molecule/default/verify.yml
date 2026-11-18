@@ -2257,16 +2257,22 @@
         - name: Record configuration-only removal rejection
           ansible.builtin.set_fact:
             router_cve_2026_98432_unsafe_removal_rejected: >-
-              {{ ansible_failed_task.name == 'Refuse removal when runtime changes are disabled' }}
+              {{
+                ansible_failed_task.name
+                == 'Refuse removal when runtime changes are disabled'
+              }}
 
     - name: Assert configuration-only removal is rejected
       ansible.builtin.assert:
         that:
-          - router_cve_2026_98432_unsafe_removal_rejected | default(false) | bool
+          - >-
+            router_cve_2026_98432_unsafe_removal_rejected
+            | default(false) | bool
 
     - name: Verify rejected removal preserved mitigation configuration
       ansible.builtin.raw: |
-        uci -q get firewall.ansible_cve_2026_98432.path | grep -Fxq /etc/cve_2026_98432.nft || exit 1
+        uci -q get firewall.ansible_cve_2026_98432.path \\
+          | grep -Fxq /etc/cve_2026_98432.nft || exit 1
         test -f /etc/cve_2026_98432.nft || exit 1
         grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf || exit 1
       changed_when: false
