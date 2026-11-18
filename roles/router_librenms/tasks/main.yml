@@ -144,7 +144,14 @@
           busybox tar -xzf
           {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
           -C {{ router_librenms_remote_dir.stdout | trim }}
-          --strip-components=1
+      changed_when: false
+
+    - name: Locate extracted LibreNMS source directory
+      community.openwrt.command:
+        cmd: >-
+          busybox find {{ router_librenms_remote_dir.stdout | trim }}
+          -mindepth 1 -maxdepth 1 -type d
+      register: router_librenms_source_dir
       changed_when: false
 
     - name: Create LibreNMS script directory
@@ -155,7 +162,7 @@
 
     - name: Deploy downloaded LibreNMS scripts
       community.openwrt.copy:
-        src: "{{ router_librenms_remote_dir.stdout | trim }}/{{ item.path }}"
+        src: "{{ router_librenms_source_dir.stdout | trim }}/{{ item.path }}"
         remote_src: true
         dest: "/etc/librenms/{{ item.name }}"
         owner: root
