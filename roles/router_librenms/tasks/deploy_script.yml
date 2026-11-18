@@ -3,8 +3,9 @@
   community.openwrt.command:
     cmd: >-
       cmp -s
-      {{ router_librenms_source_file }}
-      /etc/librenms/{{ router_librenms_script.name }}
+      {{ router_librenms_source_file | quote }}
+      {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
+    uses_shell: true
   register: router_librenms_script_comparison
   failed_when: false
   changed_when: false
@@ -13,14 +14,17 @@
   community.openwrt.command:
     cmd: >-
       cp
-      {{ router_librenms_source_file }}
-      /etc/librenms/{{ router_librenms_script.name }}
+      {{ router_librenms_source_file | quote }}
+      {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
+    uses_shell: true
   when: router_librenms_script_comparison.rc != 0
   changed_when: true
   notify: Restart SNMP daemon
 
 - name: Set LibreNMS script permissions
   community.openwrt.command:
-    cmd: "chmod 0755 /etc/librenms/{{ router_librenms_script.name }}"
-  when: router_librenms_script_comparison.rc != 0
+    cmd: >-
+      chmod 0755
+      {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
+  uses_shell: true
   changed_when: false
