@@ -182,7 +182,7 @@
       - >-
         router_cve_2026_98432_include.result == 'include' or
         (
-          router_cve_2026_98432_file_exists.stdout | trim == 'missing'
+          router_cve_2026_98432_file_exists.rc != 0
           and router_cve_2026_98432_sysupgrade_entry.rc != 0
           and router_cve_2026_98432_active_table.rc != 0
         )
@@ -197,17 +197,17 @@
       - >-
         router_cve_2026_98432_state != 'absent'
         or router_cve_2026_98432_apply_runtime_changes | bool
-        or router_cve_2026_98432_active_table.rc != 0
     fail_msg: >-
-      The live mitigation table exists. Enable runtime changes to remove it;
-      configuration-only removal would orphan the active packet filter.
+      Configuration-only removal is unsafe because the live nftables table
+      cannot be inspected. Enable runtime changes to verify and remove it
+      without orphaning an active packet filter.
 
 - name: Back up the current mitigation file when present
   community.openwrt.slurp:
     src: /etc/cve_2026_98432.nft
   register: router_cve_2026_98432_ruleset_backup
   changed_when: false
-  when: router_cve_2026_98432_file_exists.stdout | trim == 'regular'
+  when: router_cve_2026_98432_file_exists.rc == 0 and router_cve_2026_98432_file_is_regular.rc == 0
 
 - name: Apply the requested mitigation state
   block:
