@@ -146,11 +146,17 @@ jobs:
 
       - name: Verify BusyBox tar gzip extraction
         run: |
-          mkdir -p "$RUNNER_TEMP/librenms-tar/source-root/snmp/Openwrt"
-          printf '%s\n' 'test-script' \
-            > "$RUNNER_TEMP/librenms-tar/source-root/snmp/Openwrt/wlClients.sh"
+          root="$RUNNER_TEMP/librenms-tar/source-root"
+          mkdir -p "$root/snmp/Openwrt"
+          printf '%s\\n' 'test-script' > "$root/snmp/distro"
+          for script in wlClients.sh wlFrequency.sh wlNoiseFloor.sh \
+            wlRate.sh wlSNR.sh; do
+            printf '%s\\n' 'test-script' > "$root/snmp/Openwrt/$script"
+          done
           tar -czf "$RUNNER_TEMP/librenms-tar/archive.tar.gz" \
             -C "$RUNNER_TEMP/librenms-tar" source-root
+          python3 roles/router_librenms/files/validate_archive.py \
+            "$RUNNER_TEMP/librenms-tar/archive.tar.gz"
           mkdir -p "$RUNNER_TEMP/librenms-tar/extracted"
           docker run --rm \
             -v "$RUNNER_TEMP/librenms-tar:/tmp/librenms-tar" \
@@ -161,12 +167,13 @@ jobs:
               busybox tar -tzf /tmp/librenms-tar/archive.tar.gz >/dev/null
               busybox tar -xzf /tmp/librenms-tar/archive.tar.gz \
                 -C /tmp/librenms-tar/extracted
-              script=/tmp/librenms-tar/extracted/source-root
-              script="$script/snmp/Openwrt/wlClients.sh"
+              expected=/tmp/librenms-tar/extracted/source-root
+              script="$expected/snmp/Openwrt/wlClients.sh"
               test -f "$script"
               grep -Fx "test-script" "$script"
-              busybox find /tmp/librenms-tar/extracted \
-                -mindepth 1 -maxdepth 1 -type d
+              actual=$(busybox find /tmp/librenms-tar/extracted \
+                -mindepth 1 -maxdepth 1 -type d)
+              test "$actual" = "$expected"
             '
 
       - name: Verify APK system audit behavior on OpenWrt
