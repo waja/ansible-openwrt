@@ -150,6 +150,11 @@ def validate_archive(archive_path):
                             f"{MAX_UNPACKED_BYTES}-byte expanded-size limit"
                         )
 
+                # Consume the remainder so gzip CRC/trailer errors and
+                # oversized trailing metadata cannot be silently ignored.
+                while bounded.read(64 * 1024):
+                    pass
+
                 missing = REQUIRED_FILES - regular_files
                 if missing:
                     raise ArchiveValidationError(
