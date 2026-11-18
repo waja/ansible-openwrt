@@ -2,7 +2,6 @@
 """Download an archive while requiring HTTPS for every redirect."""
 
 import os
-import shutil
 import sys
 import tempfile
 from urllib.error import URLError
