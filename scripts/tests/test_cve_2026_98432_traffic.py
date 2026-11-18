@@ -58,16 +58,43 @@ while True:
 
 def connect(
     address: str, port: int, *, ipv6: bool = False, ip_options: bool = False
-) -> None:
-    family = socket.AF_INET6 if ipv6 else socket.AF_INET
-    with socket.socket(family, socket.SOCK_STREAM) as client:
-        client.settimeout(1.5)
-        if ip_options:
-            # Three NOP options plus EOL produce a 24-byte IPv4 header (IHL 6).
-            client.setsockopt(
-                socket.IPPROTO_IP, socket.IP_OPTIONS, b"\x01\x01\x01\x00"
-            )
-        client.connect((address, port))
+) -> bool:
+    source = """
+import socket
+import sys
+
+address = sys.argv[1]
+port = int(sys.argv[2])
+ipv6 = sys.argv[3] == "true"
+ip_options = sys.argv[4] == "true"
+family = socket.AF_INET6 if ipv6 else socket.AF_INET
+client = socket.socket(family, socket.SOCK_STREAM)
+client.settimeout(1.5)
+if ip_options:
+    client.setsockopt(socket.IPPROTO_IP, socket.IP_OPTIONS, b"\\x01\\x01\\x01\\x00")
+try:
+    client.connect((address, port))
+except (TimeoutError, socket.timeout):
+    sys.exit(10)
+except ConnectionResetError:
+    sys.exit(11)
+finally:
+    client.close()
+"""
+    result = subprocess.run(
+        [
+            "ip", "netns", "exec", CLIENT, sys.executable, "-c", source,
+            address, str(port), str(ipv6).lower(), str(ip_options).lower(),
+        ],
+        check=False, capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        return True
+    if result.returncode in (10, 11):
+        return False
+    raise RuntimeError(
+        f"Client connection failed unexpectedly: {result.stderr or result.stdout}"
+    )
 
 
 def counter_packets() -> int:
@@ -83,14 +110,7 @@ def counter_packets() -> int:
 
 def expect_drop(address: str, port: int, label: str) -> None:
     before = counter_packets()
-    try:
-        connect(address, port, ip_options=True)
-    except (TimeoutError, socket.timeout):
-        pass
-    except OSError as error:
-        if error.errno not in (104, 110):
-            raise
-    else:
+    if connect(address, port, ip_options=True):
         raise AssertionError(f"{label}: IPv4 TCP with IP options was accepted")
     after = counter_packets()
     if after <= before:
@@ -130,7 +150,7 @@ def configure() -> None:
         (ROUTER, "r1", "fd00:2::1/64"),
         (SERVER, "s0", "fd00:2::2/64"),
     ):
-        run("ip", "-n", namespace, "-6", "address", "add", address, "dev", interface)
+        run("ip", "-n", namespace, "-6", "address", "add", address, "dev", interface, "nodad")
 
     run("ip", "-n", CLIENT, "route", "add", "198.51.100.0/24", "via", "192.0.2.1")
     run("ip", "-n", SERVER, "route", "add", "192.0.2.0/24", "via", "198.51.100.1")
@@ -180,7 +200,8 @@ def main() -> int:
         print("PASS: IPv4 TCP with IP options is dropped on FORWARD")
 
         # The IPv4-only rule must not affect IPv6.
-        connect("fd00:2::2", IPV6_PORT, ipv6=True)
+        if not connect("fd00:2::2", IPV6_PORT, ipv6=True):
+            raise AssertionError("IPv6 TCP was not accepted")
         print("PASS: IPv6 TCP is accepted")
         return 0
     except Exception:
