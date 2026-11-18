@@ -107,6 +107,33 @@ class ArchiveValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveValidationError, "Duplicate"):
             validate_archive(self.archive_path)
 
+    def test_rejects_duplicate_root_directory_entries(self):
+        entries = [("", tarfile.DIRTYPE, b""), ("", tarfile.DIRTYPE, b"")]
+        entries.extend((name, tarfile.REGTYPE, b"x") for name in REQUIRED)
+        self.write_archive(entries)
+        with self.assertRaisesRegex(ArchiveValidationError, "Duplicate"):
+            validate_archive(self.archive_path)
+
+    def test_rejects_regular_file_as_ancestor(self):
+        entries = [(name, tarfile.REGTYPE, b"x") for name in REQUIRED]
+        entries.append(("snmp", tarfile.REGTYPE, b"not-a-directory"))
+        self.write_archive(entries)
+        with self.assertRaisesRegex(ArchiveValidationError, "ancestor|descendants"):
+            validate_archive(self.archive_path)
+
+    def test_rejects_regular_file_with_link_target(self):
+        entries = [(name, tarfile.REGTYPE, b"x") for name in REQUIRED]
+        entries.append(("extra", tarfile.REGTYPE, b"payload"))
+        self.write_archive(entries)
+        with tarfile.open(self.archive_path, "a:gz") as archive:
+            member = tarfile.TarInfo("source-root/linked")
+            member.type = tarfile.REGTYPE
+            member.size = 1
+            member.linkname = "target"
+            archive.addfile(member, io.BytesIO(b"x"))
+        with self.assertRaisesRegex(ArchiveValidationError, "link target"):
+            validate_archive(self.archive_path)
+
     def test_rejects_missing_required_file(self):
         self.write_archive(
             [(name, tarfile.REGTYPE, b"x") for name in REQUIRED[:-1]]
