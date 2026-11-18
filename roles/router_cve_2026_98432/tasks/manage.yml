@@ -79,6 +79,7 @@
     - type
     - path
     - position
+    - enabled
   register: router_cve_2026_98432_include_options
   changed_when: false
   failed_when: false
