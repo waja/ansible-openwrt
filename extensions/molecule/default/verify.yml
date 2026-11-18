@@ -2337,6 +2337,39 @@
         that:
           - router_cve_2026_98432_missing_state_rejected | default(false) | bool
 
+    - name: Reject configuration-only removal of a live mitigation
+      block:
+        - name: Attempt to remove a live mitigation without runtime changes
+          ansible.builtin.include_role:
+            name: router_cve_2026_98432
+          vars:
+            router_cve_2026_98432_state: absent
+            router_cve_2026_98432_apply_runtime_changes: false
+      rescue:
+        - name: Record the staged-removal rejection
+          ansible.builtin.set_fact:
+            router_cve_2026_98432_staged_removal_rejected: >-
+              {{
+                'configuration-only removal'
+                in ansible_failed_result.msg
+              }}
+
+    - name: Assert live mitigation cannot be orphaned by staged removal
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_staged_removal_rejected | default(false) | bool
+
+    - name: Verify the live mitigation remains after rejected staged removal
+      community.openwrt.command:
+        cmd: nft list table ip cve_2026_98432
+      register: router_cve_2026_98432_after_staged_removal
+      changed_when: false
+
+    - name: Assert the active mitigation table was preserved
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_after_staged_removal.rc == 0
+
     - name: Remove CVE mitigation without changing the running firewall
       ansible.builtin.include_role:
         name: router_cve_2026_98432
