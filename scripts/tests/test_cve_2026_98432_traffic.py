@@ -88,7 +88,7 @@ def expect_drop(address: str, port: int, label: str) -> None:
     except (TimeoutError, socket.timeout):
         pass
     except OSError as error:
-        if error.errno not in (101, 110, 111):
+        if error.errno not in (104, 110):
             raise
     else:
         raise AssertionError(f"{label}: IPv4 TCP with IP options was accepted")
@@ -140,10 +140,6 @@ def configure() -> None:
     run("ip", "netns", "exec", ROUTER, "sysctl", "-q", "-w", "net.ipv4.ip_forward=1")
     run("ip", "netns", "exec", ROUTER, "sysctl", "-q", "-w", "net.ipv6.conf.all.forwarding=1")
 
-    run(
-        "nft", "-f", "-",
-        namespace=ROUTER,
-    ) if False else None
     ruleset = f"""
 table ip {TABLE} {{
     chain pre {{
