@@ -2245,27 +2245,28 @@
         that:
           - router_cve_2026_98432_missing_state_rejected | default(false) | bool
 
-    - name: Remove CVE mitigation without changing the running firewall
-      ansible.builtin.include_role:
-        name: router_cve_2026_98432
-      vars:
-        router_cve_2026_98432_state: absent
-        router_cve_2026_98432_apply_runtime_changes: false
+    - name: Confirm configuration-only removal is rejected as unsafe
+      block:
+        - name: Attempt CVE mitigation removal without runtime inspection
+          ansible.builtin.include_role:
+            name: router_cve_2026_98432
+          vars:
+            router_cve_2026_98432_state: absent
+            router_cve_2026_98432_apply_runtime_changes: false
+      rescue:
+        - name: Record configuration-only removal rejection
+          ansible.builtin.set_fact:
+            router_cve_2026_98432_unsafe_removal_rejected: >-
+              {{ ansible_failed_task.name == 'Refuse removal when runtime changes are disabled' }}
 
-    - name: Verify CVE mitigation configuration was removed
+    - name: Assert configuration-only removal is rejected
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_unsafe_removal_rejected | default(false) | bool
+
+    - name: Verify rejected removal preserved mitigation configuration
       ansible.builtin.raw: |
-        if uci -q get firewall.ansible_cve_2026_98432 >/dev/null; then
-          echo "CVE mitigation UCI include still exists"
-          exit 1
-        fi
-        test ! -e /etc/cve_2026_98432.nft || exit 1
-        if [ -e /etc/sysupgrade.conf ]; then
-          if grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf; then
-            echo "CVE mitigation sysupgrade entry still exists"
-            exit 1
-          else
-            grep_status=$?
-            [ "$grep_status" -eq 1 ] || exit "$grep_status"
-          fi
-        fi
+        uci -q get firewall.ansible_cve_2026_98432.path | grep -Fxq /etc/cve_2026_98432.nft || exit 1
+        test -f /etc/cve_2026_98432.nft || exit 1
+        grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf || exit 1
       changed_when: false
