@@ -19,7 +19,9 @@
   ansible.builtin.set_fact:
     router_cve_2026_98432_kernel_status: >-
       {% set release = router_cve_2026_98432_running_kernel.stdout | trim %}
-      {% if release is match('^6\.6\.[0-9]+([.+-]|$)') %}
+      {% if release is match('^6\.6\.[0-9]+-rc[0-9]+') %}
+      unknown
+      {% elif release is match('^6\.6\.[0-9]+([.+-]|$)') %}
       {% set patchlevel = (
         release.split('.')[2].split('-')[0].split('+')[0] | int
       ) %}
