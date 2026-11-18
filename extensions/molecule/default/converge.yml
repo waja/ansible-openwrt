@@ -1448,7 +1448,7 @@
 
     - name: Verify the installed ruleset and sysupgrade entry
       ansible.builtin.raw: |
-        grep -Fqx 'ip protocol tcp ip hdrlength 6-15 counter drop' \
-          /etc/cve_2026_98432.nft
-        grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf
+        grep -Eq '^[[:space:]]*ip protocol tcp ip hdrlength 6-15 counter drop[[:space:]]* \
+          /etc/cve_2026_98432.nft &&
+          grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf
       changed_when: false
