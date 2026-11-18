@@ -129,6 +129,8 @@
     - name: Ensure router temporary storage can hold the validated archive
       ansible.builtin.assert:
         that:
+          - router_librenms_tmp_storage.rc is defined
+          - router_librenms_tmp_storage.rc == 0
           - router_librenms_tmp_storage.stdout_lines | length >= 2
           - router_librenms_tmp_storage.stdout_lines[-1].split() | length >= 4
           - >-
