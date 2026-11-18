@@ -46,7 +46,7 @@
 
 - name: Check firewall4 availability
   community.openwrt.command:
-    cmd: command -v fw4
+    cmd: /sbin/fw4 --help
   changed_when: false
   check_mode: false
 
