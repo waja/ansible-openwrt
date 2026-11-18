@@ -59,10 +59,12 @@ def validate_archive(archive_path):
                 raise ArchiveValidationError(f"Unsafe archive path: {raw_name!r}")
             if root is None:
                 root = parts[0]
-            if parts[0] != root or len(parts) < 2:
+            if parts[0] != root or (len(parts) < 2 and not member.isdir()):
                 raise ArchiveValidationError(
                     "Archive members must share one top-level directory"
                 )
+            if len(parts) == 1:
+                continue
             relative_path = PurePosixPath(*parts[1:]).as_posix()
             if relative_path in seen_paths:
                 raise ArchiveValidationError(
