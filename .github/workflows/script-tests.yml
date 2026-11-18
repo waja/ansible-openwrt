@@ -161,9 +161,9 @@ jobs:
               busybox tar -tzf /tmp/librenms-tar/archive.tar.gz >/dev/null
               busybox tar -xzf /tmp/librenms-tar/archive.tar.gz \
                 -C /tmp/librenms-tar/extracted
-              test -f /tmp/librenms-tar/extracted/source-root/snmp/Openwrt/wlClients.sh
-              grep -Fx "test-script" \
-                /tmp/librenms-tar/extracted/source-root/snmp/Openwrt/wlClients.sh
+              script=/tmp/librenms-tar/extracted/source-root/snmp/Openwrt/wlClients.sh
+              test -f "$script"
+              grep -Fx "test-script" "$script"
               busybox find /tmp/librenms-tar/extracted \
                 -mindepth 1 -maxdepth 1 -type d
             '
