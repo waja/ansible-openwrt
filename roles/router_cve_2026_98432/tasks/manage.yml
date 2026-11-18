@@ -243,16 +243,6 @@
         - router_cve_2026_98432_include.result | default('') == 'include'
 
     - name: Reload fw4 when managed configuration changed
-      block:
-        - name: Validate the resulting fw4 ruleset
-          community.openwrt.command:
-            cmd: fw4 check
-          changed_when: false
-
-        - name: Reload the firewall
-          community.openwrt.service:
-            name: firewall
-            state: reloaded
       when:
         - not ansible_check_mode
         - router_cve_2026_98432_apply_runtime_changes | bool
@@ -272,6 +262,16 @@
               )
             )
           )
+      block:
+        - name: Validate the resulting fw4 ruleset
+          community.openwrt.command:
+            cmd: fw4 check
+          changed_when: false
+
+        - name: Reload the firewall
+          community.openwrt.service:
+            name: firewall
+            state: reloaded
 
     - name: Remove the standalone nftables table
       community.openwrt.command:
