@@ -103,7 +103,6 @@
       register: router_librenms_remote_dir
       changed_when: false
 
-
     - name: Create separate LibreNMS extraction directory on the router
       community.openwrt.command:
         cmd: >-
@@ -112,19 +111,15 @@
           ~ '/extracted') | quote }}
       changed_when: false
 
-      when:
-        - router_librenms_remote_dir.stdout is defined
-        - router_librenms_remote_dir.stdout | trim | length > 0
-
     - name: Check available router temporary storage
       community.openwrt.command:
         cmd: df -Pk /tmp
       register: router_librenms_tmp_storage
       changed_when: false
-
-      when:
-        - router_librenms_remote_dir.stdout is defined
-        - router_librenms_remote_dir.stdout | trim | length > 0
+      retries: 3
+      delay: 2
+      until: router_librenms_tmp_storage.stdout is defined
+      ignore_unreachable: true
 
     - name: Ensure router temporary storage can hold the validated archive
       ansible.builtin.assert:
@@ -140,7 +135,6 @@
           At least 64 MiB of free space in /tmp is required to stage and
           extract the LibreNMS source archive safely.
 
-
     - name: Upload LibreNMS source archive to the router
       community.openwrt.copy:
         src: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
@@ -150,7 +144,6 @@
         group: root
         mode: '0600'
       changed_when: false
-
 
     - name: Extract LibreNMS agent source archive with BusyBox tar
       community.openwrt.command:
@@ -162,10 +155,6 @@
           ~ '/extracted') | quote }}
       changed_when: false
 
-      when:
-        - router_librenms_remote_dir.stdout is defined
-        - router_librenms_tmp_storage.stdout_lines is defined
-
     - name: Locate extracted LibreNMS source directory
       community.openwrt.command:
         cmd: >-
@@ -176,10 +165,6 @@
       register: router_librenms_source_dir
       changed_when: false
 
-      when:
-        - router_librenms_remote_dir.stdout is defined
-        - router_librenms_tmp_storage.stdout_lines is defined
-
     - name: Ensure exactly one LibreNMS source root was extracted
       ansible.builtin.assert:
         that:
@@ -188,14 +173,11 @@
           The validated LibreNMS archive did not extract to exactly one
           top-level source directory.
 
-
     - name: Create LibreNMS script directory
       community.openwrt.file:
         path: /etc/librenms
         state: directory
         mode: '0755'
-
-
 
     - name: Deploy downloaded LibreNMS scripts
       ansible.builtin.include_tasks: deploy_script.yml
@@ -219,7 +201,6 @@
         router_librenms_source_file: >-
           {{ router_librenms_source_dir.stdout | trim
           }}/{{ router_librenms_script.path }}
-      when: router_librenms_source_dir.stdout is defined
 
     - name: Deploy LibreNMS hardware detection script
       community.openwrt.copy:
