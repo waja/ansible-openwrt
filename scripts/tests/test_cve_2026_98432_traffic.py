@@ -158,8 +158,8 @@ def main() -> int:
     servers: list[subprocess.Popen[str]] = []
     namespaces_created = False
     try:
-        configure()
         namespaces_created = True
+        configure()
         servers.extend([
             start_server(ROUTER, socket.AF_INET, "192.0.2.1", INPUT_PORT),
             start_server(SERVER, socket.AF_INET, "198.51.100.2", FORWARD_PORT),
