@@ -9,6 +9,8 @@
   register: router_librenms_script_comparison
   failed_when: false
   changed_when: false
+  ignore_unreachable: true
+  ignore_unreachable: true
 
 - name: Copy updated LibreNMS script on the router
   community.openwrt.command:
@@ -17,8 +19,11 @@
       {{ router_librenms_source_file | quote }}
       {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
     uses_shell: true
-  when: router_librenms_script_comparison.rc != 0
+  when:
+    - router_librenms_script_comparison.rc is defined
+    - router_librenms_script_comparison.rc != 0
   changed_when: true
+  ignore_unreachable: true
   notify: Restart SNMP daemon
 
 - name: Set LibreNMS script permissions
