@@ -1464,7 +1464,7 @@
           - router_cve_2026_98432_runtime_table.rc == 0
           - >-
             router_cve_2026_98432_runtime_table.stdout is search(
-              '(?s)chain pre\\s*\\{[^}]*type filter hook prerouting '
+              '(?s)chain pre\s*\{[^}]*type filter hook prerouting '
               ~ 'priority (-310|raw - 10);[^}]*'
               ~ 'ip protocol tcp ip hdrlength 6-15 counter.*drop'
             )
