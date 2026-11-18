@@ -25,18 +25,46 @@ class ArchiveValidationError(ValueError):
     """Raised when an archive is unsafe or incomplete."""
 
 
-class StrictTarInfo(tarfile.TarInfo):
-    """Reject malformed headers even after valid members were parsed."""
+class StrictTarFile(tarfile.TarFile):
+    """Reject malformed headers instead of silently ending the stream."""
 
-    @classmethod
-    def frombuf(cls, buf, encoding, errors):
+    def next(self):
+        self._check("ra")
+        if self.firstmember is not None:
+            member = self.firstmember
+            self.firstmember = None
+            return member
+
+        if self.offset != self.fileobj.tell():
+            if self.offset == 0:
+                return None
+            self.fileobj.seek(self.offset - 1)
+            if not self.fileobj.read(1):
+                raise ArchiveValidationError("Unexpected end of tar stream")
+
         try:
-            return super().frombuf(buf, encoding, errors)
+            member = self.tarinfo.fromtarfile(self)
+        except tarfile.EOFHeaderError:
+            member = None
         except tarfile.InvalidHeaderError as error:
             raise ArchiveValidationError(
                 f"Invalid tar header: {error}"
             ) from error
+        except (tarfile.EmptyHeaderError, tarfile.TruncatedHeaderError) as error:
+            raise ArchiveValidationError(
+                f"Truncated tar archive: {error}"
+            ) from error
+        except tarfile.SubsequentHeaderError as error:
+            raise ArchiveValidationError(
+                f"Invalid subsequent tar header: {error}"
+            ) from error
 
+        if member is not None:
+            if not self.stream:
+                self.members.append(member)
+        else:
+            self._loaded = True
+        return member
 
 class BoundedReader:
     """Limit bytes read from a decompressed archive stream."""
@@ -73,10 +101,9 @@ def validate_archive(archive_path):
     try:
         with gzip.open(archive_path, "rb") as compressed:
             bounded = BoundedReader(compressed, MAX_DECOMPRESSED_BYTES)
-            with tarfile.open(
+            with StrictTarFile.open(
                 fileobj=bounded,
                 mode="r|",
-                tarinfo=StrictTarInfo,
                 bufsize=tarfile.BLOCKSIZE,
             ) as archive:
                 root = None
