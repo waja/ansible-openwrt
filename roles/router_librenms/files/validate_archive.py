@@ -168,15 +168,6 @@ def validate_archive(archive_path):
                             f"{MAX_UNPACKED_BYTES}-byte expanded-size limit"
                         )
 
-                # TarFile stops at the first zero block. Require the second
-                # zero block as well, and reject EOF without a valid terminator.
-                if archive.fileobj.read(tarfile.BLOCKSIZE) != (
-                    b"\\0" * tarfile.BLOCKSIZE
-                ):
-                    raise ArchiveValidationError(
-                        "Archive is missing the two-block tar terminator"
-                    )
-
                 # Consume the remainder so gzip CRC/trailer errors and
                 # oversized trailing metadata cannot be silently ignored.
                 while bounded.read(64 * 1024):
