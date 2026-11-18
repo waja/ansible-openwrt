@@ -6,10 +6,12 @@ import io
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from validate_archive import (
     ArchiveValidationError,
+    MAX_DECOMPRESSED_BYTES,
     MAX_MEMBERS,
     MAX_UNPACKED_BYTES,
     validate_archive,
@@ -187,6 +189,25 @@ class ArchiveValidationTests(unittest.TestCase):
         self.write_archive(entries)
         with self.assertRaisesRegex(ArchiveValidationError, "expanded-size"):
             validate_archive(self.archive_path)
+
+    def test_rejects_oversized_pax_metadata(self):
+        with tarfile.open(
+            self.archive_path, "w:gz", format=tarfile.PAX_FORMAT
+        ) as archive:
+            for name in REQUIRED:
+                member = tarfile.TarInfo("source-root/" + name)
+                member.size = 1
+                archive.addfile(member, io.BytesIO(b"x"))
+            member = tarfile.TarInfo("source-root/extra")
+            member.size = 1
+            member.pax_headers = {"comment": "x" * (MAX_DECOMPRESSED_BYTES + 1)}
+            archive.addfile(member, io.BytesIO(b"x"))
+
+        with patch("validate_archive.MAX_DECOMPRESSED_BYTES", 1024):
+            with self.assertRaisesRegex(
+                ArchiveValidationError, "decompressed-stream"
+            ):
+                validate_archive(self.archive_path)
 
     def test_rejects_excessive_member_count(self):
         entries = [(name, tarfile.REGTYPE, b"x") for name in REQUIRED]
