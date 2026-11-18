@@ -125,6 +125,13 @@ class ArchiveValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveValidationError, "ancestor|descendants"):
             validate_archive(self.archive_path)
 
+    def test_rejects_regular_file_ancestor_before_children(self):
+        entries = [("snmp", tarfile.REGTYPE, b"not-a-directory")]
+        entries.extend((name, tarfile.REGTYPE, b"x") for name in REQUIRED)
+        self.write_archive(entries)
+        with self.assertRaisesRegex(ArchiveValidationError, "ancestor"):
+            validate_archive(self.archive_path)
+
     def test_rejects_regular_file_with_link_target(self):
         entries = [(name, tarfile.REGTYPE, b"x") for name in REQUIRED]
         entries.append(("extra", tarfile.REGTYPE, b"payload"))
