@@ -8,6 +8,33 @@
     fail_msg: >-
       State must be present or absent and runtime changes must be boolean.
 
+- name: Read the running kernel release
+  community.openwrt.command:
+    cmd: uname -r
+  register: router_cve_2026_98432_running_kernel
+  changed_when: false
+  check_mode: false
+
+- name: Classify the running 6.6 kernel against the upstream fixed threshold
+  ansible.builtin.set_fact:
+    router_cve_2026_98432_kernel_status: >-
+      {% set release = router_cve_2026_98432_running_kernel.stdout | trim %}
+      {% if release is match('^6\\.6\\.[0-9]+([.+-]|$)') %}
+      {% set patchlevel = release.split('.')[2].split('-')[0].split('+')[0] | int %}
+      {{ 'fixed_threshold_met' if patchlevel >= 159 else 'below_fixed_threshold' }}
+      {% else %}
+      unknown
+      {% endif %}
+  changed_when: false
+
+- name: Report running kernel classification
+  ansible.builtin.debug:
+    msg: >-
+      Running kernel {{ router_cve_2026_98432_running_kernel.stdout | trim }}:
+      {{ router_cve_2026_98432_kernel_status }}. This is version information
+      only; verify vendor backports and advisories before changing mitigation
+      state.
+
 - name: Check firewall4 availability
   community.openwrt.command:
     cmd: command -v fw4
