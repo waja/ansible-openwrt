@@ -118,7 +118,9 @@
       changed_when: false
       retries: 3
       delay: 2
-      until: router_librenms_tmp_storage.stdout is defined
+      until: >-
+        router_librenms_tmp_storage.rc is defined
+        and router_librenms_tmp_storage.rc == 0
       ignore_unreachable: true
 
     - name: Ensure router temporary storage can hold the validated archive
