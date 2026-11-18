@@ -188,9 +188,11 @@ def main() -> int:
         time.sleep(0.5)
 
         # Ordinary IPv4 TCP must continue to work on both paths.
-        connect("192.0.2.1", INPUT_PORT)
+        if not connect("192.0.2.1", INPUT_PORT):
+            raise AssertionError("ordinary IPv4 TCP to INPUT was not accepted")
         print("PASS: ordinary IPv4 TCP to INPUT is accepted")
-        connect("198.51.100.2", FORWARD_PORT)
+        if not connect("198.51.100.2", FORWARD_PORT):
+            raise AssertionError("ordinary IPv4 TCP to FORWARD was not accepted")
         print("PASS: ordinary IPv4 TCP to FORWARD is accepted")
 
         # IP options must be dropped on both paths and counted by the rule.
