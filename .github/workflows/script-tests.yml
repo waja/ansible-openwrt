@@ -246,11 +246,11 @@ jobs:
             "$RUNNER_TEMP/owrt-test/test.sh"
           cp scripts/tests/test-owrt-extra-cli.sh \
             "$RUNNER_TEMP/owrt-test/cli-tests.sh"
-          docker run --rm \
+          docker run --rm -i \
             -v "$RUNNER_TEMP/owrt-test:/opt/owrt-test:ro" \
             --entrypoint busybox \
             "$OPENWRT_IMAGE" \
-            ash -c '
+            ash -s <<'EOF_BUSYBOX_SMOKE'
               set -eux
 
               cp /opt/owrt-test/owrt-extra.sh /tmp/owrt-extra-test.sh
@@ -548,7 +548,7 @@ jobs:
               busybox ash -n /opt/owrt-test/cli-tests.sh
               busybox ash /opt/owrt-test/cli-tests.sh \
                 /tmp/owrt-extra-test.sh
-            '
+          EOF_BUSYBOX_SMOKE
 
       - name: Test discovery failure handling
         run: |
