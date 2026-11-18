@@ -2223,6 +2223,25 @@
           - >-
             router_firewall_ambiguous_redirect_failure
             == 'Reject ambiguous anonymous firewall redirect matches'
+    - name: Reject an omitted CVE mitigation state
+      block:
+        - name: Include CVE mitigation role without an explicit state
+          ansible.builtin.include_role:
+            name: router_cve_2026_98432
+          vars:
+            router_cve_2026_98432_state: null
+            router_cve_2026_98432_apply_runtime_changes: false
+      rescue:
+        - name: Record missing-state rejection
+          ansible.builtin.set_fact:
+            router_cve_2026_98432_missing_state_rejected: >-
+              {{ ansible_failed_task.name == 'Validate requested mitigation state' }}
+
+    - name: Assert an explicit CVE mitigation state is required
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_missing_state_rejected | default(false) | bool
+
     - name: Remove CVE mitigation without changing the running firewall
       ansible.builtin.include_role:
         name: router_cve_2026_98432
