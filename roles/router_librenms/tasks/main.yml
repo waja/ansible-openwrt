@@ -112,16 +112,6 @@
       register: router_librenms_remote_dir
       changed_when: false
 
-    - name: Upload LibreNMS source archive to the router
-      community.openwrt.copy:
-        src: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
-        dest: >-
-          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
-        owner: root
-        group: root
-        mode: '0600'
-      changed_when: false
-
     - name: Check available router temporary storage
       community.openwrt.command:
         cmd: df -Pk /tmp
@@ -137,6 +127,16 @@
         fail_msg: >-
           At least 40 MiB of free space in /tmp is required to stage and
           extract the LibreNMS source archive safely.
+
+    - name: Upload LibreNMS source archive to the router
+      community.openwrt.copy:
+        src: "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
+        dest: >-
+          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
+        owner: root
+        group: root
+        mode: '0600'
+      changed_when: false
 
     - name: Extract LibreNMS agent source archive with BusyBox tar
       community.openwrt.command:
