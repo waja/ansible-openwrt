@@ -96,6 +96,16 @@
       become: false
       changed_when: false
 
+    - name: Validate LibreNMS source archive on the controller
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ role_path }}/files/validate_archive.py"
+          - "{{ router_librenms_download_dir.path }}/librenms-agent.tar.gz"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
     - name: Create temporary LibreNMS extraction directory on the router
       community.openwrt.command:
         cmd: mktemp -d /tmp/ansible-librenms.XXXXXX
@@ -110,23 +120,23 @@
         owner: root
         group: root
         mode: '0600'
-
-    - name: Validate LibreNMS archive with BusyBox tar
-      community.openwrt.command:
-        cmd: >-
-          busybox tar -tzf
-          {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
-      register: router_librenms_archive_listing
       changed_when: false
 
-    - name: Reject absolute paths and parent-directory traversal in archive
+    - name: Check available router temporary storage
+      community.openwrt.command:
+        cmd: df -Pk /tmp
+      register: router_librenms_tmp_storage
+      changed_when: false
+
+    - name: Ensure router temporary storage can hold the validated archive
       ansible.builtin.assert:
         that:
-          - >-
-            router_librenms_archive_listing.stdout_lines
-            | select('match', '(^/|(^|/)\\.\\.(/|$))')
-            | list | length == 0
-        fail_msg: Unsafe path in LibreNMS source archive
+          - router_librenms_tmp_storage.stdout_lines | length >= 2
+          - router_librenms_tmp_storage.stdout_lines[-1].split() | length >= 4
+          - router_librenms_tmp_storage.stdout_lines[-1].split()[3] | int >= 40960
+        fail_msg: >-
+          At least 40 MiB of free space in /tmp is required to stage and
+          extract the LibreNMS source archive safely.
 
     - name: Extract LibreNMS agent source archive with BusyBox tar
       community.openwrt.command:
@@ -135,6 +145,7 @@
           {{ router_librenms_remote_dir.stdout | trim }}/librenms-agent.tar.gz
           -C {{ router_librenms_remote_dir.stdout | trim }}
           --strip-components=1
+      changed_when: false
 
     - name: Create LibreNMS script directory
       community.openwrt.file:
