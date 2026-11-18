@@ -72,15 +72,6 @@
       become: false
       changed_when: false
 
-    - name: Create temporary LibreNMS source directory on the controller
-      ansible.builtin.file:
-        path: "{{ router_librenms_download_dir.path }}/src"
-        state: directory
-        mode: '0700'
-      delegate_to: localhost
-      become: false
-      changed_when: false
-
     - name: Download LibreNMS agent source archive over HTTPS
       ansible.builtin.command:
         argv:
