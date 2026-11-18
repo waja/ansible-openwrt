@@ -108,7 +108,8 @@
       community.openwrt.command:
         cmd: >-
           mkdir
-          {{ (router_librenms_remote_dir.stdout | trim ~ '/extracted') | quote }}
+          {{ (router_librenms_remote_dir.stdout | trim
+          ~ '/extracted') | quote }}
       changed_when: false
       ignore_unreachable: true
       when:
@@ -156,7 +157,8 @@
       community.openwrt.command:
         cmd: >-
           busybox tar -xzf
-          {{ (router_librenms_remote_dir.stdout | trim ~ '/librenms-agent.tar.gz') | quote }}
+          {{ (router_librenms_remote_dir.stdout | trim
+          ~ '/librenms-agent.tar.gz') | quote }}
           -C {{ (router_librenms_remote_dir.stdout | trim ~ '/extracted') | quote }}
       changed_when: false
       ignore_unreachable: true
@@ -237,7 +239,8 @@
             state: absent
           when:
             - router_librenms_remote_dir is defined
-            - router_librenms_remote_dir.stdout | default('') | trim | length > 0
+            - router_librenms_remote_dir.stdout is defined
+            - router_librenms_remote_dir.stdout | trim | length > 0
           changed_when: false
           ignore_unreachable: true
       always:
