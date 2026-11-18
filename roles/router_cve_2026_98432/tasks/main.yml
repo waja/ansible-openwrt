@@ -8,16 +8,32 @@
     fail_msg: >-
       State must be present or absent and runtime changes must be boolean.
 
-- name: Check firewall4 availability and current configuration
+- name: Check firewall4 availability
   community.openwrt.command:
-    cmd: fw4 check
+    cmd: command -v fw4
   changed_when: false
-  when: router_cve_2026_98432_apply_runtime_changes | bool
+  check_mode: false
+
+- name: Refuse unrelated pending firewall UCI changes
+  community.openwrt.command:
+    cmd: uci changes firewall
+  register: router_cve_2026_98432_pending_firewall_changes
+  changed_when: false
+  check_mode: false
+
+- name: Ensure the firewall UCI package has no pending operator changes
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_pending_firewall_changes.stdout | trim == ''
+    fail_msg: >-
+      The firewall UCI package has uncommitted changes. Commit or discard them
+      before managing the CVE mitigation.
 
 - name: Check firewall service is enabled
   community.openwrt.command:
     cmd: /etc/init.d/firewall enabled
   changed_when: false
+  check_mode: false
 
 - name: Read the owned UCI include
   community.openwrt.uci:
@@ -26,6 +42,7 @@
   register: router_cve_2026_98432_include
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Read the owned UCI include options
   community.openwrt.uci:
