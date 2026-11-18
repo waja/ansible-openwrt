@@ -177,6 +177,15 @@
         - router_librenms_remote_dir.stdout is defined
         - router_librenms_tmp_storage.stdout_lines is defined
 
+    - name: Ensure exactly one LibreNMS source root was extracted
+      ansible.builtin.assert:
+        that:
+          - router_librenms_source_dir.stdout_lines | length == 1
+        fail_msg: >-
+          The validated LibreNMS archive did not extract to exactly one
+          top-level source directory.
+      when: router_librenms_source_dir.stdout_lines is defined
+
     - name: Create LibreNMS script directory
       community.openwrt.file:
         path: /etc/librenms
