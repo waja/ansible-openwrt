@@ -120,6 +120,9 @@
           {{ (router_librenms_remote_dir.stdout | trim ~ '/extracted') | quote }}
       changed_when: false
       ignore_unreachable: true
+      when:
+        - router_librenms_remote_dir.stdout is defined
+        - router_librenms_remote_dir.stdout | trim | length > 0
 
     - name: Check available router temporary storage
       community.openwrt.command:
@@ -127,6 +130,9 @@
       register: router_librenms_tmp_storage
       changed_when: false
       ignore_unreachable: true
+      when:
+        - router_librenms_remote_dir.stdout is defined
+        - router_librenms_remote_dir.stdout | trim | length > 0
 
     - name: Ensure router temporary storage can hold the validated archive
       ansible.builtin.assert:
@@ -139,6 +145,7 @@
         fail_msg: >-
           At least 64 MiB of free space in /tmp is required to stage and
           extract the LibreNMS source archive safely.
+      when: router_librenms_tmp_storage.stdout_lines is defined
 
     - name: Upload LibreNMS source archive to the router
       community.openwrt.copy:
@@ -150,6 +157,9 @@
         mode: '0600'
       changed_when: false
       ignore_unreachable: true
+      when:
+        - router_librenms_remote_dir.stdout is defined
+        - router_librenms_tmp_storage.stdout_lines is defined
 
     - name: Extract LibreNMS agent source archive with BusyBox tar
       community.openwrt.command:
@@ -159,6 +169,9 @@
           -C {{ (router_librenms_remote_dir.stdout | trim ~ '/extracted') | quote }}
       changed_when: false
       ignore_unreachable: true
+      when:
+        - router_librenms_remote_dir.stdout is defined
+        - router_librenms_tmp_storage.stdout_lines is defined
 
     - name: Locate extracted LibreNMS source directory
       community.openwrt.command:
@@ -169,12 +182,17 @@
       register: router_librenms_source_dir
       changed_when: false
       ignore_unreachable: true
+      when:
+        - router_librenms_remote_dir.stdout is defined
+        - router_librenms_tmp_storage.stdout_lines is defined
 
     - name: Create LibreNMS script directory
       community.openwrt.file:
         path: /etc/librenms
         state: directory
         mode: '0755'
+      ignore_unreachable: true
+      when: router_librenms_source_dir.stdout is defined
 
     - name: Deploy downloaded LibreNMS scripts
       ansible.builtin.include_tasks: deploy_script.yml
@@ -198,6 +216,7 @@
         router_librenms_source_file: >-
           {{ router_librenms_source_dir.stdout | trim
           }}/{{ router_librenms_script.path }}
+      when: router_librenms_source_dir.stdout is defined
 
     - name: Deploy LibreNMS hardware detection script
       community.openwrt.copy:
@@ -207,6 +226,8 @@
         group: root
         mode: '0755'
       notify: Restart SNMP daemon
+      ignore_unreachable: true
+      when: router_librenms_source_dir.stdout is defined
   always:
     - name: Remove temporary LibreNMS extraction directory from the router
       community.openwrt.file:
