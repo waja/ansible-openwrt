@@ -216,7 +216,9 @@
     src: /etc/cve_2026_98432.nft
   register: router_cve_2026_98432_ruleset_backup
   changed_when: false
-  when: router_cve_2026_98432_file_exists.rc == 0 and router_cve_2026_98432_file_is_regular.rc == 0
+  when:
+    - router_cve_2026_98432_file_exists.rc == 0
+    - router_cve_2026_98432_file_is_regular.rc == 0
 
 - name: Apply the requested mitigation state
   block:
@@ -441,7 +443,9 @@
         owner: root
         group: root
         mode: '0644'
-      when: router_cve_2026_98432_file_exists.rc == 0 and router_cve_2026_98432_file_is_regular.rc == 0
+      when:
+    - router_cve_2026_98432_file_exists.rc == 0
+    - router_cve_2026_98432_file_is_regular.rc == 0
 
     - name: Remove the mitigation file created by the failed run
       community.openwrt.file:
