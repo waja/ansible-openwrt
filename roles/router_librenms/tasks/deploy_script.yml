@@ -32,9 +32,8 @@
       {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }})
       || exit $?;
       if [ "$mode" != 755 ]; then
-        chmod 0755
-        {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
-        && echo permissions-updated;
+        chmod 0755 {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }} &&
+        echo permissions-updated;
       fi
     uses_shell: true
   register: router_librenms_script_permissions
