@@ -1465,4 +1465,3 @@
             router_cve_2026_98432_installed_ruleset.content | b64decode
             is search('ip protocol tcp ip hdrlength 6-15 counter drop')
           - router_cve_2026_98432_installed_sysupgrade.rc == 0
-
