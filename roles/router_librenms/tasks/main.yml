@@ -180,6 +180,10 @@
       loop_control:
         loop_var: router_librenms_script
         label: "{{ router_librenms_script.name }}"
+      vars:
+        router_librenms_source_file: >-
+          {{ router_librenms_source_dir.stdout | trim
+          }}/{{ router_librenms_script.path }}
 
     - name: Deploy LibreNMS hardware detection script
       community.openwrt.copy:
