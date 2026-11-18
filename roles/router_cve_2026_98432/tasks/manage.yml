@@ -94,10 +94,26 @@
   failed_when: false
   check_mode: false
 
-- name: Inspect the owned ruleset path without following symlinks
+- name: Check whether the owned ruleset path is a symlink
   community.openwrt.command:
-    cmd: stat -c %F /etc/cve_2026_98432.nft
+    cmd: test -L /etc/cve_2026_98432.nft
+  register: router_cve_2026_98432_file_is_symlink
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check whether the owned ruleset path exists
+  community.openwrt.command:
+    cmd: test -e /etc/cve_2026_98432.nft
   register: router_cve_2026_98432_file_exists
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check whether the owned ruleset path is a regular file
+  community.openwrt.command:
+    cmd: test -f /etc/cve_2026_98432.nft
+  register: router_cve_2026_98432_file_is_regular
   changed_when: false
   failed_when: false
   check_mode: false
@@ -105,21 +121,13 @@
 - name: Reject non-regular objects at the owned ruleset path
   ansible.builtin.assert:
     that:
+      - router_cve_2026_98432_file_is_symlink.rc != 0
       - >-
-        (
-          router_cve_2026_98432_file_exists.rc == 0
-          and router_cve_2026_98432_file_exists.stdout | trim == 'regular file'
-        )
-        or
-        (
-          router_cve_2026_98432_file_exists.rc != 0
-          and router_cve_2026_98432_file_exists.stderr
-              is search('No such file or directory')
-        )
+        router_cve_2026_98432_file_exists.rc != 0
+        or router_cve_2026_98432_file_is_regular.rc == 0
     fail_msg: >-
-      /etc/cve_2026_98432.nft exists but is not a regular file, or its state
-      could not be determined. Refusing to follow or remove an unmanaged
-      filesystem object.
+      /etc/cve_2026_98432.nft exists but is not a regular file, or is a
+      symlink. Refusing to follow or remove an unmanaged filesystem object.
 
 
 - name: Check whether sysupgrade configuration exists
