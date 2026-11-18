@@ -2244,7 +2244,9 @@
 
     - name: Capture fw4 validation failure and mitigation rollback
       block:
-        - name: Attempt mitigation reconciliation with an invalid unrelated include
+        - name: >-
+            Attempt mitigation reconciliation with an invalid unrelated
+            include
           ansible.builtin.include_role:
             name: router_cve_2026_98432
           vars:
@@ -2291,12 +2293,16 @@
     - name: Verify rollback preserved owned and unrelated configuration
       ansible.builtin.assert:
         that:
-          - router_cve_2026_98432_rollback_include.result == '/etc/cve_2026_98432.nft'
+          - >-
+            router_cve_2026_98432_rollback_include.result
+            == '/etc/cve_2026_98432.nft'
           - >-
             router_cve_2026_98432_rollback_ruleset.content | b64decode
             is search('ip protocol tcp ip hdrlength 6-15 counter drop')
           - router_cve_2026_98432_rollback_sysupgrade.rc == 0
-          - router_cve_2026_98432_unrelated_include.result == '/tmp/ansible-molecule-invalid.nft'
+          - >-
+            router_cve_2026_98432_unrelated_include.result
+            == '/tmp/ansible-molecule-invalid.nft'
 
     - name: Remove the invalid nftables test include
       community.openwrt.uci:
@@ -2321,7 +2327,10 @@
         - name: Record missing-state rejection
           ansible.builtin.set_fact:
             router_cve_2026_98432_missing_state_rejected: >-
-              {{ ansible_failed_task.name == 'Validate requested mitigation state' }}
+              {{
+                ansible_failed_task.name
+                == 'Validate requested mitigation state'
+              }}
 
     - name: Assert an explicit CVE mitigation state is required
       ansible.builtin.assert:
