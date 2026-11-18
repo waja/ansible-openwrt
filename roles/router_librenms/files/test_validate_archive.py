@@ -133,6 +133,18 @@ class ArchiveValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveValidationError, "link target"):
             validate_archive(self.archive_path)
 
+    def test_rejects_missing_tar_terminator(self):
+        self.write_archive()
+        archive_data = gzip.decompress(self.archive_path.read_bytes())
+        last_data_block = (len(archive_data.rstrip(b"\\0")) - 1) // 512
+        archive_data = (
+            archive_data[: (last_data_block + 1) * 512] + b"\\0" * 512
+        )
+        self.archive_path.write_bytes(gzip.compress(archive_data))
+
+        with self.assertRaisesRegex(ArchiveValidationError, "two-block tar terminator"):
+            validate_archive(self.archive_path)
+
     def test_rejects_invalid_header_after_required_files(self):
         entries = [(name, tarfile.REGTYPE, b"x") for name in REQUIRED]
         entries.append(("extra", tarfile.REGTYPE, b"x"))
