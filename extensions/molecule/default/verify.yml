@@ -2271,7 +2271,7 @@
 
     - name: Verify rejected removal preserved mitigation configuration
       ansible.builtin.raw: |
-        uci -q get firewall.ansible_cve_2026_98432.path \\
+        uci -q get firewall.ansible_cve_2026_98432.path \
           | grep -Fxq /etc/cve_2026_98432.nft || exit 1
         test -f /etc/cve_2026_98432.nft || exit 1
         grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf || exit 1
