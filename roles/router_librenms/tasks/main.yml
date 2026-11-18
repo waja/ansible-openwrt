@@ -163,13 +163,20 @@
         mode: '0755'
 
     - name: Deploy downloaded LibreNMS scripts
-      community.openwrt.copy:
-        src: "{{ router_librenms_source_dir.stdout | trim }}/{{ item.path }}"
-        remote_src: true
-        dest: "/etc/librenms/{{ item.name }}"
-        owner: root
-        group: root
-        mode: '0755'
+      community.openwrt.command:
+        cmd: >-
+          if ! cmp -s
+          {{ router_librenms_source_dir.stdout | trim }}/{{ item.path }}
+          /etc/librenms/{{ item.name }};
+          then
+          cp
+          {{ router_librenms_source_dir.stdout | trim }}/{{ item.path }}
+          /etc/librenms/{{ item.name }}
+          && chmod 0755 /etc/librenms/{{ item.name }}
+          && echo changed;
+          fi
+      register: router_librenms_script_deployment
+      changed_when: "'changed' in router_librenms_script_deployment.stdout"
       loop:
         - name: distro
           path: snmp/distro
