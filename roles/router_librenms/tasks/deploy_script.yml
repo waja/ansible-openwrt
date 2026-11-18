@@ -25,11 +25,27 @@
   ignore_unreachable: true
   notify: Restart SNMP daemon
 
+- name: Check LibreNMS script permissions
+  community.openwrt.command:
+    cmd: >-
+      busybox stat -c %a
+      {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
+  register: router_librenms_script_mode
+  failed_when: false
+  changed_when: false
+  ignore_unreachable: true
+
 - name: Set LibreNMS script permissions
   community.openwrt.command:
     cmd: >-
       chmod 0755
       {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
   uses_shell: true
-  changed_when: false
+  when:
+    - router_librenms_script_mode.rc is defined
+    - >-
+      router_librenms_script_mode.rc != 0
+      or router_librenms_script_mode.stdout | trim != '755'
+  changed_when: true
   ignore_unreachable: true
+  notify: Restart SNMP daemon
