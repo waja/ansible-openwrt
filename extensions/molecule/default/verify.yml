@@ -2261,10 +2261,9 @@
         that:
           - router_cve_2026_98432_rollback_seen | default(false) | bool
 
-    - name: Verify rollback preserved the owned mitigation state
+    - name: Verify rollback preserved owned and unrelated configuration
       ansible.builtin.raw: |
-        uci -q get firewall.ansible_cve_2026_98432.path |
-          grep -Fqx '/etc/cve_2026_98432.nft'
+        uci -q get firewall.ansible_cve_2026_98432.path | grep -Fqx '/etc/cve_2026_98432.nft' &&
         grep -Eq '^[[:space:]]*ip protocol tcp ip hdrlength 6-15 counter drop[[:space:]]*      block:
         - name: Include CVE mitigation role without an explicit state
           ansible.builtin.include_role:
@@ -2288,7 +2287,7 @@
         name: router_cve_2026_98432
       vars:
         router_cve_2026_98432_state: absent
-        router_cve_2026_98432_apply_runtime_changes: false
+        router_cve_2026_98432_apply_runtime_changes: true
 
     - name: Verify CVE mitigation configuration was removed
       ansible.builtin.raw: |
@@ -2307,10 +2306,9 @@
           fi
         fi
       changed_when: false
-           /etc/cve_2026_98432.nft
-        grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf
-        uci -q get firewall.ansible_molecule_invalid_nft.path |
-          grep -Fqx '/tmp/ansible-molecule-invalid.nft'
+ /etc/cve_2026_98432.nft &&
+        grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf &&
+        uci -q get firewall.ansible_molecule_invalid_nft.path | grep -Fqx '/tmp/ansible-molecule-invalid.nft'
       changed_when: false
 
     - name: Remove the invalid nftables test include
