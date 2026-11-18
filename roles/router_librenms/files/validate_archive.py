@@ -38,6 +38,17 @@ class StrictTarInfo(tarfile.TarInfo):
                 f"Invalid tar header: {error}"
             ) from error
 
+    @classmethod
+    def _frombuf(cls, buf, encoding, errors, *args, **kwargs):
+        try:
+            return super()._frombuf(
+                buf, encoding, errors, *args, **kwargs
+            )
+        except tarfile.InvalidHeaderError as error:
+            raise ArchiveValidationError(
+                f"Invalid tar header: {error}"
+            ) from error
+
 class BoundedReader:
     """Limit bytes read from a decompressed archive stream."""
 
