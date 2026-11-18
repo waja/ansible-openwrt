@@ -49,6 +49,12 @@ class ArchiveValidationTests(unittest.TestCase):
         self.write_archive()
         validate_archive(self.archive_path)
 
+    def test_accepts_top_level_directory_entry(self):
+        entries = [("", tarfile.DIRTYPE, b"")]
+        entries.extend((name, tarfile.REGTYPE, b"script") for name in REQUIRED)
+        self.write_archive(entries)
+        validate_archive(self.archive_path)
+
     def test_rejects_parent_directory_traversal(self):
         self.write_archive(
             [(name, tarfile.REGTYPE, b"x") for name in REQUIRED]
