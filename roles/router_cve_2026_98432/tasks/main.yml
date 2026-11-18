@@ -52,6 +52,7 @@
     - type
     - path
     - position
+    - enabled
   register: router_cve_2026_98432_include_options
   changed_when: false
   failed_when: false
@@ -143,25 +144,12 @@
       The live mitigation table exists. Enable runtime changes to remove it;
       configuration-only removal would orphan the active packet filter.
 
-- name: Back up current firewall configuration for rollback
-  community.openwrt.slurp:
-    src: /etc/config/firewall
-  register: router_cve_2026_98432_firewall_backup
-  changed_when: false
-
 - name: Back up the current mitigation file when present
   community.openwrt.slurp:
     src: /etc/cve_2026_98432.nft
   register: router_cve_2026_98432_ruleset_backup
   changed_when: false
   when: router_cve_2026_98432_file_exists.stdout | trim == 'regular'
-
-- name: Back up sysupgrade configuration when present
-  community.openwrt.slurp:
-    src: /etc/sysupgrade.conf
-  register: router_cve_2026_98432_sysupgrade_backup
-  changed_when: false
-  when: router_cve_2026_98432_sysupgrade_file_exists.rc == 0
 
 - name: Apply the requested mitigation state
   block:
@@ -326,6 +314,99 @@
           - >-
             router_cve_2026_98432_tables_after_removal.stdout
             is not search('^table ip cve_2026_98432  rescue:
+    - name: Check for concurrent firewall UCI changes before rollback
+      community.openwrt.command:
+        cmd: uci changes firewall
+      register: router_cve_2026_98432_rollback_pending_changes
+      changed_when: false
+      check_mode: false
+
+    - name: Refuse rollback over concurrent firewall UCI changes
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_rollback_pending_changes.stdout | trim == ''
+        fail_msg: >-
+          Mitigation update failed, and unrelated firewall UCI changes are
+          pending. Automatic rollback was stopped to avoid committing or
+          discarding those operator changes; inspect the firewall manually.
+
+    - name: Restore the previous owned UCI include
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: include
+        name: ansible_cve_2026_98432
+        value:
+          type: "{{ router_cve_2026_98432_include_options.results[0].result }}"
+          path: "{{ router_cve_2026_98432_include_options.results[1].result }}"
+          position: "{{ router_cve_2026_98432_include_options.results[2].result }}"
+          enabled: "{{ router_cve_2026_98432_include_options.results[3].result }}"
+        autocommit: true
+      when: router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Remove the UCI include created by the failed run
+      community.openwrt.uci:
+        command: absent
+        key: firewall.ansible_cve_2026_98432
+        autocommit: true
+      when: router_cve_2026_98432_include.result | default('') != 'include'
+
+    - name: Restore the previous mitigation file
+      community.openwrt.copy:
+        content: >-
+          {{ router_cve_2026_98432_ruleset_backup.content | b64decode }}
+        dest: /etc/cve_2026_98432.nft
+        owner: root
+        group: root
+        mode: '0644'
+      when: router_cve_2026_98432_file_exists.rc == 0
+
+    - name: Remove the mitigation file created by the failed run
+      community.openwrt.file:
+        path: /etc/cve_2026_98432.nft
+        state: absent
+      when: router_cve_2026_98432_file_exists.rc != 0
+
+    - name: Restore only the owned sysupgrade preservation entry
+      community.openwrt.lineinfile:
+        path: /etc/sysupgrade.conf
+        line: /etc/cve_2026_98432.nft
+        regexp: '^/etc/cve_2026_98432\\.nft    - name: Reload the restored firewall configuration
+      community.openwrt.service:
+        name: firewall
+        state: reloaded
+      register: router_cve_2026_98432_rollback_reload
+      when: router_cve_2026_98432_apply_runtime_changes | bool
+      failed_when: false
+
+    - name: Remove a mitigation table introduced by the failed run
+      community.openwrt.command:
+        cmd: nft delete table ip cve_2026_98432
+      when:
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_active_table.rc != 0
+      failed_when: false
+
+    - name: Stop after reporting the recovery outcome
+      ansible.builtin.fail:
+        msg: >-
+          CVE mitigation update failed. The previous owned UCI include,
+          ruleset file, and sysupgrade entry were restored.
+          {% if not (router_cve_2026_98432_apply_runtime_changes | bool) %}
+          Runtime recovery was skipped because runtime changes are disabled.
+          {% elif router_cve_2026_98432_rollback_reload is defined
+                  and router_cve_2026_98432_rollback_reload.failed | default(false) %}
+          The firewall recovery reload failed; inspect the live firewall.
+          {% else %}
+          The firewall recovery reload completed successfully.
+          {% endif %}
+          Any mitigation table absent before this run was also removed.
+)
+      when:
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+
+  rescue:
     - name: Restore the previous firewall UCI configuration
       community.openwrt.copy:
         content: >-
@@ -366,6 +447,30 @@
         path: /etc/sysupgrade.conf
         state: absent
       when: router_cve_2026_98432_sysupgrade_file_exists.rc != 0
+
+    - name: Reload the restored firewall configuration
+      community.openwrt.service:
+        name: firewall
+        state: reloaded
+      when: router_cve_2026_98432_apply_runtime_changes | bool
+      failed_when: false
+
+    - name: Stop after restoring the previous state
+      ansible.builtin.fail:
+        msg: >-
+          CVE mitigation update failed. The previous firewall configuration
+          and owned files were restored; the firewall reload was attempted.
+
+        create: "{{ router_cve_2026_98432_sysupgrade_file_exists.rc != 0 }}"
+        state: "{{ 'present' if router_cve_2026_98432_sysupgrade_entry.rc == 0 else 'absent' }}"
+
+    - name: Remove an empty sysupgrade file created by the failed run
+      community.openwrt.file:
+        path: /etc/sysupgrade.conf
+        state: absent
+      when:
+        - router_cve_2026_98432_sysupgrade_file_exists.rc != 0
+        - router_cve_2026_98432_sysupgrade_entry.rc != 0
 
     - name: Reload the restored firewall configuration
       community.openwrt.service:
