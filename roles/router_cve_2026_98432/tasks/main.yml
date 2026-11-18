@@ -132,6 +132,17 @@
       exists without the role-owned UCI include. Resolve it manually rather
       than overwriting or deleting unmanaged firewall state.
 
+- name: Refuse configuration-only removal while the live mitigation exists
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_state != 'absent'
+        or router_cve_2026_98432_apply_runtime_changes | bool
+        or router_cve_2026_98432_active_table.rc != 0
+    fail_msg: >-
+      The live mitigation table exists. Enable runtime changes to remove it;
+      configuration-only removal would orphan the active packet filter.
+
 - name: Back up current firewall configuration for rollback
   community.openwrt.slurp:
     src: /etc/config/firewall
@@ -233,10 +244,9 @@
               router_cve_2026_98432_state == 'present' and (
                 router_cve_2026_98432_active_table.rc != 0
                 or router_cve_2026_98432_active_table.stdout is not search(
-                  'type filter hook prerouting priority (-310|raw - 10)'
-                )
-                or router_cve_2026_98432_active_table.stdout is not search(
-                  'ip protocol tcp ip hdrlength 6-15 counter.*drop'
+                  '(?s)chain pre\\s*\\{[^}]*type filter hook prerouting '
+                  ~ 'priority (-310|raw - 10);[^}]*'
+                  ~ 'ip protocol tcp ip hdrlength 6-15 counter.*drop'
                 )
                 or router_cve_2026_98432_active_table.stdout is search(
                   'flags.*dormant'
@@ -271,7 +281,6 @@
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_active_table.rc == 0
-      failed_when: false
 
     - name: Read the active mitigation table
       community.openwrt.command:
@@ -286,32 +295,91 @@
       ansible.builtin.assert:
         that:
           - >-
-            router_cve_2026_98432_active_rules.stdout is search(
-              'type filter hook prerouting priority (-310|raw - 10)'
+            router_cve_2026_98432_active_rules.stdout is not search(
+              'flags.*dormant'
             )
           - >-
             router_cve_2026_98432_active_rules.stdout is search(
-              'ip protocol tcp ip hdrlength 6-15 counter.*drop'
+              '(?s)chain pre\\s*\\{[^}]*type filter hook prerouting '
+              ~ 'priority (-310|raw - 10);[^}]*'
+              ~ 'ip protocol tcp ip hdrlength 6-15 counter.*drop'
             )
         fail_msg: The expected CVE mitigation is not active in nftables.
       when:
         - router_cve_2026_98432_state == 'present'
         - router_cve_2026_98432_apply_runtime_changes | bool
 
-    - name: Verify the mitigation table is absent after removal
+    - name: Inventory nftables tables after removal
       community.openwrt.command:
-        cmd: nft list table ip cve_2026_98432
-      register: router_cve_2026_98432_removed_table
+        cmd: nft list tables
+      register: router_cve_2026_98432_tables_after_removal
       changed_when: false
-      failed_when: false
+      check_mode: false
       when:
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_apply_runtime_changes | bool
 
-    - name: Assert the mitigation table was removed
+    - name: Verify the mitigation table is absent after removal
       ansible.builtin.assert:
         that:
-          - router_cve_2026_98432_removed_table.rc != 0
+          - router_cve_2026_98432_tables_after_removal.rc == 0
+          - >-
+            router_cve_2026_98432_tables_after_removal.stdout
+            is not search('^table ip cve_2026_98432  rescue:
+    - name: Restore the previous firewall UCI configuration
+      community.openwrt.copy:
+        content: >-
+          {{ router_cve_2026_98432_firewall_backup.content | b64decode }}
+        dest: /etc/config/firewall
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Restore the previous mitigation file
+      community.openwrt.copy:
+        content: >-
+          {{ router_cve_2026_98432_ruleset_backup.content | b64decode }}
+        dest: /etc/cve_2026_98432.nft
+        owner: root
+        group: root
+        mode: '0644'
+      when: router_cve_2026_98432_file_exists.rc == 0
+
+    - name: Remove the mitigation file created by the failed run
+      community.openwrt.file:
+        path: /etc/cve_2026_98432.nft
+        state: absent
+      when: router_cve_2026_98432_file_exists.rc != 0
+
+    - name: Restore the previous sysupgrade configuration
+      community.openwrt.copy:
+        content: >-
+          {{ router_cve_2026_98432_sysupgrade_backup.content | b64decode }}
+        dest: /etc/sysupgrade.conf
+        owner: root
+        group: root
+        mode: '0644'
+      when: router_cve_2026_98432_sysupgrade_file_exists.rc == 0
+
+    - name: Remove sysupgrade configuration created by the failed run
+      community.openwrt.file:
+        path: /etc/sysupgrade.conf
+        state: absent
+      when: router_cve_2026_98432_sysupgrade_file_exists.rc != 0
+
+    - name: Reload the restored firewall configuration
+      community.openwrt.service:
+        name: firewall
+        state: reloaded
+      when: router_cve_2026_98432_apply_runtime_changes | bool
+      failed_when: false
+
+    - name: Stop after restoring the previous state
+      ansible.builtin.fail:
+        msg: >-
+          CVE mitigation update failed. The previous firewall configuration
+          and owned files were restored; the firewall reload was attempted.
+)
       when:
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_apply_runtime_changes | bool
