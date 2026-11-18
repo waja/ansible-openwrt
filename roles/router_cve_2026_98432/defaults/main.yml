@@ -1,5 +1,5 @@
 # roles/router_cve_2026_98432/defaults/main.yml
 ---
 # The operator must explicitly choose whether the workaround is installed.
-router_cve_2026_98432_state: absent
+router_cve_2026_98432_state: null
 router_cve_2026_98432_apply_runtime_changes: true
