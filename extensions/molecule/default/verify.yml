@@ -2223,6 +2223,107 @@
           - >-
             router_firewall_ambiguous_redirect_failure
             == 'Reject ambiguous anonymous firewall redirect matches'
+    - name: Create an invalid nftables include to exercise rollback
+      community.openwrt.copy:
+        content: "this is not valid nftables syntax"
+        dest: /tmp/ansible-molecule-invalid.nft
+        mode: '0600'
+
+    - name: Register the invalid nftables include
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: include
+        name: ansible_molecule_invalid_nft
+        value:
+          type: nftables
+          path: /tmp/ansible-molecule-invalid.nft
+          position: ruleset-post
+          enabled: '1'
+        autocommit: true
+
+    - name: Capture fw4 validation failure and mitigation rollback
+      block:
+        - name: Attempt mitigation reconciliation with an invalid unrelated include
+          ansible.builtin.include_role:
+            name: router_cve_2026_98432
+          vars:
+            router_cve_2026_98432_state: present
+            router_cve_2026_98432_apply_runtime_changes: true
+      rescue:
+        - name: Record the expected mitigation validation failure
+          ansible.builtin.set_fact:
+            router_cve_2026_98432_rollback_seen: >-
+              {{ 'CVE mitigation update failed' in ansible_failed_result.msg }}
+
+    - name: Verify validation failure triggered rollback
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_rollback_seen | default(false) | bool
+
+    - name: Verify rollback preserved the owned mitigation state
+      ansible.builtin.raw: |
+        uci -q get firewall.ansible_cve_2026_98432.path |
+          grep -Fqx '/etc/cve_2026_98432.nft'
+        grep -Eq '^[[:space:]]*ip protocol tcp ip hdrlength 6-15 counter drop[[:space:]]*      block:
+        - name: Include CVE mitigation role without an explicit state
+          ansible.builtin.include_role:
+            name: router_cve_2026_98432
+          vars:
+            router_cve_2026_98432_state: null
+            router_cve_2026_98432_apply_runtime_changes: true
+      rescue:
+        - name: Record missing-state rejection
+          ansible.builtin.set_fact:
+            router_cve_2026_98432_missing_state_rejected: >-
+              {{ ansible_failed_task.name == 'Validate requested mitigation state' }}
+
+    - name: Assert an explicit CVE mitigation state is required
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_missing_state_rejected | default(false) | bool
+
+    - name: Remove CVE mitigation without changing the running firewall
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: absent
+        router_cve_2026_98432_apply_runtime_changes: false
+
+    - name: Verify CVE mitigation configuration was removed
+      ansible.builtin.raw: |
+        if uci -q get firewall.ansible_cve_2026_98432 >/dev/null; then
+          echo "CVE mitigation UCI include still exists"
+          exit 1
+        fi
+        test ! -e /etc/cve_2026_98432.nft || exit 1
+        if [ -e /etc/sysupgrade.conf ]; then
+          if grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf; then
+            echo "CVE mitigation sysupgrade entry still exists"
+            exit 1
+          else
+            grep_status=$?
+            [ "$grep_status" -eq 1 ] || exit "$grep_status"
+          fi
+        fi
+      changed_when: false
+           /etc/cve_2026_98432.nft
+        grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf
+        uci -q get firewall.ansible_molecule_invalid_nft.path |
+          grep -Fqx '/tmp/ansible-molecule-invalid.nft'
+      changed_when: false
+
+    - name: Remove the invalid nftables test include
+      community.openwrt.uci:
+        command: absent
+        key: firewall.ansible_molecule_invalid_nft
+        autocommit: true
+
+    - name: Remove the invalid nftables test file
+      community.openwrt.file:
+        path: /tmp/ansible-molecule-invalid.nft
+        state: absent
+
     - name: Reject an omitted CVE mitigation state
       block:
         - name: Include CVE mitigation role without an explicit state
