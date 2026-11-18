@@ -242,6 +242,16 @@
           router_cve_2026_98432_ruleset_change.changed | default(false)
           or router_cve_2026_98432_include_change.changed | default(false)
           or router_cve_2026_98432_sysupgrade_change.changed | default(false)
+          or (
+            router_cve_2026_98432_state == 'present'
+            and (
+              router_cve_2026_98432_active_table.rc != 0
+              or router_cve_2026_98432_active_table.stdout is not search(
+                'ip protocol tcp ip hdrlength 6-15 counter.*drop'
+              )
+              or router_cve_2026_98432_active_table.stdout is search('flags.*dormant')
+            )
+          )
 
     - name: Remove the standalone nftables table
       community.openwrt.command:
@@ -266,7 +276,16 @@
       ansible.builtin.assert:
         that:
           - router_cve_2026_98432_tables_after_removal.rc == 0
-          - router_cve_2026_98432_tables_after_removal.stdout is not search('(?m)^table ip cve_2026_98432      community.openwrt.command:
+          - >-
+            router_cve_2026_98432_tables_after_removal.stdout
+            is not search('(?m)^table ip cve_2026_98432$')
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+
+    - name: Read the active mitigation table
+      community.openwrt.command:
         cmd: nft list table ip cve_2026_98432
       register: router_cve_2026_98432_active_rules
       changed_when: false
