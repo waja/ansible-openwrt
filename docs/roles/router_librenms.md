@@ -78,7 +78,7 @@ GitHub REST API. The router must have BusyBox tar with gzip and
 `--strip-components` support. Before transfer, the controller validates the archive structure, rejects
 absolute paths, traversal, duplicate paths, links and special files, requires
 all deployed scripts, and enforces compressed-size (8 MiB), expanded-size
-(32 MiB), and member-count (4096) limits. The router must have at least 40 MiB
+(32 MiB), and member-count (4096) limits. The router must have at least 48 MiB
 free in /tmp for staging and extraction.
 `wlInterfaces.txt` is rendered locally from the configured interface
 mappings and is not downloaded. The router itself does not need Internet
