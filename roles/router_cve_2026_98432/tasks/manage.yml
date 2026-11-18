@@ -20,8 +20,14 @@
     router_cve_2026_98432_kernel_status: >-
       {% set release = router_cve_2026_98432_running_kernel.stdout | trim %}
       {% if release is match('^6\.6\.[0-9]+([.+-]|$)') %}
-      {% set patchlevel = release.split('.')[2].split('-')[0].split('+')[0] | int %}
-      {{ 'fixed_threshold_met' if patchlevel >= 159 else 'below_fixed_threshold' }}
+      {% set patchlevel = (
+        release.split('.')[2].split('-')[0].split('+')[0] | int
+      ) %}
+      {{
+        'fixed_threshold_met'
+        if patchlevel >= 159
+        else 'below_fixed_threshold'
+      }}
       {% else %}
       unknown
       {% endif %}
@@ -103,7 +109,9 @@
 - name: Reject non-regular objects at the owned ruleset path
   ansible.builtin.assert:
     that:
-      - router_cve_2026_98432_file_exists.stdout | trim in ['missing', 'regular']
+      - >-
+        router_cve_2026_98432_file_exists.stdout | trim
+        in ['missing', 'regular']
     fail_msg: >-
       /etc/cve_2026_98432.nft exists but is not a regular file. Refusing to
       follow or remove an unmanaged filesystem object.
@@ -388,8 +396,11 @@
         value:
           type: "{{ router_cve_2026_98432_include_options.results[0].result }}"
           path: "{{ router_cve_2026_98432_include_options.results[1].result }}"
-          position: "{{ router_cve_2026_98432_include_options.results[2].result }}"
-          enabled: "{{ router_cve_2026_98432_include_options.results[3].result | default('1', true) }}"
+          position: >-
+            {{ router_cve_2026_98432_include_options.results[2].result }}
+          enabled: >-
+            {{ router_cve_2026_98432_include_options.results[3].result
+               | default('1', true) }}
         autocommit: true
       when: router_cve_2026_98432_include.result | default('') == 'include'
 
@@ -402,7 +413,8 @@
 
     - name: Restore the previous mitigation file
       community.openwrt.copy:
-        content: "{{ router_cve_2026_98432_ruleset_backup.content | b64decode }}"
+        content: >-
+          {{ router_cve_2026_98432_ruleset_backup.content | b64decode }}
         dest: /etc/cve_2026_98432.nft
         owner: root
         group: root
@@ -421,7 +433,9 @@
         line: /etc/cve_2026_98432.nft
         regexp: '^/etc/cve_2026_98432\.nft$'
         create: true
-        state: "{{ 'present' if router_cve_2026_98432_sysupgrade_entry.rc == 0 else 'absent' }}"
+        state: >-
+          {{ 'present' if router_cve_2026_98432_sysupgrade_entry.rc == 0
+             else 'absent' }}
 
     - name: Check whether sysupgrade configuration is empty after rollback
       community.openwrt.command:
@@ -485,7 +499,9 @@
           {% if not (router_cve_2026_98432_apply_runtime_changes | bool) %}
           Runtime recovery was skipped because runtime changes are disabled.
           {% elif router_cve_2026_98432_rollback_reload is defined
-                  and router_cve_2026_98432_rollback_reload.failed | default(false) %}
+                  and
+                  router_cve_2026_98432_rollback_reload.failed
+                  | default(false) %}
           The firewall recovery reload failed; inspect the live firewall.
           {% else %}
           The firewall recovery reload completed successfully.
