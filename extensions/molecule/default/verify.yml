@@ -2357,7 +2357,9 @@
     - name: Assert live mitigation cannot be orphaned by staged removal
       ansible.builtin.assert:
         that:
-          - router_cve_2026_98432_staged_removal_rejected | default(false) | bool
+          - >-
+            router_cve_2026_98432_staged_removal_rejected
+            | default(false) | bool
 
     - name: Verify the live mitigation remains after rejected staged removal
       community.openwrt.command:
