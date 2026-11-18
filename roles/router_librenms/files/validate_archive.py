@@ -30,24 +30,22 @@ def validate_archive(archive_path):
             f"Archive exceeds the {MAX_ARCHIVE_BYTES}-byte compressed-size limit"
         )
     try:
-        archive = tarfile.open(archive_path, mode="r:gz")
+        archive = tarfile.open(archive_path, mode="r|gz")
     except (OSError, tarfile.TarError) as error:
         raise ArchiveValidationError(f"Invalid gzip tar archive: {error}") from error
 
     with archive:
-        members = archive.getmembers()
-        if not members:
-            raise ArchiveValidationError("Archive is empty")
-        if len(members) > MAX_MEMBERS:
-            raise ArchiveValidationError(
-                f"Archive contains more than {MAX_MEMBERS} members"
-            )
-
         root = None
         unpacked_size = 0
+        member_count = 0
         seen_paths = set()
         regular_files = set()
-        for member in members:
+        for member in archive:
+            member_count += 1
+            if member_count > MAX_MEMBERS:
+                raise ArchiveValidationError(
+                    f"Archive contains more than {MAX_MEMBERS} members"
+                )
             raw_name = member.name
             if not raw_name or raw_name.startswith("/") or "\\" in raw_name:
                 raise ArchiveValidationError(f"Unsafe archive path: {raw_name!r}")
