@@ -55,13 +55,30 @@
   register: router_cve_2026_98432_include_options
   changed_when: false
   failed_when: false
+  check_mode: false
 
-- name: Check whether the owned ruleset file exists
+- name: Inspect the owned ruleset path without following symlinks
   community.openwrt.command:
-    cmd: test -f /etc/cve_2026_98432.nft
+    cmd: >-
+      if [ -L /etc/cve_2026_98432.nft ]; then
+        echo symlink;
+      elif [ -e /etc/cve_2026_98432.nft ]; then
+        if [ -f /etc/cve_2026_98432.nft ]; then echo regular;
+        else echo other; fi;
+      else
+        echo missing;
+      fi
   register: router_cve_2026_98432_file_exists
   changed_when: false
-  failed_when: false
+  check_mode: false
+
+- name: Reject non-regular objects at the owned ruleset path
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_file_exists.stdout | trim in ['missing', 'regular']
+    fail_msg: >-
+      /etc/cve_2026_98432.nft exists but is not a regular file. Refusing to
+      follow or remove an unmanaged filesystem object.
 
 
 - name: Check whether sysupgrade configuration exists
@@ -70,6 +87,7 @@
   register: router_cve_2026_98432_sysupgrade_file_exists
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Check whether sysupgrade already preserves the ruleset
   community.openwrt.command:
@@ -77,6 +95,7 @@
   register: router_cve_2026_98432_sysupgrade_entry
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Check for an existing mitigation table
   community.openwrt.command:
@@ -84,6 +103,7 @@
   register: router_cve_2026_98432_active_table
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Refuse conflicting or unmanaged state
   ansible.builtin.assert:
@@ -103,7 +123,7 @@
       - >-
         router_cve_2026_98432_include.result == 'include' or
         (
-          router_cve_2026_98432_file_exists.rc != 0
+          router_cve_2026_98432_file_exists.stdout | trim == 'missing'
           and router_cve_2026_98432_sysupgrade_entry.rc != 0
           and router_cve_2026_98432_active_table.rc != 0
         )
@@ -123,7 +143,7 @@
     src: /etc/cve_2026_98432.nft
   register: router_cve_2026_98432_ruleset_backup
   changed_when: false
-  when: router_cve_2026_98432_file_exists.rc == 0
+  when: router_cve_2026_98432_file_exists.stdout | trim == 'regular'
 
 - name: Back up sysupgrade configuration when present
   community.openwrt.slurp:
