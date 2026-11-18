@@ -74,11 +74,16 @@ The role downloads one source archive from the configured archive endpoint
 to the Ansible controller during each run, copies it to the router, and
 extracts it there with `busybox tar`. Downloading one archive ensures all
 scripts come from the same repository snapshot and avoids depending on the
-GitHub REST API. The router must have BusyBox tar with gzip extraction support. Before transfer, the controller validates the archive structure, rejects
-absolute paths, traversal, duplicate paths, links and special files, requires
-all deployed scripts, and enforces compressed-size (8 MiB), regular-file
-payload (32 MiB), decompressed-stream (48 MiB), and member-count (4096) limits. The router must have at least 64 MiB
-free in /tmp for staging and extraction.
+GitHub REST API. The router must have BusyBox tar with gzip extraction support.
+
+Before transfer, the controller validates the complete gzip/tar stream,
+including its end marker, and rejects absolute paths, traversal, duplicate
+paths, links, special files, and file/directory conflicts. The archive must
+contain one top-level directory whose name uses only ASCII letters, digits,
+dots, underscores, and hyphens. All deployed scripts must be present. Limits
+are 8 MiB compressed size, 32 MiB regular-file payload, 48 MiB decompressed
+stream, and 4096 members. The router must have at least 64 MiB free in
+`/tmp` for staging and extraction.
 `wlInterfaces.txt` is rendered locally from the configured interface
 mappings and is not downloaded. The router itself does not need Internet
 access. The controller must be able to reach the configured endpoint over
