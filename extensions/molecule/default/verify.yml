@@ -2230,7 +2230,7 @@
             name: router_cve_2026_98432
           vars:
             router_cve_2026_98432_state: null
-            router_cve_2026_98432_apply_runtime_changes: false
+            router_cve_2026_98432_apply_runtime_changes: true
       rescue:
         - name: Record missing-state rejection
           ansible.builtin.set_fact:
