@@ -75,19 +75,21 @@ to the Ansible controller during each run, copies it to the router, and
 extracts it there with `busybox tar`. Downloading one archive ensures all
 scripts come from the same repository snapshot and avoids depending on the
 GitHub REST API. The router must have BusyBox tar with gzip and
-`--strip-components` support. The role checks the archive listing and rejects
-absolute paths and parent-directory traversal before extraction.
+`--strip-components` support. Before transfer, the controller validates the archive structure, rejects
+absolute paths, traversal, duplicate paths, links and special files, requires
+all deployed scripts, and enforces compressed-size (8 MiB), expanded-size
+(32 MiB), and member-count (4096) limits. The router must have at least 40 MiB
+free in /tmp for staging and extraction.
 `wlInterfaces.txt` is rendered locally from the configured interface
 mappings and is not downloaded. The router itself does not need Internet
 access. The controller must be able to reach the configured endpoint over
 HTTPS; `codeload.github.com` is required only when using the default endpoint.
 
-Archive extraction is performed by the target's BusyBox implementation rather
-than Python's `tarfile` module. This reduces controller-side code and runtime
-requirements, but BusyBox tar does not provide the same explicit per-member,
-expanded-size, and metadata resource limits as the Python extractor. Treat
-this implementation as an alternative with a different security/resource
-trade-off; use a trusted archive source.
+Archive validation uses Python's standard-library `tarfile` module on the
+Ansible controller, but extraction remains on the router with BusyBox tar.
+Only regular files and directories are accepted; symbolic links, hard links,
+special files, duplicate paths and archives without the required scripts are
+rejected. The archive is bounded before it is copied to the router.
 
 `router_librenms_source_ref` selects the upstream branch, tag, or commit
 (default: `master`). Each host downloads its own archive, so a moving ref can
