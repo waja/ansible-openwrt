@@ -1,13 +1,5 @@
 # roles/router_cve_2026_98432/tasks/main.yml
 ---
-- name: Validate requested mitigation state
-  ansible.builtin.assert:
-    that:
-      - router_cve_2026_98432_state in ['present', 'absent']
-      - router_cve_2026_98432_apply_runtime_changes is boolean
-    fail_msg: >-
-      State must be present or absent and runtime changes must be boolean.
-
 - name: Read the running kernel release
   community.openwrt.command:
     cmd: uname -r
@@ -42,6 +34,15 @@
       {{ router_cve_2026_98432_kernel_status }}. This is version information
       only; verify vendor backports and advisories before changing mitigation
       state.
+
+- name: Validate requested mitigation state
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_state in ['present', 'absent']
+      - router_cve_2026_98432_apply_runtime_changes is boolean
+    fail_msg: >-
+      State must be present or absent and runtime changes must be boolean.
+
 
 - name: Check firewall4 availability
   community.openwrt.command:
