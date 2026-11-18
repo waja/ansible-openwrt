@@ -252,13 +252,16 @@
       community.openwrt.command:
         cmd: fw4 check
       changed_when: false
-      when: router_cve_2026_98432_apply_runtime_changes | bool
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_apply_runtime_changes | bool
 
     - name: Reload firewall after applying the mitigation
       community.openwrt.service:
         name: firewall
         state: reloaded
       when:
+        - not ansible_check_mode
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_reload_required | bool
 
@@ -266,6 +269,7 @@
       community.openwrt.command:
         cmd: nft delete table ip cve_2026_98432
       when:
+        - not ansible_check_mode
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_active_table.rc == 0
@@ -276,6 +280,7 @@
       register: router_cve_2026_98432_active_rules
       changed_when: false
       when:
+        - not ansible_check_mode
         - router_cve_2026_98432_state == 'present'
         - router_cve_2026_98432_apply_runtime_changes | bool
 
@@ -304,6 +309,7 @@
       changed_when: false
       check_mode: false
       when:
+        - not ansible_check_mode
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_apply_runtime_changes | bool
 
