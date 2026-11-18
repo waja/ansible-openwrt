@@ -26,16 +26,9 @@
   notify: Restart SNMP daemon
 
 - name: Ensure LibreNMS script permissions
-  community.openwrt.command:
-    cmd: >-
-      dest={{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }};
-      mode=$(busybox stat -c %a "$dest") || exit $?;
-      if [ "$mode" != 755 ]; then
-        chmod 0755 "$dest" && echo permissions-updated;
-      fi
-    uses_shell: true
-  register: router_librenms_script_permissions
-  changed_when: >-
-    'permissions-updated' in router_librenms_script_permissions.stdout
+  community.openwrt.file:
+    path: "{{ '/etc/librenms/' ~ router_librenms_script.name }}"
+    state: file
+    mode: '0755'
   ignore_unreachable: true
   notify: Restart SNMP daemon
