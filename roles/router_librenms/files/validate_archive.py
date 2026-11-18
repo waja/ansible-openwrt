@@ -3,6 +3,7 @@
 
 import gzip
 import os
+import re
 import sys
 import tarfile
 from pathlib import PurePosixPath
@@ -45,6 +46,11 @@ class StrictTarFile(tarfile.TarFile):
         try:
             member = self.tarinfo.fromtarfile(self)
         except tarfile.EOFHeaderError:
+            second_zero_block = self.fileobj.read(tarfile.BLOCKSIZE)
+            if second_zero_block != b"\0" * tarfile.BLOCKSIZE:
+                raise ArchiveValidationError(
+                    "Tar archive is missing its second zero end block"
+                )
             member = None
         except tarfile.InvalidHeaderError as error:
             raise ArchiveValidationError(
@@ -60,11 +66,12 @@ class StrictTarFile(tarfile.TarFile):
             ) from error
 
         if member is not None:
-            if not self.stream:
+            if not getattr(self, "stream", False):
                 self.members.append(member)
         else:
             self._loaded = True
         return member
+
 
 class BoundedReader:
     """Limit bytes read from a decompressed archive stream."""
@@ -140,6 +147,10 @@ def validate_archive(archive_path):
 
                     if root is None:
                         root = parts[0]
+                        if not re.fullmatch(r"[A-Za-z0-9._-]+", root):
+                            raise ArchiveValidationError(
+                                f"Unsafe archive root directory: {root!r}"
+                            )
                     if parts[0] != root or (
                         len(parts) < 2 and not member.isdir()
                     ):
