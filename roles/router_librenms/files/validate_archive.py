@@ -26,52 +26,17 @@ class ArchiveValidationError(ValueError):
     """Raised when an archive is unsafe or incomplete."""
 
 
-class StrictTarFile(tarfile.TarFile):
-    """Reject malformed headers instead of silently ending the stream."""
+class StrictTarInfo(tarfile.TarInfo):
+    """Reject malformed headers instead of letting tarfile stop iteration."""
 
-    def next(self):
-        self._check("ra")
-        if self.firstmember is not None:
-            member = self.firstmember
-            self.firstmember = None
-            return member
-
-        if self.offset != self.fileobj.tell():
-            if self.offset == 0:
-                return None
-            self.fileobj.seek(self.offset - 1)
-            if not self.fileobj.read(1):
-                raise ArchiveValidationError("Unexpected end of tar stream")
-
+    @classmethod
+    def frombuf(cls, buf, encoding, errors):
         try:
-            member = self.tarinfo.fromtarfile(self)
-        except tarfile.EOFHeaderError:
-            second_zero_block = self.fileobj.read(tarfile.BLOCKSIZE)
-            if second_zero_block != b"\0" * tarfile.BLOCKSIZE:
-                raise ArchiveValidationError(
-                    "Tar archive is missing its second zero end block"
-                )
-            member = None
+            return super().frombuf(buf, encoding, errors)
         except tarfile.InvalidHeaderError as error:
             raise ArchiveValidationError(
                 f"Invalid tar header: {error}"
             ) from error
-        except (tarfile.EmptyHeaderError, tarfile.TruncatedHeaderError) as error:
-            raise ArchiveValidationError(
-                f"Truncated tar archive: {error}"
-            ) from error
-        except tarfile.SubsequentHeaderError as error:
-            raise ArchiveValidationError(
-                f"Invalid subsequent tar header: {error}"
-            ) from error
-
-        if member is not None:
-            if not getattr(self, "stream", False):
-                self.members.append(member)
-        else:
-            self._loaded = True
-        return member
-
 
 class BoundedReader:
     """Limit bytes read from a decompressed archive stream."""
@@ -108,9 +73,10 @@ def validate_archive(archive_path):
     try:
         with gzip.open(archive_path, "rb") as compressed:
             bounded = BoundedReader(compressed, MAX_DECOMPRESSED_BYTES)
-            with StrictTarFile.open(
+            with tarfile.open(
                 fileobj=bounded,
                 mode="r|",
+                tarinfo=StrictTarInfo,
                 bufsize=tarfile.BLOCKSIZE,
             ) as archive:
                 root = None
@@ -205,6 +171,15 @@ def validate_archive(archive_path):
                             "Archive exceeds the "
                             f"{MAX_UNPACKED_BYTES}-byte expanded-size limit"
                         )
+
+                # tarfile stops after the first zero block. BusyBox requires
+                # two complete zero blocks, so verify the second one here.
+                if archive.fileobj.read(tarfile.BLOCKSIZE) != (
+                    b"\\0" * tarfile.BLOCKSIZE
+                ):
+                    raise ArchiveValidationError(
+                        "Tar archive is missing its second zero end block"
+                    )
 
                 # Consume the remainder so gzip CRC/trailer errors and
                 # oversized trailing metadata cannot be silently ignored.
