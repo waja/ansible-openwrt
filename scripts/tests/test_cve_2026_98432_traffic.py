@@ -183,6 +183,26 @@ def main() -> int:
         connect("fd00:2::2", IPV6_PORT, ipv6=True)
         print("PASS: IPv6 TCP is accepted")
         return 0
+    except Exception:
+        for namespace in (CLIENT, ROUTER, SERVER):
+            print(f"=== {namespace} interfaces ===", file=sys.stderr)
+            subprocess.run(
+                ["ip", "-n", namespace, "address"],
+                check=False, text=True,
+            )
+            print(f"=== {namespace} routes ===", file=sys.stderr)
+            subprocess.run(
+                ["ip", "-n", namespace, "route", "show"],
+                check=False, text=True,
+            )
+        for server in servers:
+            if server.poll() is not None and server.stderr is not None:
+                print(server.stderr.read(), file=sys.stderr)
+        subprocess.run(
+            ["ip", "netns", "exec", ROUTER, "nft", "list", "ruleset"],
+            check=False, text=True,
+        )
+        raise
     finally:
         for server in servers:
             server.terminate()
