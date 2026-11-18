@@ -12,6 +12,7 @@
   community.openwrt.command:
     cmd: fw4 check
   changed_when: false
+  when: router_cve_2026_98432_apply_runtime_changes | bool
 
 - name: Check firewall service is enabled
   community.openwrt.command:
@@ -216,6 +217,7 @@
       community.openwrt.command:
         cmd: fw4 check
       changed_when: false
+      when: router_cve_2026_98432_apply_runtime_changes | bool
 
     - name: Reload firewall after applying the mitigation
       community.openwrt.service:
