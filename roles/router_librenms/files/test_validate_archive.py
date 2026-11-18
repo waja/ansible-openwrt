@@ -36,7 +36,9 @@ class ArchiveValidationTests(unittest.TestCase):
         if entries is None:
             entries = [(name, tarfile.REGTYPE, b"script") for name in REQUIRED]
         with tarfile.open(self.archive_path, "w:gz") as archive:
-            for name, kind, data in entries:
+            for entry in entries:
+                name, kind, data = entry[:3]
+                linkname = entry[3] if len(entry) > 3 else ""
                 member_name = (
                     name
                     if name.startswith("/") or name.startswith("other-root/")
@@ -44,6 +46,7 @@ class ArchiveValidationTests(unittest.TestCase):
                 )
                 member = tarfile.TarInfo(member_name)
                 member.type = kind
+                member.linkname = linkname
                 if kind == tarfile.REGTYPE:
                     member.size = len(data)
                     archive.addfile(member, io.BytesIO(data))
@@ -124,13 +127,8 @@ class ArchiveValidationTests(unittest.TestCase):
     def test_rejects_regular_file_with_link_target(self):
         entries = [(name, tarfile.REGTYPE, b"x") for name in REQUIRED]
         entries.append(("extra", tarfile.REGTYPE, b"payload"))
+        entries.append(("linked", tarfile.REGTYPE, b"x", "target"))
         self.write_archive(entries)
-        with tarfile.open(self.archive_path, "a:gz") as archive:
-            member = tarfile.TarInfo("source-root/linked")
-            member.type = tarfile.REGTYPE
-            member.size = 1
-            member.linkname = "target"
-            archive.addfile(member, io.BytesIO(b"x"))
         with self.assertRaisesRegex(ArchiveValidationError, "link target"):
             validate_archive(self.archive_path)
 
