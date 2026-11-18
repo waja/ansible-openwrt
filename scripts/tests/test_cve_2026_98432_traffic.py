@@ -20,14 +20,20 @@ IPV6_PORT = 18082
 
 
 def run(*args: str, namespace: str | None = None) -> str:
-    command = ["ip", "netns", "exec", namespace, *args] if namespace else list(args)
+    command = (
+        ["ip", "netns", "exec", namespace, *args]
+        if namespace
+        else list(args)
+    )
     result = subprocess.run(
         command, check=True, text=True, capture_output=True
     )
     return result.stdout
 
 
-def start_server(namespace: str, family: int, address: str, port: int) -> subprocess.Popen[str]:
+def start_server(
+    namespace: str, family: int, address: str, port: int
+) -> subprocess.Popen[str]:
     source = """
 import socket
 import sys
@@ -71,7 +77,11 @@ family = socket.AF_INET6 if ipv6 else socket.AF_INET
 client = socket.socket(family, socket.SOCK_STREAM)
 client.settimeout(1.5)
 if ip_options:
-    client.setsockopt(socket.IPPROTO_IP, socket.IP_OPTIONS, b"\\x01\\x01\\x01\\x00")
+    client.setsockopt(
+        socket.IPPROTO_IP,
+        socket.IP_OPTIONS,
+        b"\\x01\\x01\\x01\\x00",
+    )
 try:
     client.connect((address, port))
 except (TimeoutError, socket.timeout):
@@ -93,7 +103,8 @@ finally:
     if result.returncode in (10, 11):
         return False
     raise RuntimeError(
-        f"Client connection failed unexpectedly: {result.stderr or result.stdout}"
+        "Client connection failed unexpectedly: "
+        f"{result.stderr or result.stdout}"
     )
 
 
@@ -115,7 +126,8 @@ def expect_drop(address: str, port: int, label: str) -> None:
     after = counter_packets()
     if after <= before:
         raise AssertionError(
-            f"{label}: the mitigation counter did not increase ({before} -> {after})"
+            f"{label}: the mitigation counter did not increase "
+            f"({before} -> {after})"
         )
 
 
@@ -150,15 +162,36 @@ def configure() -> None:
         (ROUTER, "r1", "fd00:2::1/64"),
         (SERVER, "s0", "fd00:2::2/64"),
     ):
-        run("ip", "-n", namespace, "-6", "address", "add", address, "dev", interface, "nodad")
+        run(
+            "ip", "-n", namespace, "-6", "address", "add",
+            address, "dev", interface, "nodad",
+        )
 
-    run("ip", "-n", CLIENT, "route", "add", "198.51.100.0/24", "via", "192.0.2.1")
-    run("ip", "-n", SERVER, "route", "add", "192.0.2.0/24", "via", "198.51.100.1")
-    run("ip", "-n", CLIENT, "-6", "route", "add", "fd00:2::/64", "via", "fd00:1::1")
-    run("ip", "-n", SERVER, "-6", "route", "add", "fd00:1::/64", "via", "fd00:2::1")
+    run(
+        "ip", "-n", CLIENT, "route", "add", "198.51.100.0/24",
+        "via", "192.0.2.1",
+    )
+    run(
+        "ip", "-n", SERVER, "route", "add", "192.0.2.0/24",
+        "via", "198.51.100.1",
+    )
+    run(
+        "ip", "-n", CLIENT, "-6", "route", "add", "fd00:2::/64",
+        "via", "fd00:1::1",
+    )
+    run(
+        "ip", "-n", SERVER, "-6", "route", "add", "fd00:1::/64",
+        "via", "fd00:2::1",
+    )
 
-    run("ip", "netns", "exec", ROUTER, "sysctl", "-q", "-w", "net.ipv4.ip_forward=1")
-    run("ip", "netns", "exec", ROUTER, "sysctl", "-q", "-w", "net.ipv6.conf.all.forwarding=1")
+    run(
+        "ip", "netns", "exec", ROUTER, "sysctl", "-q", "-w",
+        "net.ipv4.ip_forward=1",
+    )
+    run(
+        "ip", "netns", "exec", ROUTER, "sysctl", "-q", "-w",
+        "net.ipv6.conf.all.forwarding=1",
+    )
 
     ruleset = f"""
 table ip {TABLE} {{
@@ -192,7 +225,9 @@ def main() -> int:
             raise AssertionError("ordinary IPv4 TCP to INPUT was not accepted")
         print("PASS: ordinary IPv4 TCP to INPUT is accepted")
         if not connect("198.51.100.2", FORWARD_PORT):
-            raise AssertionError("ordinary IPv4 TCP to FORWARD was not accepted")
+            raise AssertionError(
+                "ordinary IPv4 TCP to FORWARD was not accepted"
+            )
         print("PASS: ordinary IPv4 TCP to FORWARD is accepted")
 
         # IP options must be dropped on both paths and counted by the rule.
