@@ -42,6 +42,14 @@
   changed_when: false
   failed_when: false
 
+
+- name: Check whether sysupgrade configuration exists
+  community.openwrt.command:
+    cmd: test -f /etc/sysupgrade.conf
+  register: router_cve_2026_98432_sysupgrade_file_exists
+  changed_when: false
+  failed_when: false
+
 - name: Check whether sysupgrade already preserves the ruleset
   community.openwrt.command:
     cmd: grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf
@@ -101,7 +109,7 @@
     src: /etc/sysupgrade.conf
   register: router_cve_2026_98432_sysupgrade_backup
   changed_when: false
-  when: router_cve_2026_98432_sysupgrade_entry.rc == 0
+  when: router_cve_2026_98432_sysupgrade_file_exists.rc == 0
 
 - name: Apply the requested mitigation state
   block:
@@ -257,13 +265,13 @@
         owner: root
         group: root
         mode: '0644'
-      when: router_cve_2026_98432_sysupgrade_entry.rc == 0
+      when: router_cve_2026_98432_sysupgrade_file_exists.rc == 0
 
     - name: Remove sysupgrade configuration created by the failed run
       community.openwrt.file:
         path: /etc/sysupgrade.conf
         state: absent
-      when: router_cve_2026_98432_sysupgrade_entry.rc != 0
+      when: router_cve_2026_98432_sysupgrade_file_exists.rc != 0
 
     - name: Reload the restored firewall configuration
       community.openwrt.service:
