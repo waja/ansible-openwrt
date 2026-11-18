@@ -26,7 +26,8 @@
     that:
       - router_cve_2026_98432_pending_changes.stdout | trim == ''
     fail_msg: >-
-      Commit or discard pending firewall UCI changes before managing the mitigation.
+      Commit or discard pending firewall UCI changes before managing the
+      mitigation.
 
 - name: Read the owned UCI include
   community.openwrt.uci:
@@ -83,7 +84,8 @@
         router_cve_2026_98432_file_exists.rc != 0
         or router_cve_2026_98432_file_is_regular.rc == 0
     fail_msg: >-
-      The owned ruleset path is not a regular file; refusing to overwrite or remove it.
+      The owned ruleset path is not a regular file; refusing to overwrite or
+      remove it.
 
 - name: Check whether sysupgrade already preserves the ruleset
   community.openwrt.command:
@@ -145,7 +147,8 @@
           )
         )
     fail_msg: >-
-      Existing state conflicts with this role or is not owned by it; resolve it manually.
+      Existing state conflicts with this role or is not owned by it; resolve
+      it manually.
 
 - name: Refuse removal when runtime changes are disabled
   ansible.builtin.assert:
