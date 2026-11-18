@@ -102,7 +102,7 @@
         cmd: mktemp -d /tmp/ansible-librenms.XXXXXX
       register: router_librenms_remote_dir
       changed_when: false
-      ignore_unreachable: true
+
 
     - name: Create separate LibreNMS extraction directory on the router
       community.openwrt.command:
@@ -111,7 +111,7 @@
           {{ (router_librenms_remote_dir.stdout | trim
           ~ '/extracted') | quote }}
       changed_when: false
-      ignore_unreachable: true
+
       when:
         - router_librenms_remote_dir.stdout is defined
         - router_librenms_remote_dir.stdout | trim | length > 0
@@ -121,7 +121,7 @@
         cmd: df -Pk /tmp
       register: router_librenms_tmp_storage
       changed_when: false
-      ignore_unreachable: true
+
       when:
         - router_librenms_remote_dir.stdout is defined
         - router_librenms_remote_dir.stdout | trim | length > 0
@@ -137,7 +137,7 @@
         fail_msg: >-
           At least 64 MiB of free space in /tmp is required to stage and
           extract the LibreNMS source archive safely.
-      when: router_librenms_tmp_storage.stdout_lines is defined
+
 
     - name: Upload LibreNMS source archive to the router
       community.openwrt.copy:
@@ -148,10 +148,7 @@
         group: root
         mode: '0600'
       changed_when: false
-      ignore_unreachable: true
-      when:
-        - router_librenms_remote_dir.stdout is defined
-        - router_librenms_tmp_storage.stdout_lines is defined
+
 
     - name: Extract LibreNMS agent source archive with BusyBox tar
       community.openwrt.command:
@@ -162,7 +159,7 @@
           -C {{ (router_librenms_remote_dir.stdout | trim
           ~ '/extracted') | quote }}
       changed_when: false
-      ignore_unreachable: true
+
       when:
         - router_librenms_remote_dir.stdout is defined
         - router_librenms_tmp_storage.stdout_lines is defined
@@ -176,7 +173,7 @@
           -mindepth 1 -maxdepth 1 -type d
       register: router_librenms_source_dir
       changed_when: false
-      ignore_unreachable: true
+
       when:
         - router_librenms_remote_dir.stdout is defined
         - router_librenms_tmp_storage.stdout_lines is defined
@@ -188,15 +185,15 @@
         fail_msg: >-
           The validated LibreNMS archive did not extract to exactly one
           top-level source directory.
-      when: router_librenms_source_dir.stdout_lines is defined
+
 
     - name: Create LibreNMS script directory
       community.openwrt.file:
         path: /etc/librenms
         state: directory
         mode: '0755'
-      ignore_unreachable: true
-      when: router_librenms_source_dir.stdout is defined
+
+
 
     - name: Deploy downloaded LibreNMS scripts
       ansible.builtin.include_tasks: deploy_script.yml
@@ -230,8 +227,7 @@
         group: root
         mode: '0755'
       notify: Restart SNMP daemon
-      ignore_unreachable: true
-      when: router_librenms_source_dir.stdout is defined
+
   always:
     - name: Clean up router-side LibreNMS staging
       block:
