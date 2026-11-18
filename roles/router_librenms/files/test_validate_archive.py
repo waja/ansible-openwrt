@@ -37,7 +37,8 @@ class ArchiveValidationTests(unittest.TestCase):
             entries = [(name, tarfile.REGTYPE, b"script") for name in REQUIRED]
         with tarfile.open(self.archive_path, "w:gz") as archive:
             for name, kind, data in entries:
-                member = tarfile.TarInfo("source-root/" + name)
+                member_name = name if name.startswith("/") else "source-root/" + name
+                member = tarfile.TarInfo(member_name)
                 member.type = kind
                 if kind == tarfile.REGTYPE:
                     member.size = len(data)
