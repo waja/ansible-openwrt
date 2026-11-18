@@ -2237,8 +2237,13 @@
           exit 1
         fi
         test ! -e /etc/cve_2026_98432.nft || exit 1
-        if grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf; then
-          echo "CVE mitigation sysupgrade entry still exists"
-          exit 1
+        if [ -e /etc/sysupgrade.conf ]; then
+          if grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf; then
+            echo "CVE mitigation sysupgrade entry still exists"
+            exit 1
+          else
+            grep_status=$?
+            [ "$grep_status" -eq 1 ] || exit "$grep_status"
+          fi
         fi
       changed_when: false
