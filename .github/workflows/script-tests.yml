@@ -144,7 +144,7 @@ jobs:
             -s roles/router_librenms/files \
             -p 'test_validate_archive.py'
 
-      - name: Verify BusyBox tar gzip and strip-components support
+      - name: Verify BusyBox tar gzip extraction
         run: |
           mkdir -p "$RUNNER_TEMP/librenms-tar/source-root/snmp/Openwrt"
           printf '%s\n' 'test-script' \
@@ -160,10 +160,12 @@ jobs:
               set -eu
               busybox tar -tzf /tmp/librenms-tar/archive.tar.gz >/dev/null
               busybox tar -xzf /tmp/librenms-tar/archive.tar.gz \
-                -C /tmp/librenms-tar/extracted --strip-components=1
-              test -f /tmp/librenms-tar/extracted/snmp/Openwrt/wlClients.sh
+                -C /tmp/librenms-tar/extracted
+              test -f /tmp/librenms-tar/extracted/source-root/snmp/Openwrt/wlClients.sh
               grep -Fx "test-script" \
-                /tmp/librenms-tar/extracted/snmp/Openwrt/wlClients.sh
+                /tmp/librenms-tar/extracted/source-root/snmp/Openwrt/wlClients.sh
+              busybox find /tmp/librenms-tar/extracted \
+                -mindepth 1 -maxdepth 1 -type d
             '
 
       - name: Verify APK system audit behavior on OpenWrt
