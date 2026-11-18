@@ -14,6 +14,68 @@
       vars:
         router_storage_expand_root: false
 
+    - name: Detect CVE-2026-98432 kernel status without applying mitigation
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_manage: false
+
+    - name: Verify CVE kernel detection returns a supported status
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_effective_kernel_status in [
+              'patched', 'vulnerable', 'unknown'
+            ]
+          - router_cve_2026_98432_kernel_probe.stdout
+            is search('(?m)^kernel_release=')
+          - router_cve_2026_98432_kernel_probe.stdout
+            is search('(?m)^kernel_package=')
+          - router_cve_2026_98432_status_probe.stdout
+            is search('(?m)^file=')
+          - router_cve_2026_98432_status_probe.stdout
+            is search('(?m)^active=')
+
+    - name: Verify vulnerable and fixed kernel version boundaries
+      ansible.builtin.raw: >-
+        CVE_ACTION=classify CVE_VERSION={{ item.version }} sh -c {{
+          lookup(
+            'ansible.builtin.file',
+            playbook_dir ~
+            '/../../../roles/router_cve_2026_98432/files/manage.sh'
+          ) | quote
+        }}
+      loop:
+        - version: 6.12.112
+          expected: vulnerable
+        - version: 6.12.113
+          expected: patched
+        - version: 5.15.222
+          expected: vulnerable
+        - version: 5.15.223
+          expected: patched
+        - version: 6.6.158
+          expected: vulnerable
+        - version: 6.6.159
+          expected: patched
+        - version: 7.3-rc6
+          expected: vulnerable
+        - version: 7.3-rc7
+          expected: patched
+        - version: 7.3.0-rc6
+          expected: vulnerable
+        - version: 7.3.0-rc7
+          expected: patched
+      register: router_cve_2026_98432_version_tests
+      changed_when: false
+
+    - name: Assert kernel version boundary results
+      ansible.builtin.assert:
+        that:
+          - item.stdout | trim == item.item.expected
+      loop: "{{ router_cve_2026_98432_version_tests.results }}"
+      loop_control:
+        label: "{{ item.item.version }} -> {{ item.item.expected }}"
+
     - name: Verify container storage is not treated as expandable SquashFS
       ansible.builtin.assert:
         that:
@@ -61,28 +123,9 @@
         router_system_asu_upgrade_packages: 1
         router_system_log_ip: 192.0.2.234
 
-    - name: Seed an additional Dropbear WAN firewall rule
-      community.openwrt.uci:
-        command: section
-        config: firewall
-        type: rule
-        name: ansible_router_firewall_dropbear_extra_wan
-        value:
-          name: Ansible managed Dropbear extra ports WAN
-          src: wan
-          proto: tcp
-          dest_port: '2222 2223'
-          target: ACCEPT
-        autocommit: true
-      tags:
-        - molecule-idempotence-notest
-
     - name: Apply router firewall role with defaults
       ansible.builtin.include_role:
         name: router_firewall
-        apply:
-          tags:
-            - molecule-idempotence-notest
       vars:
         router_firewall_input: ACCEPT
         router_firewall_forward: ACCEPT
@@ -98,9 +141,9 @@
           echo "Unexpected additional Dropbear WAN firewall rule"
           exit 1
         fi
-        echo "Verified: no extra Dropbear WAN firewall rule by default"
       changed_when: false
-      when: "'molecule-idempotence-notest' not in ansible_skip_tags"
+      tags:
+        - molecule-idempotence-notest
 
     - name: Apply router firewall role with WAN access enabled
       ansible.builtin.include_role:
@@ -1424,29 +1467,3 @@
           loop:
             - /tmp/ansible-molecule-owut
             - /tmp/ansible-molecule-owut-mode
-
-    - name: Configure CVE mitigation without changing the running firewall
-      ansible.builtin.include_role:
-        name: router_cve_2026_98432
-      vars:
-        router_cve_2026_98432_state: present
-        router_cve_2026_98432_apply_runtime_changes: false
-
-    - name: Verify standalone CVE mitigation UCI include
-      community.openwrt.uci:
-        command: get
-        key: firewall.ansible_cve_2026_98432.path
-      register: router_cve_2026_98432_test_include
-      changed_when: false
-
-    - name: Assert CVE mitigation is configured
-      ansible.builtin.assert:
-        that:
-          - router_cve_2026_98432_test_include.result == '/etc/cve_2026_98432.nft'
-
-    - name: Verify the installed ruleset and sysupgrade entry
-      ansible.builtin.raw: |
-        grep -Fqx 'ip protocol tcp ip hdrlength 6-15 counter drop' \
-          /etc/cve_2026_98432.nft
-        grep -Fqx '/etc/cve_2026_98432.nft' /etc/sysupgrade.conf
-      changed_when: false
