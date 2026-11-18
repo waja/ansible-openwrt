@@ -163,20 +163,7 @@
         mode: '0755'
 
     - name: Deploy downloaded LibreNMS scripts
-      community.openwrt.command:
-        cmd: >-
-          if ! cmp -s
-          {{ router_librenms_source_dir.stdout | trim }}/{{ item.path }}
-          /etc/librenms/{{ item.name }};
-          then
-          cp
-          {{ router_librenms_source_dir.stdout | trim }}/{{ item.path }}
-          /etc/librenms/{{ item.name }}
-          && chmod 0755 /etc/librenms/{{ item.name }}
-          && echo changed;
-          fi
-      register: router_librenms_script_deployment
-      changed_when: "'changed' in router_librenms_script_deployment.stdout"
+      ansible.builtin.include_tasks: deploy_script.yml
       loop:
         - name: distro
           path: snmp/distro
@@ -191,8 +178,8 @@
         - name: wlSNR.sh
           path: snmp/Openwrt/wlSNR.sh
       loop_control:
-        label: "{{ item.name }}"
-      notify: Restart SNMP daemon
+        loop_var: router_librenms_script
+        label: "{{ router_librenms_script.name }}"
 
     - name: Deploy LibreNMS hardware detection script
       community.openwrt.copy:
