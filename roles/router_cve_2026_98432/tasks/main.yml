@@ -388,7 +388,7 @@
           type: "{{ router_cve_2026_98432_include_options.results[0].result }}"
           path: "{{ router_cve_2026_98432_include_options.results[1].result }}"
           position: "{{ router_cve_2026_98432_include_options.results[2].result }}"
-          enabled: "{{ router_cve_2026_98432_include_options.results[3].result }}"
+          enabled: "{{ router_cve_2026_98432_include_options.results[3].result | default('1', true) }}"
         autocommit: true
       when: router_cve_2026_98432_include.result | default('') == 'include'
 
@@ -445,7 +445,7 @@
         state: reloaded
       register: router_cve_2026_98432_rollback_reload
       when: router_cve_2026_98432_apply_runtime_changes | bool
-      failed_when: false
+      ignore_errors: true
 
     - name: Remove a mitigation table introduced by the failed run
       community.openwrt.command:
