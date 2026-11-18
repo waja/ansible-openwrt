@@ -203,7 +203,7 @@ class ArchiveValidationTests(unittest.TestCase):
             member.pax_headers = {"comment": "x" * (MAX_DECOMPRESSED_BYTES + 1)}
             archive.addfile(member, io.BytesIO(b"x"))
 
-        with patch("validate_archive.MAX_DECOMPRESSED_BYTES", 1024):
+        with patch("validate_archive.MAX_DECOMPRESSED_BYTES", 8192):
             with self.assertRaisesRegex(
                 ArchiveValidationError, "decompressed-stream"
             ):
