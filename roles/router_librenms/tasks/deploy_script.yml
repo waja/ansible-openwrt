@@ -10,7 +10,6 @@
   failed_when: false
   changed_when: false
   ignore_unreachable: true
-  ignore_unreachable: true
 
 - name: Copy updated LibreNMS script on the router
   community.openwrt.command:
@@ -33,3 +32,4 @@
       {{ ('/etc/librenms/' ~ router_librenms_script.name) | quote }}
   uses_shell: true
   changed_when: false
+  ignore_unreachable: true
