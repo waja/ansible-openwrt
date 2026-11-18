@@ -670,6 +670,21 @@ else
     echo "(apk not found; this check requires OpenWrt 25.12+ with apk)"
 fi
 
+# --- Runtime-only state snapshots ----------------------------------------
+RUNTIME_HELPER=/usr/libexec/owrt-extra-runtime.sh
+if [ -r "$RUNTIME_HELPER" ]; then
+    print_section "10. Runtime-only state (point-in-time snapshots)"
+    if sh "$RUNTIME_HELPER" "$OUT/runtime" 2> "$OUT/runtime-collector.log"; then
+        cat "$OUT/runtime/status.txt"
+        echo "Raw snapshots: $OUT/runtime/ (sensitive; inspect before sharing)"
+    else
+        echo "WARNING: runtime snapshot collection failed to initialize." >&2
+        echo "Review $OUT/runtime-collector.log" >&2
+    fi
+else
+    echo "Runtime snapshot helper not found; runtime collection skipped."
+fi
+
 # --- Info -----------------------------------------------------------------
 print_section "7. Info only"
 echo "-- UCI files (covered by the UCI diff in section 1):"
