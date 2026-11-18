@@ -100,17 +100,27 @@ or CI workflows.
 
 ### CI scope and path filters
 
-- Prefer simple, conservative test selection over saving CI minutes. An
-  additional test run is cheaper than maintaining fragile path-detection logic
-  or accidentally skipping a required test.
-- The Molecule workflow skips its matrix only when every changed file is
-  Markdown. All other changes run Molecule; if the base commit or diff is
-  unavailable, Molecule runs.
-- Keep script-specific smoke tests in their dedicated workflow. Script
-  changes also run Molecule; avoid adding exceptions just to save that run.
+- Prefer simple, conservative test selection over saving CI minutes. Use
+  only explicit, stable path exemptions; an additional test run is cheaper
+  than fragile detection or accidentally skipping a required test.
+- The Molecule workflow skips its matrix only when every changed file is a
+  Markdown file, is under `docs/`, or is one of these five files covered by
+  `script-tests.yml`:
+  `scripts/owrt-extra.sh`, `scripts/owrt-extra-runtime.sh`,
+  `scripts/tests/owrt-extra-failure-tests.sh`,
+  `scripts/tests/test-owrt-extra-cli.sh`, and
+  `scripts/tests/test-owrt-extra-runtime.sh`. Any other changed path runs
+  Molecule. An empty or unavailable diff, or a failed diff command, also
+  runs Molecule.
+- Discovery scripts use the `owrt-` filename prefix directly under
+  `scripts/`. Discovery shell test filenames include `owrt` under
+  `scripts/tests/`. These naming conventions identify discovery files but
+  do not themselves grant a Molecule exemption. Add a path to the explicit
+  allowlist only after `script-tests.yml` exercises it. Shell lint covers
+  all files under `scripts/`.
 - Keep scheduled smoke tests and manual `workflow_dispatch` available.
 - Do not add workflow-level path filters that can leave required checks
-  pending.
+  pending; keep the aggregate `Molecule` status job active for every PR.
 
 Use `docs/reference-projects.md` as a curated set of external
 Ansible/OpenWrt examples when researching relevant design questions,
@@ -567,10 +577,15 @@ with it.
   07:17 UTC), pull requests, and pushes to `development` and `master`.
   The workflow starts for all push and pull-request events so required checks
   are not left pending by workflow-level path filters. The change-detection
-  job skips the Molecule matrix only when every changed file is Markdown.
-  Every other change runs Molecule. If the base commit is unavailable or Git
-  cannot produce the diff, Molecule runs. Scheduled and manual runs always
-  run the Molecule matrix.
+  job skips the Molecule matrix only when every changed file is Markdown,
+  under `docs/`, or one of the five explicitly listed discovery files in
+  the CI scope section above. New files matching the `owrt-` naming
+  convention still run Molecule until `script-tests.yml` covers them and
+  they are added to the allowlist. Every other change runs Molecule. An
+  empty, unavailable, or uncomputable diff runs Molecule. Scheduled and
+  manual runs bypass change detection, but still require the OpenWrt version,
+  structure, lint, and applicable Ansible prechecks to pass before the
+  Molecule matrix starts.
 
 ### Jobs
 
@@ -594,13 +609,18 @@ with it.
   - Run only when `has_collection == 'true'`.
   - Use `ansible-test` with `${{ steps.python.outputs.python-version }}`.
 - `molecule`
-  - Depends on `changes`, `check-structure`, `lint`, `sanity`, and
-    `units`. It runs only after structure and lint prerequisites pass.
+  - Depends on `changes`, `openwrt-versions`, `check-structure`,
+    `lint`, `sanity`, and `units`. It runs only after the OpenWrt
+    version and structure checks, lint, and applicable Ansible prechecks pass.
   - Installs pinned roles and collections from `requirements.yml` into
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
-  - Runs for scheduled/manual events and whenever any changed file is not
-    Markdown. It skips the matrix only for Markdown-only changes. If the
-    base commit is unavailable or Git cannot produce the diff, it runs.
+  - Runs for scheduled/manual events and whenever any changed path falls
+    outside the documented exemptions: Markdown, `docs/**`, and the five
+    explicitly listed discovery files covered by `script-tests.yml`. New
+    discovery files run Molecule until their tests are added and the paths
+    are explicitly allowlisted. The matrix is skipped only when every
+    changed file matches an exemption. Empty, unavailable, or uncomputable
+    diffs run Molecule.
   - Installs the hash-locked Molecule toolchain from
     `requirements/ci/molecule.txt` with `--require-hashes`.
   - Sets `MOLECULE_GLOB` to discover scenarios under
@@ -641,8 +661,8 @@ with it.
     summary. It validates one artifact for every expected OpenWrt-version
     and scenario pair, reports durations and explicit skipped status, and
     fails for failed, cancelled, missing, duplicate, malformed, or
-    unexpected results. Intentional Markdown-only skips are reported as
-    skipped; failed prechecks fail the aggregate check.
+    unexpected results. Intentional documentation/discovery-only skips are
+    reported as skipped; failed prechecks fail the aggregate check.
 
 When changing the workflow, update this section to reflect actual job
 dependencies, conditions, matrix, and commands.
@@ -692,8 +712,14 @@ Workflow: `.github/workflows/forward-compatibility.yml`.
   the shared OpenWrt-version matrix and image action.
 - The local diff avoids GitHub's changed-file API limit; if the base commit
   is unavailable, tests run by default.
-- Does not depend on the Molecule matrix, so script-only changes avoid
-  Ansible/Molecule integration tests.
+- Does not depend on the Molecule matrix. The five explicitly
+  allowlisted discovery files are copied and exercised by this workflow:
+  `scripts/owrt-extra.sh`, `scripts/owrt-extra-runtime.sh`,
+  `scripts/tests/owrt-extra-failure-tests.sh`,
+  `scripts/tests/test-owrt-extra-cli.sh`, and
+  `scripts/tests/test-owrt-extra-runtime.sh`. Other files matching the
+  discovery naming convention still run Molecule. All scripts remain covered
+  by the separate ShellCheck job.
 
 ### Script and documentation lint (`.github/workflows/lint-scripts-docs.yml`)
 

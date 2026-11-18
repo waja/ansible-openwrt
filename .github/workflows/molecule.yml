@@ -70,22 +70,31 @@ jobs:
             diff_args=("$BASE_SHA" "$HEAD_SHA")
           fi
 
-          if ! git diff --no-renames --name-only "${diff_args[@]}" \
-            > "$RUNNER_TEMP/changed-files.txt"; then
+          if ! git diff --no-renames --name-only -z "${diff_args[@]}" \
+            > "$RUNNER_TEMP/changed-files.bin"; then
             echo "molecule=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          cat "$RUNNER_TEMP/changed-files.txt"
-
-          # Only Markdown-only changes skip Molecule. Test everything else.
+          # Skip Molecule only for documentation and discovery paths covered
+          # by the dedicated script checks. Keep other changes conservative.
           molecule=false
-          while IFS= read -r path; do
-            case "$path" in
-              *.md) ;;
-              *) molecule=true; break ;;
-            esac
-          done < "$RUNNER_TEMP/changed-files.txt"
+          if [[ ! -s "$RUNNER_TEMP/changed-files.bin" ]]; then
+            molecule=true
+          else
+            while IFS= read -r -d '' path; do
+              printf 'Changed path: %q\\n' "$path"
+              case "$path" in
+                *.md|docs/*) ;;
+                scripts/owrt-extra.sh) ;;
+                scripts/owrt-extra-runtime.sh) ;;
+                scripts/tests/owrt-extra-failure-tests.sh) ;;
+                scripts/tests/test-owrt-extra-cli.sh) ;;
+                scripts/tests/test-owrt-extra-runtime.sh) ;;
+                *) molecule=true; break ;;
+              esac
+            done < "$RUNNER_TEMP/changed-files.bin"
+          fi
 
           echo "molecule=$molecule" >> "$GITHUB_OUTPUT"
 
