@@ -299,6 +299,7 @@
             )
         fail_msg: The expected CVE mitigation is not active in nftables.
       when:
+        - not ansible_check_mode
         - router_cve_2026_98432_state == 'present'
         - router_cve_2026_98432_apply_runtime_changes | bool
 
@@ -319,7 +320,13 @@
           - router_cve_2026_98432_tables_after_removal.rc == 0
           - >-
             router_cve_2026_98432_tables_after_removal.stdout
-            is not search('^table ip cve_2026_98432  rescue:
+            is not search('(?m)^table ip cve_2026_98432$')
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+
+  rescue:
     - name: Check for concurrent firewall UCI changes before rollback
       community.openwrt.command:
         cmd: uci changes firewall
