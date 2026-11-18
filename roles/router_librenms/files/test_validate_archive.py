@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for LibreNMS source archive validation."""
 
+import gzip
 import io
 import tarfile
 import tempfile
@@ -130,6 +131,19 @@ class ArchiveValidationTests(unittest.TestCase):
         entries.append(("linked", tarfile.REGTYPE, b"x", "target"))
         self.write_archive(entries)
         with self.assertRaisesRegex(ArchiveValidationError, "link target"):
+            validate_archive(self.archive_path)
+
+    def test_rejects_invalid_header_after_required_files(self):
+        entries = [(name, tarfile.REGTYPE, b"x") for name in REQUIRED]
+        entries.append(("extra", tarfile.REGTYPE, b"x"))
+        self.write_archive(entries)
+
+        archive_data = bytearray(gzip.decompress(self.archive_path.read_bytes()))
+        header_offset = archive_data.index(b"source-root/extra")
+        archive_data[header_offset + 148] = ord("X")
+        self.archive_path.write_bytes(gzip.compress(archive_data))
+
+        with self.assertRaisesRegex(ArchiveValidationError, "Invalid tar header"):
             validate_archive(self.archive_path)
 
     def test_rejects_missing_required_file(self):
