@@ -123,6 +123,7 @@
         owner: root
         group: root
         mode: '0644'
+      register: router_cve_2026_98432_ruleset_install
       when: router_cve_2026_98432_state == 'present'
 
     - name: Configure the dedicated fw4 ruleset include
@@ -137,6 +138,7 @@
           position: ruleset-post
           enabled: '1'
         autocommit: true
+      register: router_cve_2026_98432_include_install
       when: router_cve_2026_98432_state == 'present'
 
     - name: Preserve the owned ruleset through sysupgrade
@@ -146,6 +148,7 @@
         regexp: '^/etc/cve_2026_98432\.nft$'
         create: true
         state: present
+      register: router_cve_2026_98432_sysupgrade_install
       when: router_cve_2026_98432_state == 'present'
 
     - name: Remove the dedicated fw4 include
@@ -153,6 +156,7 @@
         command: absent
         key: firewall.ansible_cve_2026_98432
         autocommit: true
+      register: router_cve_2026_98432_include_remove
       when:
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_include.result | default('') == 'include'
@@ -163,6 +167,7 @@
         line: /etc/cve_2026_98432.nft
         regexp: '^/etc/cve_2026_98432\.nft$'
         state: absent
+      register: router_cve_2026_98432_sysupgrade_remove
       when:
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_sysupgrade_entry.rc == 0
@@ -171,9 +176,41 @@
       community.openwrt.file:
         path: /etc/cve_2026_98432.nft
         state: absent
+      register: router_cve_2026_98432_ruleset_remove
       when:
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Determine whether the firewall needs a reload
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_reload_required: >-
+          {{
+            router_cve_2026_98432_ruleset_install.changed | default(false)
+            or router_cve_2026_98432_include_install.changed | default(false)
+            or router_cve_2026_98432_sysupgrade_install.changed | default(false)
+            or router_cve_2026_98432_include_remove.changed | default(false)
+            or router_cve_2026_98432_sysupgrade_remove.changed | default(false)
+            or router_cve_2026_98432_ruleset_remove.changed | default(false)
+            or (
+              router_cve_2026_98432_state == 'present' and (
+                router_cve_2026_98432_active_table.rc != 0
+                or router_cve_2026_98432_active_table.stdout is not search(
+                  'type filter hook prerouting priority (-310|raw - 10)'
+                )
+                or router_cve_2026_98432_active_table.stdout is not search(
+                  'ip protocol tcp ip hdrlength 6-15 counter.*drop'
+                )
+                or router_cve_2026_98432_active_table.stdout is search(
+                  'flags.*dormant'
+                )
+              )
+            )
+            or (
+              router_cve_2026_98432_state == 'absent'
+              and router_cve_2026_98432_active_table.rc == 0
+            )
+          }}
+      changed_when: false
 
     - name: Validate the resulting fw4 ruleset before reload
       community.openwrt.command:
@@ -184,7 +221,9 @@
       community.openwrt.service:
         name: firewall
         state: reloaded
-      when: router_cve_2026_98432_apply_runtime_changes | bool
+      when:
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_reload_required | bool
 
     - name: Remove the now-unreferenced nftables table
       community.openwrt.command:
