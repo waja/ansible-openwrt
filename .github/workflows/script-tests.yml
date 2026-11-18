@@ -148,10 +148,10 @@ jobs:
         run: |
           root="$RUNNER_TEMP/librenms-tar/source-root"
           mkdir -p "$root/snmp/Openwrt"
-          printf '%s\\n' 'test-script' > "$root/snmp/distro"
+          printf '%s\n' 'test-script' > "$root/snmp/distro"
           for script in wlClients.sh wlFrequency.sh wlNoiseFloor.sh \
             wlRate.sh wlSNR.sh; do
-            printf '%s\\n' 'test-script' > "$root/snmp/Openwrt/$script"
+            printf '%s\n' 'test-script' > "$root/snmp/Openwrt/$script"
           done
           tar -czf "$RUNNER_TEMP/librenms-tar/archive.tar.gz" \
             -C "$RUNNER_TEMP/librenms-tar" source-root
@@ -272,7 +272,7 @@ jobs:
               grep -Eq -- "^[[:space:]#]*-h([[:space:]]|$)" /tmp/help.txt
 
               # Exercise redaction using representative UCI output.
-              printf "%s\\n" \
+              printf "%s\n" \
                 "< wireless.default_radio.key=wifi-secret" \
                 "> network.wg0.private_key=wireguard-secret" \
                 "> network.wg0.psk=psk-secret" \
