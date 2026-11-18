@@ -470,6 +470,22 @@ jobs:
           path: matrix-results/*.json
           if-no-files-found: error
           retention-days: 1
+  cve-mitigation-traffic:
+    name: CVE mitigation traffic
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: 3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install network namespace and nftables tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes iproute2 nftables python3
+
+      - name: Test IPv4 INPUT/FORWARD filtering and IPv6 compatibility
+        run: |
+          sudo python3 scripts/tests/test_cve_2026_98432_traffic.py
+
   molecule-status:
     name: Molecule
     needs:
