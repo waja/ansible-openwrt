@@ -34,7 +34,7 @@ class ArchiveValidationTests(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def write_archive(self, entries=None):
+    def write_archive(self, entries=None, root="source-root"):
         if entries is None:
             entries = [(name, tarfile.REGTYPE, b"script") for name in REQUIRED]
         with tarfile.open(self.archive_path, "w:gz") as archive:
@@ -44,7 +44,7 @@ class ArchiveValidationTests(unittest.TestCase):
                 member_name = (
                     name
                     if name.startswith("/") or name.startswith("other-root/")
-                    else "source-root/" + name
+                    else root + "/" + name
                 )
                 member = tarfile.TarInfo(member_name)
                 member.type = kind
@@ -64,6 +64,16 @@ class ArchiveValidationTests(unittest.TestCase):
         entries.extend((name, tarfile.REGTYPE, b"script") for name in REQUIRED)
         self.write_archive(entries)
         validate_archive(self.archive_path)
+
+    def test_rejects_root_names_with_whitespace(self):
+        self.write_archive(root="source-root ")
+        with self.assertRaisesRegex(ArchiveValidationError, "Unsafe archive root"):
+            validate_archive(self.archive_path)
+
+    def test_rejects_root_names_with_newlines(self):
+        self.write_archive(root="source-root\n")
+        with self.assertRaisesRegex(ArchiveValidationError, "Unsafe archive root"):
+            validate_archive(self.archive_path)
 
     def test_rejects_parent_directory_traversal(self):
         self.write_archive(
@@ -139,6 +149,16 @@ class ArchiveValidationTests(unittest.TestCase):
         entries.append(("linked", tarfile.REGTYPE, b"x", "target"))
         self.write_archive(entries)
         with self.assertRaisesRegex(ArchiveValidationError, "link target"):
+            validate_archive(self.archive_path)
+
+    def test_rejects_single_zero_block_terminator(self):
+        self.write_archive()
+        data = gzip.decompress(self.archive_path.read_bytes())
+        terminator = data.find(b"\0" * 1024)
+        self.assertGreaterEqual(terminator, 0)
+        truncated = data[: terminator + tarfile.BLOCKSIZE]
+        self.archive_path.write_bytes(gzip.compress(truncated))
+        with self.assertRaisesRegex(ArchiveValidationError, "second zero"):
             validate_archive(self.archive_path)
 
     def test_rejects_invalid_header_after_required_files(self):
