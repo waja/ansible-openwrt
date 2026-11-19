@@ -104,7 +104,7 @@
 
 - name: Check for an existing mitigation table
   community.openwrt.command:
-    cmd: nft list table ip cve_2026_98432
+    cmd: "{{ router_cve_2026_98432_runtime_table_probe_command }}"
   register: router_cve_2026_98432_active_table
   changed_when: false
   failed_when: false
@@ -343,7 +343,7 @@
       block:
         - name: Validate the resulting fw4 ruleset
           community.openwrt.command:
-            cmd: fw4 check
+            cmd: "{{ router_cve_2026_98432_fw4_check_command }}"
           changed_when: false
 
         - name: Record that a firewall reload is about to be attempted
