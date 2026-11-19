@@ -198,7 +198,7 @@ def validate_archive(archive_path):
                 # tarfile stops after the first zero block. BusyBox requires
                 # two complete zero blocks, so verify the second one here.
                 if archive.fileobj.read(tarfile.BLOCKSIZE) != (
-                    b"\\0" * tarfile.BLOCKSIZE
+                    bytes(tarfile.BLOCKSIZE)
                 ):
                     raise ArchiveValidationError(
                         "Tar archive is missing its second zero end block"
