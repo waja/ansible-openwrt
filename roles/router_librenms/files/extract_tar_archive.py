@@ -139,7 +139,11 @@ def _validate_sparse_extents(member):
 
 
 def _validate_member(member, roots):
-    """Validate a member path and record its top-level directory."""
+    """Validate a member type and path and record its top-level directory."""
+    if not (member.isfile() or member.isdir() or member.issym()):
+        raise ValueError(
+            f"Unsupported archive member type: {member.type!r}"
+        )
     path = PurePosixPath(member.name)
     parts = path.parts
     if member.size < 0:
