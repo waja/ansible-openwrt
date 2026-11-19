@@ -1565,7 +1565,8 @@
             router_cve_2026_98432_installed_ruleset.content
             == (lookup(
               'file',
-              playbook_dir ~ '/../../../roles/router_cve_2026_98432/files/mitigation.nft'
+              playbook_dir ~ '/../../../roles/router_cve_2026_98432/files/mitigation.nft',
+              rstrip=False
             ) | b64encode)
 
     - name: >-
