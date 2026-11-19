@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "files"))
 
 from extract_tar_archive import (
     BoundedTarInfo,
+    _open_streaming_archive,
     _expanded_member_size,
     extract_archive,
 )
@@ -130,6 +131,16 @@ class ExtractArchiveTests(unittest.TestCase):
         ])
         with self.assertRaisesRegex(ValueError, "top-level directory"):
             extract_archive(self.archive, self.destination)
+
+    def test_streaming_archive_does_not_cache_members(self):
+        self.create_archive([
+            (f"agent-main/file-{index}", "x", "file", "")
+            for index in range(10)
+        ])
+        with _open_streaming_archive(self.archive) as archive:
+            list(archive)
+            self.assertTrue(archive.stream)
+            self.assertEqual(archive.members, [])
 
     def test_rejects_oversized_archive(self):
         self.create_archive([("agent-main/file", "data", "file", "")])
