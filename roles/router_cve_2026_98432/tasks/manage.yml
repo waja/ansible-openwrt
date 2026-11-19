@@ -210,8 +210,11 @@
             or (
               router_cve_2026_98432_ruleset_backup.content | default('')
               != (
-                lookup('file', role_path ~ '/files/mitigation.nft')
-                | b64encode
+                lookup(
+                  'file',
+                  role_path ~ '/files/mitigation.nft',
+                  rstrip=False
+                ) | b64encode
               )
             )
             or router_cve_2026_98432_include.result | default('') != 'include'
