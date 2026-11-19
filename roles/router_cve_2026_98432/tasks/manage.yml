@@ -228,7 +228,9 @@
       - router_cve_2026_98432_include_export.stdout | trim != ''
   when: router_cve_2026_98432_include.result | default('') == 'include'
 
-- name: Refuse updating an enabled include when runtime inspection is inconclusive
+- name: >-
+    Refuse updating an enabled include when runtime inspection is
+    inconclusive
   ansible.builtin.assert:
     that:
       - >-
