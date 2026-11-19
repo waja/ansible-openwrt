@@ -1465,7 +1465,7 @@
         that:
           - >-
             router_cve_2026_98432_fw4_print.stdout
-            is search('(?s)table ip cve_2026_98432 \\{')
+            is search('(?s)table ip cve_2026_98432 \{')
           - >-
             router_cve_2026_98432_fw4_print.stdout
             is search('ip protocol tcp ip hdrlength 6-15 counter drop')
