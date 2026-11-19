@@ -519,7 +519,7 @@
     - name: Collapse duplicate owned sysupgrade entries
       community.openwrt.command:
         cmd: >-
-          awk '$0 != "/etc/cve_2026_98432.nft" || !seen++'
+        awk '$0 != "/etc/cve_2026_98432.nft" || !seen++'
           /etc/sysupgrade.conf > /tmp/ansible-cve-2026-98432-sysupgrade.conf &&
           cat /tmp/ansible-cve-2026-98432-sysupgrade.conf
           > /etc/sysupgrade.conf &&
