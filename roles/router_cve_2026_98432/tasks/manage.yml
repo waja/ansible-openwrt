@@ -146,7 +146,7 @@
         )
       - >-
         router_cve_2026_98432_include.result != 'include'
-        or router_cve_2026_98432_active_table.rc != 0
+        or router_cve_2026_98432_active_table.rc | default(1) != 0
         or (
           router_cve_2026_98432_include_options.results[3].result != '0'
           and router_cve_2026_98432_active_table.stdout is search(
@@ -160,7 +160,7 @@
           and router_cve_2026_98432_sysupgrade_entry.rc != 0
           and (
             not (router_cve_2026_98432_apply_runtime_changes | bool)
-            or router_cve_2026_98432_active_table.rc != 0
+            or router_cve_2026_98432_active_table.rc | default(1) != 0
           )
         )
     fail_msg: >-
