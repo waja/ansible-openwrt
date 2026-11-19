@@ -174,9 +174,7 @@ def extract_archive(archive_path, destination):
         return tarfile.data_filter(stripped, path)
 
     # Reopen the archive: streaming mode avoids caching every TarInfo object.
-    with tarfile.open(
-        archive_path, mode="r|*", tarinfo=BoundedTarInfo
-    ) as archive:
+    with _open_streaming_archive(archive_path) as archive:
         archive.extractall(
             path=os.fspath(destination),
             filter=safe_filter,
