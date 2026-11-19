@@ -126,7 +126,7 @@
 - name: Define the expected active nftables rule
   ansible.builtin.set_fact:
     router_cve_2026_98432_rule_pattern: >-
-      (?s)chain pre \\{[^}]*type filter hook prerouting priority -310;
+      (?s)chain pre \\{[^}]*type filter hook prerouting priority (?:raw )?-310;
       [^}]*ip protocol tcp ip hdrlength 6-15 counter
       (?: packets [0-9]+ bytes [0-9]+)? drop
 
@@ -443,6 +443,7 @@
           nft -f /tmp/ansible-cve-2026-98432-previous.nft
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
         - router_cve_2026_98432_active_table.rc == 0
       failed_when: false
 
@@ -451,6 +452,7 @@
         cmd: nft delete table ip cve_2026_98432
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
         - router_cve_2026_98432_active_table.rc != 0
       failed_when: false
 
