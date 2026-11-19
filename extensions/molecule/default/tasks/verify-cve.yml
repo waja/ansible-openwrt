@@ -185,6 +185,17 @@
     test -z "$(uci changes firewall)"
   changed_when: false
 
+- name: Reset the staged-only state before testing failed removal
+  ansible.builtin.raw: |
+    set -e
+    uci -q delete firewall.ansible_cve_2026_98432 || true
+    uci commit firewall
+    if test -f /etc/sysupgrade.conf; then
+      sed -i '\\|^/etc/cve_2026_98432\\.nft$|d' /etc/sysupgrade.conf
+    fi
+    rm -f /etc/cve_2026_98432.nft
+  changed_when: true
+
 - name: Stage mitigation again before testing failed removal
   ansible.builtin.include_role:
     name: router_cve_2026_98432
