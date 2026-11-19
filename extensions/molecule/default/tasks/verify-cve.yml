@@ -122,6 +122,8 @@
       vars:
         router_cve_2026_98432_state: present
         router_cve_2026_98432_apply_runtime_changes: true
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-no-table
         router_cve_2026_98432_fw4_check_command: >-
           /tmp/ansible-cve-2026-98432-failing-fw4-check
   rescue:
@@ -189,6 +191,8 @@
   vars:
     router_cve_2026_98432_state: present
     router_cve_2026_98432_apply_runtime_changes: false
+    router_cve_2026_98432_runtime_table_probe_command: >-
+      /tmp/ansible-cve-2026-98432-no-table
 
 - name: Add an extra owned UCI include option before failed removal
   community.openwrt.uci:
