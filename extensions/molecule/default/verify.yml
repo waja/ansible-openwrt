@@ -2245,10 +2245,9 @@
           - router_cve_2026_98432_missing_state_rejected | default(false) | bool
 
     - name: Capture mitigation include and ruleset before rejected removal
-      community.openwrt.command:
-        cmd: >-
-          uci show firewall.ansible_cve_2026_98432 &&
-          sha256sum /etc/cve_2026_98432.nft
+      ansible.builtin.raw: >-
+        uci show firewall.ansible_cve_2026_98432 &&
+        sha256sum /etc/cve_2026_98432.nft
       register: router_cve_2026_98432_before_rejected_removal
       changed_when: false
 
