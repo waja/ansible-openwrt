@@ -14,6 +14,7 @@ from extract_tar_archive import (
     BoundedTarInfo,
     _open_streaming_archive,
     _expanded_member_size,
+    _validate_sparse_extents,
     extract_archive,
 )
 
@@ -279,6 +280,28 @@ class ExtractArchiveTests(unittest.TestCase):
         self.assertEqual(
             (self.destination / "sparse").read_bytes(), b"abc"
         )
+
+    def test_rejects_sparse_extent_beyond_logical_size(self):
+        member = tarfile.TarInfo("agent-main/sparse")
+        member.size = 1
+        member.pax_headers = {"GNU.sparse.realsize": "1"}
+        member.sparse = [(0, 1), (1, 1)]
+        with self.assertRaisesRegex(ValueError, "exceeds logical file size"):
+            _validate_sparse_extents(member)
+
+    def test_rejects_negative_sparse_extents(self):
+        member = tarfile.TarInfo("agent-main/sparse")
+        member.size = 1
+        member.sparse = [(-1, 1)]
+        with self.assertRaisesRegex(ValueError, "negative extent"):
+            _validate_sparse_extents(member)
+
+    def test_rejects_overlapping_sparse_extents(self):
+        member = tarfile.TarInfo("agent-main/sparse")
+        member.size = 3
+        member.sparse = [(0, 2), (1, 1)]
+        with self.assertRaisesRegex(ValueError, "overlapping extents"):
+            _validate_sparse_extents(member)
 
     def test_counts_sparse_logical_size_towards_expansion_limit(self):
         member = tarfile.TarInfo("agent-main/sparse")
