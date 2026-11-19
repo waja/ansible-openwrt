@@ -3,3 +3,6 @@
 # The operator must explicitly choose whether the workaround is installed.
 router_cve_2026_98432_state: null
 router_cve_2026_98432_apply_runtime_changes: true
+# Commands can be overridden by isolated tests that inject a validation failure.
+router_cve_2026_98432_fw4_check_command: fw4 check
+router_cve_2026_98432_runtime_table_probe_command: nft list table ip cve_2026_98432
