@@ -25,12 +25,15 @@ class _RedirectResponse:
 
     def __init__(self, response):
         self.response = response
+        self.closed = False
 
     def read(self, *_args, **_kwargs):
         return b""
 
     def close(self):
-        self.response.close()
+        if not self.closed:
+            self.closed = True
+            self.response.close()
 
 
 class HTTPSOnlyRedirectHandler(HTTPRedirectHandler):
@@ -38,9 +41,13 @@ class HTTPSOnlyRedirectHandler(HTTPRedirectHandler):
 
     def http_error_302(self, request, response, code, message, headers):
         # urllib's implementation calls response.read() without a size limit.
-        return super().http_error_302(
-            request, _RedirectResponse(response), code, message, headers
-        )
+        redirect_response = _RedirectResponse(response)
+        try:
+            return super().http_error_302(
+                request, redirect_response, code, message, headers
+            )
+        finally:
+            redirect_response.close()
 
     http_error_301 = http_error_303 = http_error_307 = http_error_308 = (
         http_error_302
