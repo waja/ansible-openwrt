@@ -473,7 +473,8 @@
 
     - name: Restore the previous sysupgrade configuration
       community.openwrt.copy:
-        content: "{{ router_cve_2026_98432_sysupgrade_backup.content | b64decode }}"
+        content: >-
+          {{ router_cve_2026_98432_sysupgrade_backup.content | b64decode }}
         dest: /etc/sysupgrade.conf
       when: router_cve_2026_98432_sysupgrade_file_exists.rc == 0
 
