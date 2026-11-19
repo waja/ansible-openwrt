@@ -157,6 +157,15 @@
       Existing state conflicts with this role or is not owned by it; resolve
       it manually.
 
+- name: Capture the complete owned UCI include
+  community.openwrt.command:
+    cmd: >-
+      uci export firewall |
+      sed -n "/^config .* 'ansible_cve_2026_98432'$/,/^$/p"
+  register: router_cve_2026_98432_include_export
+  changed_when: false
+  when: router_cve_2026_98432_include.result | default('') == 'include'
+
 - name: Refuse removal when runtime changes are disabled
   ansible.builtin.assert:
     that:
@@ -385,23 +394,27 @@
         - router_cve_2026_98432_active_table.rc == 0
 
   rescue:
-    - name: Restore the previous UCI include
-      community.openwrt.uci:
-        command: section
-        config: firewall
-        type: include
-        name: ansible_cve_2026_98432
-        value:
-          type: "{{ router_cve_2026_98432_include_options.results[0].result }}"
-          path: "{{ router_cve_2026_98432_include_options.results[1].result }}"
-          position: >-
-            {{ router_cve_2026_98432_include_options.results[2].result }}
-          enabled: >-
-            {{
-              router_cve_2026_98432_include_options.results[3].result
-              | default('1', true)
-            }}
-        autocommit: true
+    - name: Stage the complete previous UCI include for recovery
+      community.openwrt.copy:
+        content: "{{ router_cve_2026_98432_include_export.stdout }}"
+        dest: /tmp/ansible-cve-2026-98432-previous.uci
+        owner: root
+        group: root
+        mode: '0600'
+      when: router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Restore the complete previous UCI include
+      community.openwrt.command:
+        cmd: >-
+          uci -q delete firewall.ansible_cve_2026_98432;
+          uci import firewall < /tmp/ansible-cve-2026-98432-previous.uci;
+          uci commit firewall
+      when: router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Remove the temporary UCI recovery file
+      community.openwrt.file:
+        path: /tmp/ansible-cve-2026-98432-previous.uci
+        state: absent
       when: router_cve_2026_98432_include.result | default('') == 'include'
 
     - name: Remove an include created by the failed run
