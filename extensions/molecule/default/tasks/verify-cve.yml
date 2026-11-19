@@ -103,8 +103,9 @@
       ansible.builtin.set_fact:
         router_cve_2026_98432_install_validation_rollback: >-
           {{
-            ansible_failed_task.name
-            == 'Report the failed mitigation update'
+            ansible_failed_task.name == 'Report the original failed mitigation update'
+            and 'Validate the resulting fw4 ruleset'
+            in ansible_failed_result.msg
           }}
 
 - name: Assert failed installation restored the absent state
@@ -144,6 +145,8 @@
 - name: Capture complete state before failed removal
   ansible.builtin.raw: |
     uci show firewall.ansible_cve_2026_98432
+    uci show firewall | grep -v ansible_cve_2026_98432
+    uci changes firewall
     sha256sum /etc/cve_2026_98432.nft
     grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
     grep -Fx /etc/molecule-preserve.conf /etc/sysupgrade.conf
@@ -180,6 +183,8 @@
 - name: Verify failed removal preserved UCI, ruleset, and sysupgrade state
   ansible.builtin.raw: |
     uci show firewall.ansible_cve_2026_98432
+    uci show firewall | grep -v ansible_cve_2026_98432
+    uci changes firewall
     sha256sum /etc/cve_2026_98432.nft
     grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
     grep -Fx /etc/molecule-preserve.conf /etc/sysupgrade.conf
