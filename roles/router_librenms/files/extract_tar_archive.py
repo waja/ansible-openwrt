@@ -18,6 +18,9 @@ class BoundedTarInfo(tarfile.TarInfo):
     """Reject oversized or excessive PAX and GNU extension headers."""
 
     def _check_metadata_size(self, archive):
+        """Account for extension bytes before tarfile reads their payload."""
+        if self.size < 0:
+            raise ValueError("Archive extension has an invalid size")
         size = self._block(self.size)
         if size > MAX_MEMBER_METADATA_SIZE:
             raise ValueError("Archive member metadata exceeds maximum size")
@@ -27,10 +30,12 @@ class BoundedTarInfo(tarfile.TarInfo):
         archive._metadata_size = total
 
     def _proc_pax(self, archive):
+        """Bound PAX metadata before delegating to the standard parser."""
         self._check_metadata_size(archive)
         return super()._proc_pax(archive)
 
     def _proc_gnulong(self, archive):
+        """Bound GNU long-name metadata before reading it."""
         self._check_metadata_size(archive)
         return super()._proc_gnulong(archive)
 
@@ -99,6 +104,8 @@ def _validate_member(member, roots):
     """Validate a member path and record its top-level directory."""
     path = PurePosixPath(member.name)
     parts = path.parts
+    if member.size < 0:
+        raise ValueError("Archive member has an invalid size")
     if path.is_absolute() or not parts or ".." in parts:
         raise ValueError(f"Unsafe archive path: {member.name!r}")
     roots.add(parts[0])
