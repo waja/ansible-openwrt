@@ -39,7 +39,7 @@ class BoundedTarInfo(tarfile.TarInfo):
         self._check_metadata_size(archive)
         return super()._proc_gnulong(archive)
 
-    def _proc_gnusparse_10(self, member, archive, pax_headers):
+    def _proc_gnusparse_10(self, member, pax_headers, archive):
         """Bound the sparse map read from the archive data stream."""
         metadata_size = tarfile.BLOCKSIZE
         total = getattr(archive, "_metadata_size", 0) + metadata_size
