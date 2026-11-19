@@ -1558,11 +1558,14 @@
       changed_when: true
       when: router_cve_2026_98432_fixture_marker.rc != 0
 
-    - name: Read the installed CVE mitigation ruleset
-      community.openwrt.slurp:
-        src: /etc/cve_2026_98432.nft
-      register: router_cve_2026_98432_installed_ruleset
-      changed_when: false
+    - name: Copy the shipped CVE ruleset for exact comparison
+      community.openwrt.copy:
+        src: >-
+          {{ playbook_dir }}/../../../roles/router_cve_2026_98432/files/mitigation.nft
+        dest: /tmp/ansible-cve-2026-98432-expected.nft
+        owner: root
+        group: root
+        mode: '0644'
 
     - name: Read the CVE mitigation sysupgrade entry
       community.openwrt.command:
@@ -1584,16 +1587,10 @@
       changed_when: false
 
     - name: Verify the installed ruleset matches the shipped asset
-      ansible.builtin.assert:
-        that:
-          - >-
-            router_cve_2026_98432_installed_ruleset.content
-            == (lookup(
-              'file',
-              playbook_dir ~ '/../../../roles/'
-              ~ 'router_cve_2026_98432/files/mitigation.nft',
-              rstrip=False
-            ) | b64encode)
+      ansible.builtin.raw: >-
+        cmp -s /etc/cve_2026_98432.nft
+        /tmp/ansible-cve-2026-98432-expected.nft
+      changed_when: false
 
     - name: >-
         Verify the CVE sysupgrade entry is unique and unrelated entries remain
