@@ -209,7 +209,10 @@
             router_cve_2026_98432_file_exists.rc != 0
             or (
               router_cve_2026_98432_ruleset_backup.content | default('')
-              != (lookup('file', role_path ~ '/files/mitigation.nft') | b64encode)
+              != (
+                lookup('file', role_path ~ '/files/mitigation.nft')
+                | b64encode
+              )
             )
             or router_cve_2026_98432_include.result | default('') != 'include'
             or router_cve_2026_98432_include_options.results[3].result
@@ -463,7 +466,10 @@
         router_cve_2026_98432_original_failure_task: >-
           {{ ansible_failed_task.name | default('Unknown task') }}
         router_cve_2026_98432_original_failure_message: >-
-          {{ ansible_failed_result.msg | default('No diagnostic was provided') }}
+          {{
+            ansible_failed_result.msg
+            | default('No diagnostic was provided')
+          }}
 
     - name: Stage the complete previous UCI include for recovery
       community.openwrt.copy:
@@ -476,12 +482,14 @@
       failed_when: false
       when: router_cve_2026_98432_include.result | default('') == 'include'
 
-    - name: Restore the complete previous UCI include without replacing other sections
+    - name: >-
+        Restore the previous UCI include without replacing other sections
       ansible.builtin.raw: |
         if uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1; then
           uci delete firewall.ansible_cve_2026_98432 || exit
         fi
-        uci -m import /etc/config/firewall < /tmp/ansible-cve-2026-98432-previous.uci &&
+        uci -m import /etc/config/firewall \
+          < /tmp/ansible-cve-2026-98432-previous.uci &&
         uci commit firewall
       register: router_cve_2026_98432_uci_restore
       changed_when: true
@@ -499,7 +507,8 @@
 
     - name: Restore the previous ruleset file
       community.openwrt.copy:
-        content: "{{ router_cve_2026_98432_ruleset_backup.content | b64decode }}"
+        content: >-
+          {{ router_cve_2026_98432_ruleset_backup.content | b64decode }}
         dest: /etc/cve_2026_98432.nft
         owner: root
         group: root
@@ -518,7 +527,8 @@
 
     - name: Restore the previous sysupgrade configuration
       community.openwrt.copy:
-        content: "{{ router_cve_2026_98432_sysupgrade_backup.content | b64decode }}"
+        content: >-
+          {{ router_cve_2026_98432_sysupgrade_backup.content | b64decode }}
         dest: /etc/sysupgrade.conf
       register: router_cve_2026_98432_sysupgrade_restore
       failed_when: false
@@ -602,12 +612,24 @@
       ansible.builtin.assert:
         that:
           - router_cve_2026_98432_uci_restore.rc | default(0) == 0
-          - router_cve_2026_98432_uci_remove_new.failed | default(false) == false
-          - router_cve_2026_98432_ruleset_restore.failed | default(false) == false
-          - router_cve_2026_98432_ruleset_remove_new.failed | default(false) == false
-          - router_cve_2026_98432_sysupgrade_restore.failed | default(false) == false
-          - router_cve_2026_98432_sysupgrade_remove_new.failed | default(false) == false
-          - router_cve_2026_98432_firewall_restore.failed | default(false) == false
+          - >-
+            router_cve_2026_98432_uci_remove_new.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_ruleset_restore.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_ruleset_remove_new.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_sysupgrade_restore.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_sysupgrade_remove_new.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_firewall_restore.failed
+            | default(false) == false
           - router_cve_2026_98432_table_restore.rc | default(0) == 0
           - router_cve_2026_98432_table_remove_new.rc | default(0) == 0
           - router_cve_2026_98432_table_compare.rc | default(0) == 0
@@ -615,20 +637,32 @@
             router_cve_2026_98432_tables_after_recovery.stdout | default('')
             is not search('(?m)^table ip cve_2026_98432$')
         fail_msg: >-
-          Recovery was incomplete after {{ router_cve_2026_98432_original_failure_task }}:
+          Recovery was incomplete after
+          {{ router_cve_2026_98432_original_failure_task }}:
           {{ router_cve_2026_98432_original_failure_message }}.
-          Recovery artifacts have been retained under /tmp/ansible-cve-2026-98432-*.
+          Recovery artifacts remain under
+          /tmp/ansible-cve-2026-98432-*.
       when: router_cve_2026_98432_apply_runtime_changes | bool
 
     - name: Verify configuration-only recovery succeeded
       ansible.builtin.assert:
         that:
           - router_cve_2026_98432_uci_restore.rc | default(0) == 0
-          - router_cve_2026_98432_uci_remove_new.failed | default(false) == false
-          - router_cve_2026_98432_ruleset_restore.failed | default(false) == false
-          - router_cve_2026_98432_ruleset_remove_new.failed | default(false) == false
-          - router_cve_2026_98432_sysupgrade_restore.failed | default(false) == false
-          - router_cve_2026_98432_sysupgrade_remove_new.failed | default(false) == false
+          - >-
+            router_cve_2026_98432_uci_remove_new.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_ruleset_restore.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_ruleset_remove_new.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_sysupgrade_restore.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_sysupgrade_remove_new.failed
+            | default(false) == false
         fail_msg: >-
           Configuration recovery was incomplete after
           {{ router_cve_2026_98432_original_failure_task }}:
