@@ -80,6 +80,7 @@
 
 - name: Create a failing fw4 check that adds an unrelated sysupgrade entry
   ansible.builtin.raw: |
+    set -e
     cat > /tmp/ansible-cve-2026-98432-failing-fw4-check <<'EOF'
     #!/bin/sh
     entry=/etc/molecule-added-during-rollback.conf
