@@ -34,6 +34,48 @@ class BoundedTarInfo(tarfile.TarInfo):
         self._check_metadata_size(archive)
         return super()._proc_gnulong(archive)
 
+    def _proc_gnusparse_10(self, member, archive, pax_headers):
+        """Bound the sparse map read from the archive data stream."""
+        metadata_size = 0
+        buffer = archive.fileobj.read(tarfile.BLOCKSIZE)
+        metadata_size += len(buffer)
+        fields, buffer = buffer.split(b"\n", 1)
+        fields = int(fields)
+        sparse = []
+
+        while len(sparse) < fields * 2:
+            if b"\n" not in buffer:
+                if metadata_size + tarfile.BLOCKSIZE > MAX_MEMBER_METADATA_SIZE:
+                    raise ValueError(
+                        "Archive member metadata exceeds maximum size"
+                    )
+                total = (
+                    getattr(archive, "_metadata_size", 0)
+                    + metadata_size
+                    + tarfile.BLOCKSIZE
+                )
+                if total > MAX_TOTAL_METADATA_SIZE:
+                    raise ValueError("Archive metadata exceeds maximum size")
+                chunk = archive.fileobj.read(tarfile.BLOCKSIZE)
+                if not chunk:
+                    raise tarfile.InvalidHeaderError(
+                        "truncated GNU sparse map"
+                    )
+                metadata_size += len(chunk)
+                buffer += chunk
+            number, buffer = buffer.split(b"\n", 1)
+            sparse.append(int(number))
+
+        total = getattr(archive, "_metadata_size", 0) + metadata_size
+        if (
+            metadata_size > MAX_MEMBER_METADATA_SIZE
+            or total > MAX_TOTAL_METADATA_SIZE
+        ):
+            raise ValueError("Archive metadata exceeds maximum size")
+        archive._metadata_size = total
+        member.offset_data = archive.fileobj.tell()
+        member.sparse = list(zip(sparse[::2], sparse[1::2]))
+
 
 def _expanded_member_size(member):
     """Return the logical size, including GNU sparse file metadata."""
