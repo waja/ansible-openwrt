@@ -1429,7 +1429,7 @@
       ansible.builtin.raw: |
         touch /etc/sysupgrade.conf
         sed -i '\|^/etc/cve_2026_98432\.nft$|d' /etc/sysupgrade.conf
-        printf '%s\\n' \
+        printf '%s\n' \
           /etc/cve_2026_98432.nft \
           /etc/cve_2026_98432.nft \
           /etc/molecule-preserve.conf >> /etc/sysupgrade.conf
