@@ -126,7 +126,8 @@
 - name: Define the expected active nftables rule
   ansible.builtin.set_fact:
     router_cve_2026_98432_rule_pattern: >-
-      (?s)chain pre \\{[^}]*type filter hook prerouting priority (?:-310|raw - 10);
+      (?s)chain pre \\{[^}]*type filter hook prerouting
+      priority (?:-310|raw - 10);
       [^}]*ip protocol tcp ip hdrlength 6-15 counter
       (?: packets [0-9]+ bytes [0-9]+)? drop
 
