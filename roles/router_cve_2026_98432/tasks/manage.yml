@@ -125,11 +125,7 @@
 
 - name: Define the expected active nftables rule
   ansible.builtin.set_fact:
-    router_cve_2026_98432_rule_pattern: >-
-      (?s)chain pre \\{[^}]*type filter hook prerouting
-      priority (?:-310|raw - 10);
-      [^}]*ip protocol tcp ip hdrlength 6-15 counter
-      (?: packets [0-9]+ bytes [0-9]+)? drop
+    router_cve_2026_98432_rule_pattern: '(?s)chain pre [{][^}]*type filter hook prerouting priority (?:-310|raw - 10);[^}]*ip protocol tcp ip hdrlength 6-15 counter(?: packets [0-9]+ bytes [0-9]+)?\\s+drop'
 
 - name: Refuse an unexpected or conflicting mitigation state
   ansible.builtin.assert:
@@ -173,6 +169,7 @@
     sed -n "/^config .* 'ansible_cve_2026_98432'$/,/^$/p"
   register: router_cve_2026_98432_include_export
   changed_when: false
+  check_mode: false
   when: router_cve_2026_98432_include.result | default('') == 'include'
 
 - name: Verify the owned UCI include backup is complete
@@ -198,7 +195,35 @@
   changed_when: false
   when: router_cve_2026_98432_file_exists.rc == 0
 
-- name: Back up the active mitigation table
+- name: Determine whether a runtime update is required
+  ansible.builtin.set_fact:
+    router_cve_2026_98432_runtime_update_required: >-
+      {{
+        router_cve_2026_98432_state == 'absent'
+        or (
+          router_cve_2026_98432_state == 'present'
+          and (
+            router_cve_2026_98432_file_exists.rc != 0
+            or (
+              router_cve_2026_98432_ruleset_backup.content | default('')
+              != (lookup('file', role_path ~ '/files/mitigation.nft') | b64encode)
+            )
+            or router_cve_2026_98432_include.result | default('') != 'include'
+            or router_cve_2026_98432_include_options.results[3].result
+               | default('0') != '1'
+            or router_cve_2026_98432_sysupgrade_entry.rc != 0
+            or router_cve_2026_98432_active_table.rc != 0
+            or router_cve_2026_98432_active_table.stdout is not search(
+              router_cve_2026_98432_rule_pattern
+            )
+            or router_cve_2026_98432_active_table.stdout is search(
+              'flags.*dormant'
+            )
+          )
+        )
+      }}
+
+- name: Back up the active mitigation table before a required runtime update
   community.openwrt.copy:
     content: "{{ router_cve_2026_98432_active_table.stdout }}"
     dest: /tmp/ansible-cve-2026-98432-previous.nft
@@ -207,6 +232,7 @@
     mode: '0600'
   when:
     - router_cve_2026_98432_apply_runtime_changes | bool
+    - router_cve_2026_98432_runtime_update_required | bool
     - router_cve_2026_98432_active_table.rc == 0
 
 - name: Record whether sysupgrade configuration exists
@@ -425,6 +451,7 @@
         state: absent
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_runtime_update_required | bool
         - router_cve_2026_98432_active_table.rc == 0
 
   rescue:
