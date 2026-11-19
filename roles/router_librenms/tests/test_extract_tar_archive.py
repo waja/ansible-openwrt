@@ -142,6 +142,26 @@ class ExtractArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "top-level directory"):
             extract_archive(self.archive, self.destination)
 
+    def test_legacy_streaming_fallback_does_not_cache_members(self):
+        self.create_archive([
+            (f"agent-main/file-{index}", "x", "file", "")
+            for index in range(10)
+        ])
+        original_open = tarfile.open
+
+        def open_without_stream_argument(*args, **kwargs):
+            if "stream" in kwargs:
+                raise TypeError("unexpected keyword argument 'stream'")
+            return original_open(*args, **kwargs)
+
+        with mock.patch(
+            "extract_tar_archive.tarfile.open",
+            side_effect=open_without_stream_argument,
+        ):
+            with _open_streaming_archive(self.archive) as archive:
+                for _member in archive:
+                    self.assertEqual(archive.members, [])
+
     def test_streaming_archive_does_not_cache_members(self):
         self.create_archive([
             (f"agent-main/file-{index}", "x", "file", "")
