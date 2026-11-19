@@ -259,43 +259,6 @@
       Removal requires runtime inspection and cleanup; enable
       router_cve_2026_98432_apply_runtime_changes.
 
-- name: Determine whether a runtime update is required
-  ansible.builtin.set_fact:
-    router_cve_2026_98432_runtime_update_required: >-
-      {{
-        router_cve_2026_98432_state == 'absent'
-        or (
-          router_cve_2026_98432_state == 'present'
-          and (
-            router_cve_2026_98432_file_exists.rc != 0
-            or not (router_cve_2026_98432_staged_ruleset_matches | bool)
-            or router_cve_2026_98432_include.result | default('') != 'include'
-            or router_cve_2026_98432_include_options.results[3].result
-               | default('0') != '1'
-            or router_cve_2026_98432_sysupgrade_entry.rc != 0
-            or router_cve_2026_98432_active_table.rc != 0
-            or router_cve_2026_98432_active_table.stdout is not search(
-              router_cve_2026_98432_rule_pattern
-            )
-            or router_cve_2026_98432_active_table.stdout is search(
-              'flags.*dormant'
-            )
-          )
-        )
-      }}
-
-- name: Back up the active mitigation table before a required runtime update
-  community.openwrt.copy:
-    content: "{{ router_cve_2026_98432_active_table.stdout }}"
-    dest: /tmp/ansible-cve-2026-98432-previous.nft
-    owner: root
-    group: root
-    mode: '0600'
-  when:
-    - router_cve_2026_98432_apply_runtime_changes | bool
-    - router_cve_2026_98432_runtime_update_required | bool
-    - router_cve_2026_98432_active_table.rc == 0
-
 - name: Record whether sysupgrade configuration exists
   community.openwrt.command:
     cmd: test -f /etc/sysupgrade.conf
@@ -510,14 +473,6 @@
         - router_cve_2026_98432_state == 'present'
         - router_cve_2026_98432_apply_runtime_changes | bool
 
-    - name: Remove the temporary runtime snapshot after success
-      community.openwrt.file:
-        path: /tmp/ansible-cve-2026-98432-previous.nft
-        state: absent
-      when:
-        - router_cve_2026_98432_apply_runtime_changes | bool
-        - router_cve_2026_98432_runtime_update_required | bool
-        - router_cve_2026_98432_active_table.rc == 0
 
   rescue:
     - name: Capture the original mitigation failure
@@ -525,23 +480,19 @@
         router_cve_2026_98432_original_failure_task: >-
           {{ ansible_failed_task.name | default('Unknown task') }}
         router_cve_2026_98432_original_failure_message: >-
-          {{
-            ansible_failed_result.msg
-            | default('No diagnostic was provided')
-          }}
+          {{ ansible_failed_result.msg | default('No diagnostic was provided') }}
 
-    - name: Stage the complete previous UCI include for recovery
+    - name: Stage the previous owned UCI include for recovery
       community.openwrt.copy:
         content: "{{ router_cve_2026_98432_include_export.stdout }}"
         dest: /tmp/ansible-cve-2026-98432-previous.uci
         owner: root
         group: root
         mode: '0600'
-      register: router_cve_2026_98432_uci_backup_stage
       failed_when: false
       when: router_cve_2026_98432_include.result | default('') == 'include'
 
-    - name: Restore the previous UCI include without replacing other sections
+    - name: Restore the previous owned UCI include
       ansible.builtin.raw: |
         if uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1; then
           uci delete firewall.ansible_cve_2026_98432 || exit
@@ -560,19 +511,18 @@
         key: firewall.ansible_cve_2026_98432
         autocommit: true
       register: router_cve_2026_98432_uci_remove_new
-      ignore_errors: true  # noqa ignore-errors
+      failed_when: false
       when: router_cve_2026_98432_include.result | default('') != 'include'
 
     - name: Restore the previous ruleset file
       community.openwrt.copy:
-        content: >-
-          {{ router_cve_2026_98432_ruleset_backup.content | b64decode }}
+        content: "{{ router_cve_2026_98432_ruleset_backup.content | b64decode }}"
         dest: /etc/cve_2026_98432.nft
         owner: root
         group: root
         mode: '0644'
       register: router_cve_2026_98432_ruleset_restore
-      ignore_errors: true  # noqa ignore-errors
+      failed_when: false
       when: router_cve_2026_98432_file_exists.rc == 0
 
     - name: Remove a ruleset file created by the failed run
@@ -580,14 +530,14 @@
         path: /etc/cve_2026_98432.nft
         state: absent
       register: router_cve_2026_98432_ruleset_remove_new
-      ignore_errors: true  # noqa ignore-errors
+      failed_when: false
       when: router_cve_2026_98432_file_exists.rc != 0
 
-    - name: Restore only the previous owned sysupgrade entry
+    - name: Restore the previous owned sysupgrade entry
       community.openwrt.lineinfile:
         path: /etc/sysupgrade.conf
         line: /etc/cve_2026_98432.nft
-        regexp: '^/etc/cve_2026_98432\.nft$'
+        regexp: '^/etc/cve_2026_98432\\.nft$'
         state: >-
           {{
             'present'
@@ -596,7 +546,7 @@
           }}
         create: "{{ router_cve_2026_98432_sysupgrade_entry.rc == 0 }}"
       register: router_cve_2026_98432_sysupgrade_restore
-      ignore_errors: true  # noqa ignore-errors
+      failed_when: false
 
     - name: Remove an empty sysupgrade file created by the failed run
       ansible.builtin.raw: |
@@ -613,34 +563,14 @@
         name: firewall
         state: reloaded
       register: router_cve_2026_98432_firewall_restore
-      ignore_errors: true  # noqa ignore-errors
-      when:
-        - router_cve_2026_98432_apply_runtime_changes | bool
-        - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
-
-    - name: Restore the previously active mitigation table atomically
-      ansible.builtin.raw: |
-        {
-          printf '%s\n' \
-            'add table ip cve_2026_98432' \
-            'delete table ip cve_2026_98432'
-          cat /tmp/ansible-cve-2026-98432-previous.nft
-        } > /tmp/ansible-cve-2026-98432-restore.nft &&
-        nft -f /tmp/ansible-cve-2026-98432-restore.nft
-      register: router_cve_2026_98432_table_restore
-      changed_when: true
       failed_when: false
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
-        - router_cve_2026_98432_active_table.rc == 0
 
-    - name: Remove the table created by the failed installation atomically
-      ansible.builtin.raw: |
-        printf '%s\n' \
-          'add table ip cve_2026_98432' \
-          'delete table ip cve_2026_98432' |
-        nft -f -
+    - name: Remove a table created by the failed installation
+      ansible.builtin.raw: >-
+        nft delete table ip cve_2026_98432 2>/dev/null || true
       register: router_cve_2026_98432_table_remove_new
       changed_when: true
       failed_when: false
@@ -649,17 +579,10 @@
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
         - router_cve_2026_98432_active_table.rc != 0
 
-    - name: Compare the restored table with the previous snapshot
-      ansible.builtin.raw: |
-        nft list table ip cve_2026_98432 |
-          sed -E 's/counter packets [0-9]+ bytes [0-9]+/counter/g' \
-          > /tmp/ansible-cve-2026-98432-restored-normalized.nft &&
-        sed -E 's/counter packets [0-9]+ bytes [0-9]+/counter/g' \
-          /tmp/ansible-cve-2026-98432-previous.nft \
-          > /tmp/ansible-cve-2026-98432-previous-normalized.nft &&
-        diff -u /tmp/ansible-cve-2026-98432-previous-normalized.nft \
-          /tmp/ansible-cve-2026-98432-restored-normalized.nft
-      register: router_cve_2026_98432_table_compare
+    - name: Verify the previously active mitigation table was restored
+      community.openwrt.command:
+        cmd: nft list table ip cve_2026_98432
+      register: router_cve_2026_98432_table_after_recovery
       changed_when: false
       failed_when: false
       when:
@@ -667,7 +590,7 @@
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
         - router_cve_2026_98432_active_table.rc == 0
 
-    - name: Read nftables tables after failed installation recovery
+    - name: Verify the mitigation table is absent after failed installation
       community.openwrt.command:
         cmd: nft list tables
       register: router_cve_2026_98432_tables_after_recovery
@@ -678,86 +601,41 @@
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
         - router_cve_2026_98432_active_table.rc != 0
 
-    - name: Verify recovery restored the previous state
+    - name: Verify recovery restored the owned configuration and runtime
       ansible.builtin.assert:
         that:
           - router_cve_2026_98432_uci_restore.rc | default(0) == 0
-          - >-
-            router_cve_2026_98432_uci_remove_new.failed
-            | default(false) == false
-          - >-
-            router_cve_2026_98432_ruleset_restore.failed
-            | default(false) == false
-          - >-
-            router_cve_2026_98432_ruleset_remove_new.failed
-            | default(false) == false
-          - >-
-            router_cve_2026_98432_sysupgrade_restore.failed
-            | default(false) == false
-          - >-
-            router_cve_2026_98432_sysupgrade_empty_file_cleanup.rc
-            | default(0) == 0
-          - >-
-            router_cve_2026_98432_firewall_restore.failed
-            | default(false) == false
-          - router_cve_2026_98432_table_restore.rc | default(0) == 0
+          - router_cve_2026_98432_uci_remove_new.failed | default(false) == false
+          - router_cve_2026_98432_ruleset_restore.failed | default(false) == false
+          - router_cve_2026_98432_ruleset_remove_new.failed | default(false) == false
+          - router_cve_2026_98432_sysupgrade_restore.failed | default(false) == false
+          - router_cve_2026_98432_sysupgrade_empty_file_cleanup.rc | default(0) == 0
+          - router_cve_2026_98432_firewall_restore.failed | default(false) == false
           - router_cve_2026_98432_table_remove_new.rc | default(0) == 0
-          - router_cve_2026_98432_table_compare.rc | default(0) == 0
+          - >-
+            router_cve_2026_98432_table_after_recovery.rc | default(0) == 0
+            or not (router_cve_2026_98432_runtime_reload_attempted | bool)
+          - >-
+            router_cve_2026_98432_table_after_recovery.stdout | default('')
+            is search(router_cve_2026_98432_rule_pattern)
+            or router_cve_2026_98432_active_table.rc != 0
           - router_cve_2026_98432_tables_after_recovery.rc | default(0) == 0
           - >-
             router_cve_2026_98432_tables_after_recovery.stdout | default('')
             is not search('(?m)^table ip cve_2026_98432$')
+            or router_cve_2026_98432_active_table.rc == 0
         fail_msg: >-
           Recovery was incomplete after
           {{ router_cve_2026_98432_original_failure_task }}:
           {{ router_cve_2026_98432_original_failure_message }}.
-          Recovery artifacts remain under
-          /tmp/ansible-cve-2026-98432-*.
-      when: router_cve_2026_98432_apply_runtime_changes | bool
+          Inspect the owned UCI include, ruleset file, sysupgrade entry,
+          and nftables table before retrying.
 
-    - name: Verify configuration-only recovery succeeded
-      ansible.builtin.assert:
-        that:
-          - router_cve_2026_98432_uci_restore.rc | default(0) == 0
-          - >-
-            router_cve_2026_98432_uci_remove_new.failed
-            | default(false) == false
-          - >-
-            router_cve_2026_98432_ruleset_restore.failed
-            | default(false) == false
-          - >-
-            router_cve_2026_98432_ruleset_remove_new.failed
-            | default(false) == false
-          - >-
-            router_cve_2026_98432_sysupgrade_restore.failed
-            | default(false) == false
-          - >-
-            router_cve_2026_98432_sysupgrade_empty_file_cleanup.rc
-            | default(0) == 0
-        fail_msg: >-
-          Configuration recovery was incomplete after
-          {{ router_cve_2026_98432_original_failure_task }}:
-          {{ router_cve_2026_98432_original_failure_message }}.
-          Recovery artifacts remain under
-          /tmp/ansible-cve-2026-98432-*.
-      when: not (router_cve_2026_98432_apply_runtime_changes | bool)
-
-    - name: Remove the temporary UCI recovery file after successful recovery
+    - name: Remove the temporary UCI recovery file
       community.openwrt.file:
         path: /tmp/ansible-cve-2026-98432-previous.uci
         state: absent
       when: router_cve_2026_98432_include.result | default('') == 'include'
-
-    - name: Remove runtime recovery artifacts after successful recovery
-      community.openwrt.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /tmp/ansible-cve-2026-98432-previous.nft
-        - /tmp/ansible-cve-2026-98432-restore.nft
-        - /tmp/ansible-cve-2026-98432-restored-normalized.nft
-        - /tmp/ansible-cve-2026-98432-previous-normalized.nft
-      when: router_cve_2026_98432_apply_runtime_changes | bool
 
     - name: Report the original failed mitigation update
       ansible.builtin.fail:
@@ -765,4 +643,6 @@
           CVE mitigation update failed in
           {{ router_cve_2026_98432_original_failure_task }}:
           {{ router_cve_2026_98432_original_failure_message }}.
-          The previous owned configuration and runtime state were restored.
+          The previous owned configuration was restored. The fw4 reload
+          applies the restored ruleset as one nftables batch; no live-table
+          snapshot is maintained.
