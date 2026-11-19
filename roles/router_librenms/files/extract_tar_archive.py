@@ -10,6 +10,42 @@ from pathlib import Path, PurePosixPath
 MAX_ARCHIVE_SIZE = 64 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 10_000
 MAX_EXPANDED_SIZE = 256 * 1024 * 1024
+MAX_MEMBER_METADATA_SIZE = 1024 * 1024
+MAX_TOTAL_METADATA_SIZE = 4 * 1024 * 1024
+
+
+class BoundedTarInfo(tarfile.TarInfo):
+    """Reject oversized or excessive PAX and GNU extension headers."""
+
+    def _check_metadata_size(self, archive):
+        size = self._block(self.size)
+        if size > MAX_MEMBER_METADATA_SIZE:
+            raise ValueError("Archive member metadata exceeds maximum size")
+        total = getattr(archive, "_metadata_size", 0) + size
+        if total > MAX_TOTAL_METADATA_SIZE:
+            raise ValueError("Archive metadata exceeds maximum size")
+        archive._metadata_size = total
+
+    def _proc_pax(self, archive):
+        self._check_metadata_size(archive)
+        return super()._proc_pax(archive)
+
+    def _proc_gnulong(self, archive):
+        self._check_metadata_size(archive)
+        return super()._proc_gnulong(archive)
+
+
+def _expanded_member_size(member):
+    """Return the logical size, including GNU sparse file metadata."""
+    size = member.size
+    for key in ("GNU.sparse.realsize", "GNU.sparse.size"):
+        value = member.pax_headers.get(key)
+        if value is not None:
+            try:
+                size = max(size, int(value))
+            except ValueError as error:
+                raise ValueError("Invalid sparse file size") from error
+    return size
 
 
 def _validate_member(member, roots):
@@ -36,14 +72,14 @@ def extract_archive(archive_path, destination):
     roots = set()
     member_count = 0
     expanded_size = 0
-    with tarfile.open(archive_path, mode="r|*") as archive:
+    with tarfile.open(\n        archive_path, mode="r|*", tarinfo=BoundedTarInfo\n    ) as archive:
         for member in archive:
             member_count += 1
             if member_count > MAX_ARCHIVE_MEMBERS:
                 raise ValueError("Archive contains too many members")
             _validate_member(member, roots)
             if member.isfile():
-                expanded_size += member.size
+                expanded_size += _expanded_member_size(member)
                 if expanded_size > MAX_EXPANDED_SIZE:
                     raise ValueError("Archive exceeds maximum expanded size")
 
@@ -68,7 +104,7 @@ def extract_archive(archive_path, destination):
         return tarfile.data_filter(stripped, path)
 
     # Reopen the archive: streaming mode avoids caching every TarInfo object.
-    with tarfile.open(archive_path, mode="r|*") as archive:
+    with tarfile.open(\n        archive_path, mode="r|*", tarinfo=BoundedTarInfo\n    ) as archive:
         archive.extractall(
             path=os.fspath(destination),
             filter=safe_filter,
