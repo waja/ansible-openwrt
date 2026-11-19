@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 
 CLIENT = "cve-test-client"
@@ -131,9 +132,10 @@ def expect_drop(address: str, port: int, label: str) -> None:
         )
 
 
-def configure() -> None:
+def configure(created_namespaces: list[str]) -> None:
     for namespace in (CLIENT, ROUTER, SERVER):
         run("ip", "netns", "add", namespace)
+        created_namespaces.append(namespace)
         run("ip", "-n", namespace, "link", "set", "lo", "up")
 
     run("ip", "link", "add", "c0", "type", "veth", "peer", "name", "r0")
@@ -193,26 +195,21 @@ def configure() -> None:
         "net.ipv6.conf.all.forwarding=1",
     )
 
-    ruleset = f"""
-table ip {TABLE} {{
-    chain pre {{
-        type filter hook prerouting priority -310; policy accept;
-        ip protocol tcp ip hdrlength 6-15 counter drop
-    }}
-}}
-"""
+    ruleset = (
+        Path(__file__).resolve().parents[2]
+        / "roles/router_cve_2026_98432/files/mitigation.nft"
+    )
     subprocess.run(
-        ["ip", "netns", "exec", ROUTER, "nft", "-f", "-"],
-        input=ruleset, text=True, check=True,
+        ["ip", "netns", "exec", ROUTER, "nft", "-f", str(ruleset)],
+        check=True,
     )
 
 
 def main() -> int:
     servers: list[subprocess.Popen[str]] = []
-    namespaces_created = False
+    created_namespaces: list[str] = []
     try:
-        namespaces_created = True
-        configure()
+        configure(created_namespaces)
         servers.extend([
             start_server(ROUTER, socket.AF_INET, "192.0.2.1", INPUT_PORT),
             start_server(SERVER, socket.AF_INET, "198.51.100.2", FORWARD_PORT),
@@ -268,13 +265,12 @@ def main() -> int:
                 server.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 server.kill()
-        if namespaces_created:
-            for namespace in (CLIENT, ROUTER, SERVER):
-                subprocess.run(
-                    ["ip", "netns", "del", namespace],
-                    check=False, stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+        for namespace in reversed(created_namespaces):
+            subprocess.run(
+                ["ip", "netns", "del", namespace],
+                check=False, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
 
 if __name__ == "__main__":
