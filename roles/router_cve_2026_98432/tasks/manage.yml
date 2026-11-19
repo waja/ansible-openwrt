@@ -481,7 +481,7 @@
         if uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1; then
           uci delete firewall.ansible_cve_2026_98432 || exit
         fi
-        uci import -m firewall < /tmp/ansible-cve-2026-98432-previous.uci &&
+        uci -m import /etc/config/firewall < /tmp/ansible-cve-2026-98432-previous.uci &&
         uci commit firewall
       register: router_cve_2026_98432_uci_restore
       changed_when: true
