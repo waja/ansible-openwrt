@@ -14,8 +14,9 @@ import download_https_archive
 class FakeResponse:
     """Small response double for download limit tests."""
 
-    def __init__(self, chunks, content_length=None):
+    def __init__(self, chunks, content_length=None, on_read=None):
         self.chunks = iter(chunks)
+        self.on_read = on_read
         self.headers = (
             {} if content_length is None
             else {"Content-Length": content_length}
@@ -31,16 +32,21 @@ class FakeResponse:
         return "https://example.invalid/archive.tar.gz"
 
     def read1(self, _size):
+        if self.on_read:
+            self.on_read()
         return next(self.chunks, b"")
 
 
 class FakeOpener:
     """Return a configured response without making a network request."""
 
-    def __init__(self, response):
+    def __init__(self, response, on_open=None):
         self.response = response
+        self.on_open = on_open
 
     def open(self, _url, timeout):
+        if self.on_open:
+            self.on_open()
         return self.response
 
 
@@ -93,18 +99,45 @@ class DownloadArchiveTests(unittest.TestCase):
                 self.download(temporary, FakeResponse([b"ab", b"cd"], "2"))
             self.assertEqual(list(Path(temporary).iterdir()), [])
 
-    def test_enforces_total_download_deadline(self):
+    def test_deadline_is_active_before_response_headers(self):
         with tempfile.TemporaryDirectory() as temporary:
-            response = FakeResponse([b"a", b"b"])
+            handler = download_https_archive._raise_download_timeout
+            opener = FakeOpener(
+                FakeResponse([]),
+                on_open=lambda: handler(None, None),
+            )
             with mock.patch.object(
-                download_https_archive, "DOWNLOAD_TIMEOUT", 10
+                download_https_archive, "build_opener",
+                return_value=opener,
             ), mock.patch.object(
-                download_https_archive.time,
-                "monotonic",
-                side_effect=[0, 0, 11],
+                download_https_archive.signal, "alarm"
             ):
                 with self.assertRaisesRegex(TimeoutError, "timed out"):
-                    self.download(temporary, response)
+                    download_https_archive.download(
+                        "https://example.invalid/archive.tar.gz",
+                        Path(temporary) / "archive.tar.gz",
+                    )
+            self.assertEqual(list(Path(temporary).iterdir()), [])
+
+    def test_deadline_is_active_during_chunked_body_reads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            response = FakeResponse(
+                [b"a"],
+                on_read=lambda: download_https_archive._raise_download_timeout(
+                    None, None
+                ),
+            )
+            with mock.patch.object(
+                download_https_archive, "build_opener",
+                return_value=FakeOpener(response),
+            ), mock.patch.object(
+                download_https_archive.signal, "alarm"
+            ):
+                with self.assertRaisesRegex(TimeoutError, "timed out"):
+                    download_https_archive.download(
+                        "https://example.invalid/archive.tar.gz",
+                        Path(temporary) / "archive.tar.gz",
+                    )
             self.assertEqual(list(Path(temporary).iterdir()), [])
 
     def test_rejects_download_larger_than_limit_without_content_length(self):
