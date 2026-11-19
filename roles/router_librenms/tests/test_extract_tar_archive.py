@@ -117,6 +117,15 @@ class ExtractArchiveTests(unittest.TestCase):
         with self.assertRaises(tarfile.FilterError):
             extract_archive(self.archive, self.destination)
 
+    def test_rejects_unsupported_member_type_during_validation(self):
+        with tarfile.open(self.archive, "w:gz") as archive:
+            member = tarfile.TarInfo("agent-main/unsupported")
+            member.type = b"Z"
+            member.size = 4
+            archive.addfile(member, io.BytesIO(b"data"))
+        with self.assertRaisesRegex(ValueError, "Unsupported archive member"):
+            extract_archive(self.archive, self.destination)
+
     def test_rejects_hard_links(self):
         self.create_archive([
             ("agent-main/file", "data", "file", ""),
