@@ -69,6 +69,7 @@
 
 - name: Create a probe that reports the mitigation table absent
   ansible.builtin.raw: |
+    set -e
     cat > /tmp/ansible-cve-2026-98432-no-table <<'EOF'
     #!/bin/sh
     echo "No such file or directory" >&2
