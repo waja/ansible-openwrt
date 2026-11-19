@@ -1488,6 +1488,15 @@
             == 'ruleset-post'
           - router_cve_2026_98432_test_include.results[3].result == '0'
 
+    - name: Verify the staged include is present in the persistent firewall file
+      ansible.builtin.raw: |
+        grep -Fq "config include 'ansible_cve_2026_98432'" /etc/config/firewall
+        grep -Fq "option type 'nftables'" /etc/config/firewall
+        grep -Fq "option path '/etc/cve_2026_98432.nft'" /etc/config/firewall
+        grep -Fq "option position 'ruleset-post'" /etc/config/firewall
+        grep -Fq "option enabled '0'" /etc/config/firewall
+      changed_when: false
+
     - name: Check for pending firewall UCI changes after staging
       community.openwrt.command:
         cmd: uci changes firewall
