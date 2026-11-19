@@ -2,6 +2,7 @@
 """Download an archive while requiring HTTPS for every redirect."""
 
 import os
+import signal
 import sys
 import tempfile
 import time
@@ -27,6 +28,11 @@ class HTTPSOnlyRedirectHandler(HTTPRedirectHandler):
         return super().redirect_request(
             request, file_pointer, code, message, headers, new_url
         )
+
+
+def _raise_download_timeout(_signum, _frame):
+    """Interrupt a download when its total time budget expires."""
+    raise TimeoutError("Archive download timed out")
 
 
 def download(url, destination):
@@ -63,26 +69,32 @@ def download(url, destination):
 
                 downloaded = 0
                 deadline = time.monotonic() + DOWNLOAD_TIMEOUT
-                while True:
-                    time_left = deadline - time.monotonic()
-                    if time_left <= 0:
-                        raise TimeoutError("Archive download timed out")
-                    response.fp.raw._sock.settimeout(
-                        min(SOCKET_TIMEOUT, time_left)
-                    )
-                    remaining = MAX_ARCHIVE_SIZE - downloaded + 1
-                    chunk = response.read1(
-                        min(DOWNLOAD_CHUNK_SIZE, remaining)
-                    )
-                    if not chunk:
-                        break
-                    downloaded += len(chunk)
-                    if downloaded > MAX_ARCHIVE_SIZE:
-                        raise ValueError(
-                            "Archive response exceeds maximum size of "
-                            f"{MAX_ARCHIVE_SIZE} bytes"
+                previous_handler = signal.signal(
+                    signal.SIGALRM, _raise_download_timeout
+                )
+                signal.alarm(DOWNLOAD_TIMEOUT)
+                try:
+                    while True:
+                        if time.monotonic() >= deadline:
+                            raise TimeoutError(
+                                "Archive download timed out"
+                            )
+                        remaining = MAX_ARCHIVE_SIZE - downloaded + 1
+                        chunk = response.read1(
+                            min(DOWNLOAD_CHUNK_SIZE, remaining)
                         )
-                    output.write(chunk)
+                        if not chunk:
+                            break
+                        downloaded += len(chunk)
+                        if downloaded > MAX_ARCHIVE_SIZE:
+                            raise ValueError(
+                                "Archive response exceeds maximum size of "
+                                f"{MAX_ARCHIVE_SIZE} bytes"
+                            )
+                        output.write(chunk)
+                finally:
+                    signal.alarm(0)
+                    signal.signal(signal.SIGALRM, previous_handler)
         os.replace(temporary_path, destination)
     finally:
         if os.path.exists(temporary_path):
