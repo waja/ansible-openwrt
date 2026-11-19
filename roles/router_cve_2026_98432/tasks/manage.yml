@@ -224,11 +224,270 @@
       community.openwrt.lineinfile:
         path: /etc/sysupgrade.conf
         line: /etc/cve_2026_98432.nft
+        regexp: '^/etc/cve_2026_98432\.nft
+    - name: Remove the fw4 include
+      community.openwrt.uci:
+        command: absent
+        key: firewall.ansible_cve_2026_98432
+        autocommit: true
+      register: router_cve_2026_98432_include_removed
+      when:
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Remove the sysupgrade entry
+      community.openwrt.lineinfile:
+        path: /etc/sysupgrade.conf
+        line: /etc/cve_2026_98432.nft
         regexp: '^/etc/cve_2026_98432\.nft$'
+        state: absent
+      register: router_cve_2026_98432_sysupgrade_removed
+      when:
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_sysupgrade_entry.rc == 0
+
+    - name: Remove the owned ruleset file
+      community.openwrt.file:
+        path: /etc/cve_2026_98432.nft
+        state: absent
+      register: router_cve_2026_98432_ruleset_removed
+      when:
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Reload fw4 when managed configuration changed
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - >-
+          router_cve_2026_98432_ruleset_change.changed | default(false)
+          or router_cve_2026_98432_include_change.changed | default(false)
+          or router_cve_2026_98432_sysupgrade_change.changed | default(false)
+          or router_cve_2026_98432_ruleset_removed.changed | default(false)
+          or router_cve_2026_98432_include_removed.changed | default(false)
+          or router_cve_2026_98432_sysupgrade_removed.changed | default(false)
+          or (
+            router_cve_2026_98432_state == 'present'
+            and (
+              router_cve_2026_98432_active_table.rc != 0
+              or router_cve_2026_98432_active_table.stdout is not search(
+                router_cve_2026_98432_rule_pattern
+              )
+              or router_cve_2026_98432_active_table.stdout is search(
+                'flags.*dormant'
+              )
+            )
+          )
+      block:
+        - name: Validate the resulting fw4 ruleset
+          community.openwrt.command:
+            cmd: fw4 check
+          changed_when: false
+
+        - name: Record that a firewall reload is about to be attempted
+          ansible.builtin.set_fact:
+            router_cve_2026_98432_runtime_reload_attempted: true
+
+        - name: Reload the firewall
+          community.openwrt.service:
+            name: firewall
+            state: reloaded
+
+    - name: Remove the standalone nftables table
+      community.openwrt.command:
+        cmd: nft delete table ip cve_2026_98432
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_active_table.rc == 0
+
+    - name: Verify the mitigation table is absent after removal
+      community.openwrt.command:
+        cmd: nft list tables
+      register: router_cve_2026_98432_tables_after_removal
+      changed_when: false
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+
+    - name: Assert the mitigation table was removed
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_tables_after_removal.rc == 0
+          - >-
+            router_cve_2026_98432_tables_after_removal.stdout
+            is not search('(?m)^table ip cve_2026_98432$')
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+
+    - name: Read the active mitigation table
+      community.openwrt.command:
+        cmd: nft list table ip cve_2026_98432
+      register: router_cve_2026_98432_active_rules
+      changed_when: false
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'present'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+
+    - name: Verify the mitigation rule is active
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_cve_2026_98432_active_rules.stdout is search(
+              router_cve_2026_98432_rule_pattern
+            )
+          - >-
+            router_cve_2026_98432_active_rules.stdout is not search(
+              'flags.*dormant'
+            )
+        fail_msg: The expected CVE mitigation rule is not active in nftables.
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'present'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+
+    - name: Remove the temporary runtime snapshot after success
+      community.openwrt.file:
+        path: /tmp/ansible-cve-2026-98432-previous.nft
+        state: absent
+      when:
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_active_table.rc == 0
+
+  rescue:
+    - name: Restore the previous UCI include
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: include
+        name: ansible_cve_2026_98432
+        value:
+          type: "{{ router_cve_2026_98432_include_options.results[0].result }}"
+          path: "{{ router_cve_2026_98432_include_options.results[1].result }}"
+          position: >-
+            {{ router_cve_2026_98432_include_options.results[2].result }}
+          enabled: >-
+            {{
+              router_cve_2026_98432_include_options.results[3].result
+              | default('1', true)
+            }}
+        autocommit: true
+      when: router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Remove an include created by the failed run
+      community.openwrt.uci:
+        command: absent
+        key: firewall.ansible_cve_2026_98432
+        autocommit: true
+      when: router_cve_2026_98432_include.result | default('') != 'include'
+
+    - name: Restore the previous ruleset file
+      community.openwrt.copy:
+        content: >-
+          {{ router_cve_2026_98432_ruleset_backup.content | b64decode }}
+        dest: /etc/cve_2026_98432.nft
+        owner: root
+        group: root
+        mode: '0644'
+      when: router_cve_2026_98432_file_exists.rc == 0
+
+    - name: Remove a ruleset file created by the failed run
+      community.openwrt.file:
+        path: /etc/cve_2026_98432.nft
+        state: absent
+      when: router_cve_2026_98432_file_exists.rc != 0
+
+    - name: Restore the sysupgrade entry
+      community.openwrt.lineinfile:
+        path: /etc/sysupgrade.conf
+        line: /etc/cve_2026_98432.nft
+        regexp: '^/etc/cve_2026_98432\.nft$'
+        create: true
+        state: >-
+          {{
+            'present'
+            if router_cve_2026_98432_sysupgrade_entry.rc == 0
+            else 'absent'
+          }}
+
+    - name: Remove an empty sysupgrade file created by the failed run
+      community.openwrt.file:
+        path: /etc/sysupgrade.conf
+        state: absent
+      when:
+        - router_cve_2026_98432_sysupgrade_file_exists.rc != 0
+
+    - name: Reload the restored firewall configuration
+      community.openwrt.service:
+        name: firewall
+        state: reloaded
+      when:
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
+      failed_when: false
+
+    - name: Restore the previously active mitigation table
+      community.openwrt.command:
+        cmd: >-
+          nft delete table ip cve_2026_98432 &&
+          nft -f /tmp/ansible-cve-2026-98432-previous.nft
+      when:
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
+        - router_cve_2026_98432_active_table.rc == 0
+      failed_when: false
+
+    - name: Remove a table created by the failed run
+      community.openwrt.command:
+        cmd: nft delete table ip cve_2026_98432
+      when:
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
+        - router_cve_2026_98432_active_table.rc != 0
+      failed_when: false
+
+    - name: Remove the temporary runtime snapshot after recovery
+      community.openwrt.file:
+        path: /tmp/ansible-cve-2026-98432-previous.nft
+        state: absent
+      when: router_cve_2026_98432_apply_runtime_changes | bool
+
+    - name: Report the failed mitigation update
+      ansible.builtin.fail:
+        msg: >-
+          CVE mitigation update failed. The previous owned UCI include,
+          ruleset file, and sysupgrade entry were restored. Inspect the live
+          firewall if the recovery reload or table cleanup failed.
+
         create: true
         state: present
       register: router_cve_2026_98432_sysupgrade_change
       when: router_cve_2026_98432_state == 'present'
+
+    - name: Count owned sysupgrade entries
+      community.openwrt.command:
+        cmd: grep -Fxc /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+      register: router_cve_2026_98432_sysupgrade_entry_count
+      changed_when: false
+      failed_when: false
+      when: router_cve_2026_98432_state == 'present'
+
+    - name: Collapse duplicate owned sysupgrade entries
+      community.openwrt.command:
+        cmd: >-
+          awk '$0 != "/etc/cve_2026_98432.nft" || !seen++'
+          /etc/sysupgrade.conf > /tmp/ansible-cve-2026-98432-sysupgrade.conf &&
+          cat /tmp/ansible-cve-2026-98432-sysupgrade.conf
+          > /etc/sysupgrade.conf &&
+          rm -f /tmp/ansible-cve-2026-98432-sysupgrade.conf
+      when:
+        - router_cve_2026_98432_state == 'present'
+        - router_cve_2026_98432_sysupgrade_entry_count.stdout | int > 1
 
     - name: Remove the fw4 include
       community.openwrt.uci:
