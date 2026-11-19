@@ -1432,6 +1432,13 @@
         router_cve_2026_98432_state: present
         router_cve_2026_98432_apply_runtime_changes: false
 
+    - name: Install CVE mitigation before testing sysupgrade duplicate handling
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: present
+        router_cve_2026_98432_apply_runtime_changes: false
+
     - name: Seed duplicate CVE sysupgrade entries and an unrelated entry
       ansible.builtin.raw: |
         touch /etc/sysupgrade.conf
