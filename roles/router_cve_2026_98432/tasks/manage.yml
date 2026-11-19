@@ -240,7 +240,15 @@
           type: nftables
           path: /etc/cve_2026_98432.nft
           position: ruleset-post
-          enabled: '1'
+          enabled: >-
+            {{
+              '1'
+              if router_cve_2026_98432_apply_runtime_changes | bool
+              else (
+                router_cve_2026_98432_include_options.results[3].result
+                | default('0', true)
+              )
+            }}
         autocommit: true
       register: router_cve_2026_98432_include_change
       when: router_cve_2026_98432_state == 'present'
@@ -459,9 +467,6 @@
       community.openwrt.copy:
         content: "{{ router_cve_2026_98432_sysupgrade_backup.content | b64decode }}"
         dest: /etc/sysupgrade.conf
-        owner: root
-        group: root
-        mode: '0600'
       when: router_cve_2026_98432_sysupgrade_file_exists.rc == 0
 
     - name: Remove sysupgrade configuration created by the failed run
