@@ -1439,12 +1439,6 @@
       register: router_cve_2026_98432_fixture_marker
 
 
-    - name: Mark the duplicate-entry fixture as seeded
-      ansible.builtin.file:
-        path: /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
-        state: touch
-      when: not router_cve_2026_98432_fixture_marker.stat.exists
-
     - name: Seed duplicate CVE sysupgrade entries and an unrelated entry
       ansible.builtin.raw: |
         touch /etc/sysupgrade.conf
@@ -1454,6 +1448,14 @@
           /etc/cve_2026_98432.nft \
           /etc/molecule-preserve.conf >> /etc/sysupgrade.conf
       changed_when: true
+      when: not router_cve_2026_98432_fixture_marker.stat.exists
+
+
+    - name: Mark the duplicate-entry fixture as seeded
+      ansible.builtin.file:
+        path: /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
+        state: touch
+      when: not router_cve_2026_98432_fixture_marker.stat.exists
 
     - name: Configure CVE mitigation without changing the running firewall
       ansible.builtin.include_role:
