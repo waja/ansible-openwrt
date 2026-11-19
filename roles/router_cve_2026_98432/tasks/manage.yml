@@ -619,11 +619,36 @@
             router_cve_2026_98432_table_after_recovery.stdout | default('')
             is search(router_cve_2026_98432_rule_pattern)
             or router_cve_2026_98432_active_table.rc != 0
+            or not (router_cve_2026_98432_runtime_reload_attempted | bool)
           - router_cve_2026_98432_tables_after_recovery.rc | default(0) == 0
           - >-
             router_cve_2026_98432_tables_after_recovery.stdout | default('')
-            is not search('(?m)^table ip cve_2026_98432$')
+            is not search('(?m)^table ip cve_2026_98432
+        fail_msg: >-
+          Recovery was incomplete after
+          {{ router_cve_2026_98432_original_failure_task }}:
+          {{ router_cve_2026_98432_original_failure_message }}.
+          Inspect the owned UCI include, ruleset file, sysupgrade entry,
+          and nftables table before retrying.
+
+    - name: Remove the temporary UCI recovery file
+      community.openwrt.file:
+        path: /tmp/ansible-cve-2026-98432-previous.uci
+        state: absent
+      when: router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Report the original failed mitigation update
+      ansible.builtin.fail:
+        msg: >-
+          CVE mitigation update failed in
+          {{ router_cve_2026_98432_original_failure_task }}:
+          {{ router_cve_2026_98432_original_failure_message }}.
+          The previous owned configuration was restored. The fw4 reload
+          applies the restored ruleset as one nftables batch; no live-table
+          snapshot is maintained.
+)
             or router_cve_2026_98432_active_table.rc == 0
+            or not (router_cve_2026_98432_runtime_reload_attempted | bool)
         fail_msg: >-
           Recovery was incomplete after
           {{ router_cve_2026_98432_original_failure_task }}:
