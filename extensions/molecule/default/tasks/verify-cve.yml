@@ -191,7 +191,7 @@
     uci -q delete firewall.ansible_cve_2026_98432 || true
     uci commit firewall
     if test -f /etc/sysupgrade.conf; then
-      sed -i '\\|^/etc/cve_2026_98432\\.nft$|d' /etc/sysupgrade.conf
+      sed -i '/^\/etc\/cve_2026_98432[.]nft$/d' /etc/sysupgrade.conf
     fi
     rm -f /etc/cve_2026_98432.nft
   changed_when: true
