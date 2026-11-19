@@ -528,7 +528,7 @@
             if router_cve_2026_98432_sysupgrade_entry.rc == 0
             else 'absent'
           }}
-        create: "{{ router_cve_2026_98432_sysupgrade_file_exists.rc == 0 }}"
+        create: "{{ router_cve_2026_98432_sysupgrade_entry.rc == 0 }}"
       register: router_cve_2026_98432_sysupgrade_restore
       failed_when: false
 
