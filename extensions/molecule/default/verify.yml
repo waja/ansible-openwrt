@@ -2229,7 +2229,6 @@
           ansible.builtin.include_role:
             name: router_cve_2026_98432
           vars:
-            router_cve_2026_98432_state: null
             router_cve_2026_98432_apply_runtime_changes: true
       rescue:
         - name: Record missing-state rejection
@@ -2244,6 +2243,14 @@
       ansible.builtin.assert:
         that:
           - router_cve_2026_98432_missing_state_rejected | default(false) | bool
+
+    - name: Capture mitigation include and ruleset before rejected removal
+      community.openwrt.command:
+        cmd: >-
+          uci show firewall.ansible_cve_2026_98432 &&
+          sha256sum /etc/cve_2026_98432.nft
+      register: router_cve_2026_98432_before_rejected_removal
+      changed_when: false
 
     - name: Confirm configuration-only removal is rejected as unsafe
       block:
@@ -2269,10 +2276,17 @@
             router_cve_2026_98432_unsafe_removal_rejected
             | default(false) | bool
 
-    - name: Verify rejected removal preserved mitigation configuration
-      ansible.builtin.raw: |
-        uci -q get firewall.ansible_cve_2026_98432.path \
-          | grep -Fxq /etc/cve_2026_98432.nft || exit 1
-        test -f /etc/cve_2026_98432.nft || exit 1
-        grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf || exit 1
+    - name: Read mitigation include and ruleset after rejected removal
+      community.openwrt.command:
+        cmd: >-
+          uci show firewall.ansible_cve_2026_98432 &&
+          sha256sum /etc/cve_2026_98432.nft
+      register: router_cve_2026_98432_after_rejected_removal
       changed_when: false
+
+    - name: Verify rejected removal preserved mitigation configuration
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_cve_2026_98432_after_rejected_removal.stdout
+            == router_cve_2026_98432_before_rejected_removal.stdout
