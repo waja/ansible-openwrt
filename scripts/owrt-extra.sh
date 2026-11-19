@@ -337,7 +337,7 @@ build_ref() {
                     continue
                     ;;
                 /etc/uci-defaults/70-rootpt-resize|/etc/uci-defaults/80-rootfs-resize)
-                    echo "SKIP: $f (hardware-specific disk resize and possible reboot)"
+                    echo "SKIP: $f (hardware-specific resize and reboot risk)"
                     # These defaults can modify block devices and reboot.
                     # Do not execute them in the reconstructed factory state.
                     continue
