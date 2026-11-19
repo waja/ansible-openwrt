@@ -497,7 +497,7 @@
         key: firewall.ansible_cve_2026_98432
         autocommit: true
       register: router_cve_2026_98432_uci_remove_new
-      failed_when: false
+      ignore_errors: true  # noqa ignore-errors
       when: router_cve_2026_98432_include.result | default('') != 'include'
 
     - name: Restore the previous ruleset file
@@ -509,7 +509,7 @@
         group: root
         mode: '0644'
       register: router_cve_2026_98432_ruleset_restore
-      failed_when: false
+      ignore_errors: true  # noqa ignore-errors
       when: router_cve_2026_98432_file_exists.rc == 0
 
     - name: Remove a ruleset file created by the failed run
@@ -517,7 +517,7 @@
         path: /etc/cve_2026_98432.nft
         state: absent
       register: router_cve_2026_98432_ruleset_remove_new
-      failed_when: false
+      ignore_errors: true  # noqa ignore-errors
       when: router_cve_2026_98432_file_exists.rc != 0
 
     - name: Restore only the previous owned sysupgrade entry
@@ -533,7 +533,7 @@
           }}
         create: "{{ router_cve_2026_98432_sysupgrade_entry.rc == 0 }}"
       register: router_cve_2026_98432_sysupgrade_restore
-      failed_when: false
+      ignore_errors: true  # noqa ignore-errors
 
     - name: Remove an empty sysupgrade file created by the failed run
       ansible.builtin.raw: |
@@ -550,7 +550,7 @@
         name: firewall
         state: reloaded
       register: router_cve_2026_98432_firewall_restore
-      failed_when: false
+      ignore_errors: true  # noqa ignore-errors
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
