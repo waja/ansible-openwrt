@@ -122,7 +122,8 @@
       echo "Mitigation UCI include remains after failed installation"
       exit 1
     fi
-    if grep -Fq "config include 'ansible_cve_2026_98432'" /etc/config/firewall; then
+    if grep -Fq \
+      "config include 'ansible_cve_2026_98432'" /etc/config/firewall; then
       echo "Persistent mitigation UCI include remains after failed installation"
       exit 1
     fi
