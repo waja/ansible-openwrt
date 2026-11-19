@@ -1425,6 +1425,16 @@
             - /tmp/ansible-molecule-owut
             - /tmp/ansible-molecule-owut-mode
 
+    - name: Seed duplicate CVE sysupgrade entries and an unrelated entry
+      ansible.builtin.raw: |
+        touch /etc/sysupgrade.conf
+        sed -i '\|^/etc/cve_2026_98432\.nft$|d' /etc/sysupgrade.conf
+        printf '%s\\n' \
+          /etc/cve_2026_98432.nft \
+          /etc/cve_2026_98432.nft \
+          /etc/molecule-preserve.conf >> /etc/sysupgrade.conf
+      changed_when: true
+
     - name: Configure CVE mitigation without changing the running firewall
       ansible.builtin.include_role:
         name: router_cve_2026_98432
@@ -1494,6 +1504,18 @@
       community.openwrt.command:
         cmd: grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf
       register: router_cve_2026_98432_installed_sysupgrade
+      changed_when: false
+
+    - name: Count the managed sysupgrade entry
+      community.openwrt.command:
+        cmd: grep -Fxc /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+      register: router_cve_2026_98432_sysupgrade_count
+      changed_when: false
+
+    - name: Verify duplicate-free sysupgrade preservation
+      ansible.builtin.raw: |
+        test "{{ router_cve_2026_98432_sysupgrade_count.stdout | trim }}" = 1
+        grep -Fxq /etc/molecule-preserve.conf /etc/sysupgrade.conf
       changed_when: false
 
     - name: Verify the installed ruleset and sysupgrade entry
