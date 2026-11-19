@@ -2382,13 +2382,17 @@
           vars:
             router_cve_2026_98432_state: absent
             router_cve_2026_98432_apply_runtime_changes: true
-            router_cve_2026_98432_runtime_table_probe_command: /tmp/ansible-cve-2026-98432-no-table
+            router_cve_2026_98432_runtime_table_probe_command: >-
+              /tmp/ansible-cve-2026-98432-no-table
             router_cve_2026_98432_fw4_check_command: /bin/false
       rescue:
         - name: Record failed removal rollback
           ansible.builtin.set_fact:
             router_cve_2026_98432_remove_validation_rollback: >-
-              {{ ansible_failed_task.name == 'Report the failed mitigation update' }}
+              {{
+                ansible_failed_task.name
+                == 'Report the failed mitigation update'
+              }}
 
     - name: Assert failed removal restored the previous state
       ansible.builtin.assert:
