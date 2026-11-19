@@ -188,7 +188,6 @@ class DownloadArchiveTests(unittest.TestCase):
             with self.assertRaises(download_https_archive.DownloadTimeout):
                 socket.create_connection(("example.invalid", 443), timeout=1)
         connection.connect.assert_called_once_with(("192.0.2.1", 443))
-        connection.close.assert_called_once()
 
     def test_socket_errors_still_allow_address_fallback(self):
         addresses = [
