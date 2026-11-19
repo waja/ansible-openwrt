@@ -90,6 +90,17 @@
     chmod 0755 /tmp/ansible-cve-2026-98432-failing-fw4-check
   changed_when: true
 
+- name: Create an inconclusive runtime table probe
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      echo "Operation not permitted" >&2
+      exit 1
+    dest: /tmp/ansible-cve-2026-98432-inconclusive-probe
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Prepare an absent mitigation state for failed installation
   ansible.builtin.raw: |
     uci -q delete firewall.ansible_cve_2026_98432 || true
@@ -149,6 +160,21 @@
     fi
     grep -Fxq /etc/molecule-added-during-rollback.conf /etc/sysupgrade.conf
   changed_when: false
+
+- name: Stage only the ruleset when runtime inspection is inconclusive
+  ansible.builtin.include_role:
+    name: router_cve_2026_98432
+  vars:
+    router_cve_2026_98432_state: present
+    router_cve_2026_98432_apply_runtime_changes: false
+    router_cve_2026_98432_runtime_table_probe_command: >-
+      /tmp/ansible-cve-2026-98432-inconclusive-probe
+
+- name: Verify inconclusive inspection did not register an include or sysupgrade entry
+  ansible.builtin.raw: |
+    test -f /etc/cve_2026_98432.nft
+    ! uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1
+    ! grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf
 
 - name: Stage mitigation again before testing failed removal
   ansible.builtin.include_role:
@@ -234,3 +260,4 @@
   loop:
     - /tmp/ansible-cve-2026-98432-no-table
     - /tmp/ansible-cve-2026-98432-failing-fw4-check
+    - /tmp/ansible-cve-2026-98432-inconclusive-probe
