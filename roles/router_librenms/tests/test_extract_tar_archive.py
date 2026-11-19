@@ -215,7 +215,7 @@ class ExtractArchiveTests(unittest.TestCase):
             "extract_tar_archive.MAX_TOTAL_METADATA_SIZE", 512
         ):
             with self.assertRaisesRegex(ValueError, "metadata"):
-                BoundedTarInfo()._proc_gnusparse_10(member, archive, {})
+                BoundedTarInfo()._proc_gnusparse_10(member, {}, archive)
         self.assertEqual(archive.fileobj.tell(), 0)
 
     def test_counts_sparse_map_towards_cumulative_metadata_limit(self):
