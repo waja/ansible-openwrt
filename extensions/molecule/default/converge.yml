@@ -1487,15 +1487,12 @@
       register: router_cve_2026_98432_fw4_print
       changed_when: false
 
-    - name: Assert fw4 includes the standalone table at ruleset scope
+    - name: Assert fw4 includes the standalone ruleset at ruleset scope
       ansible.builtin.assert:
         that:
           - >-
             router_cve_2026_98432_fw4_print.stdout
-            is search('(?s)table ip cve_2026_98432 \{')
-          - >-
-            router_cve_2026_98432_fw4_print.stdout
-            is search('ip protocol tcp ip hdrlength 6-15 counter drop')
+            is search('include "/etc/cve_2026_98432\\.nft"')
 
     - name: Restore the staged include to its disabled state
       community.openwrt.uci:
