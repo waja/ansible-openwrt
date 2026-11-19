@@ -10,7 +10,10 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "files"))
 
-from extract_tar_archive import (\n    BoundedTarInfo,\n    _expanded_member_size,\n    extract_archive,\n)
+from extract_tar_archive import (
+    _expanded_member_size,
+    extract_archive,
+)
 
 
 class ExtractArchiveTests(unittest.TestCase):
@@ -165,7 +168,9 @@ class ExtractArchiveTests(unittest.TestCase):
                 extract_archive(self.archive, self.destination)
 
     def test_rejects_oversized_pax_metadata(self):
-        with tarfile.open(self.archive, "w:gz", format=tarfile.PAX_FORMAT) as archive:
+        with tarfile.open(
+            self.archive, "w:gz", format=tarfile.PAX_FORMAT
+        ) as archive:
             member = tarfile.TarInfo("agent-main/file")
             member.pax_headers = {"comment": "x" * 1024}
             member.size = 1
