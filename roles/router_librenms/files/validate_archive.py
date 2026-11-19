@@ -30,14 +30,23 @@ class StrictTarInfo(tarfile.TarInfo):
     """Reject malformed headers and unsafe global PAX overrides."""
 
     def _proc_pax(self, archive):
-        member = super()._proc_pax(archive)
-        if self.type == tarfile.XGLTYPE and {
-            "path",
-            "linkpath",
-        }.intersection(archive.pax_headers):
+        try:
+            member = super()._proc_pax(archive)
+        except tarfile.InvalidHeaderError as error:
             raise ArchiveValidationError(
-                "Global PAX headers must not override member paths or links"
-            )
+                f"Invalid PAX header: {error}"
+            ) from error
+
+        if self.type == tarfile.XGLTYPE:
+            if {"path", "linkpath"}.intersection(archive.pax_headers):
+                raise ArchiveValidationError(
+                    "Global PAX headers must not override member paths or links"
+                )
+            if "size" in archive.pax_headers:
+                raise ArchiveValidationError("PAX size overrides are not supported")
+        elif self.type in (tarfile.XHDTYPE, tarfile.SOLARIS_XHDTYPE):
+            if "size" in member.pax_headers:
+                raise ArchiveValidationError("PAX size overrides are not supported")
         return member
 
     @classmethod
