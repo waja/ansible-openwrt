@@ -336,6 +336,12 @@ build_ref() {
                     rm -f "$f"
                     continue
                     ;;
+                /etc/uci-defaults/70-rootpt-resize|/etc/uci-defaults/80-rootfs-resize)
+                    echo "SKIP: $f (hardware-specific resize and reboot risk)"
+                    # These defaults can modify block devices and reboot.
+                    # Do not execute them in the reconstructed factory state.
+                    continue
+                    ;;
             esac
             (
                 . "$f"
