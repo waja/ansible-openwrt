@@ -142,6 +142,22 @@ class ExtractArchiveTests(unittest.TestCase):
             self.assertTrue(archive.stream)
             self.assertEqual(archive.members, [])
 
+    def test_global_pax_header_does_not_accumulate_member_objects(self):
+        with tarfile.open(
+            self.archive,
+            "w:gz",
+            format=tarfile.PAX_FORMAT,
+            pax_headers={f"global-{i}": "value" for i in range(100)},
+        ) as archive:
+            for index in range(100):
+                member = tarfile.TarInfo(f"agent-main/file-{index}")
+                member.size = 1
+                archive.addfile(member, io.BytesIO(b"x"))
+        with _open_streaming_archive(self.archive) as archive:
+            list(archive)
+            self.assertEqual(archive.members, [])
+            self.assertEqual(len(archive.pax_headers), 100)
+
     def test_rejects_oversized_archive(self):
         self.create_archive([("agent-main/file", "data", "file", "")])
         with mock.patch(
