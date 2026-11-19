@@ -84,7 +84,7 @@ class BoundedTarInfo(tarfile.TarInfo):
             raise ValueError("Archive metadata exceeds maximum size")
         archive._metadata_size = total
         member.offset_data = archive.fileobj.tell()
-        member.sparse = list(zip(sparse[::2], sparse[1::2]))
+        member.sparse = list(zip(sparse[::2], sparse[1::2], strict=True))
 
 
 def _open_streaming_archive(archive_path):
@@ -114,6 +114,28 @@ def _expanded_member_size(member):
             except ValueError as error:
                 raise ValueError("Invalid sparse file size") from error
     return size
+
+
+def _validate_sparse_extents(member):
+    """Reject sparse maps that can write beyond their logical file size."""
+    if member.sparse is None:
+        return
+
+    logical_size = _expanded_member_size(member)
+    previous_end = 0
+    expanded_size = 0
+    for offset, length in member.sparse:
+        if offset < 0 or length < 0:
+            raise ValueError("Sparse archive contains a negative extent")
+        if offset < previous_end:
+            raise ValueError("Sparse archive contains overlapping extents")
+        end = offset + length
+        if end > logical_size:
+            raise ValueError("Sparse extent exceeds logical file size")
+        expanded_size += length
+        if expanded_size > logical_size:
+            raise ValueError("Sparse extents exceed logical file size")
+        previous_end = end
 
 
 def _validate_member(member, roots):
@@ -149,6 +171,7 @@ def extract_archive(archive_path, destination):
                 raise ValueError("Archive contains too many members")
             _validate_member(member, roots)
             if member.isfile():
+                _validate_sparse_extents(member)
                 expanded_size += _expanded_member_size(member)
                 if expanded_size > MAX_EXPANDED_SIZE:
                     raise ValueError("Archive exceeds maximum expanded size")
