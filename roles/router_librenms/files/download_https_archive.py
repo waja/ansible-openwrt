@@ -4,6 +4,7 @@
 import os
 import sys
 import tempfile
+import time
 from urllib.error import URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
@@ -11,6 +12,8 @@ from urllib.request import HTTPRedirectHandler, build_opener
 
 MAX_ARCHIVE_SIZE = 64 * 1024 * 1024
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
+DOWNLOAD_TIMEOUT = 300
+SOCKET_TIMEOUT = 60
 
 
 class HTTPSOnlyRedirectHandler(HTTPRedirectHandler):
@@ -38,7 +41,7 @@ def download(url, destination):
     try:
         with os.fdopen(descriptor, "wb") as output:
             opener = build_opener(HTTPSOnlyRedirectHandler)
-            with opener.open(url, timeout=60) as response:
+            with opener.open(url, timeout=SOCKET_TIMEOUT) as response:
                 if urlsplit(response.geturl()).scheme.lower() != "https":
                     raise URLError("Archive response did not use HTTPS")
                 content_length = response.headers.get("Content-Length")
@@ -59,9 +62,16 @@ def download(url, destination):
                         )
 
                 downloaded = 0
+                deadline = time.monotonic() + DOWNLOAD_TIMEOUT
                 while True:
+                    time_left = deadline - time.monotonic()
+                    if time_left <= 0:
+                        raise TimeoutError("Archive download timed out")
+                    response.fp._sock.settimeout(
+                        min(SOCKET_TIMEOUT, time_left)
+                    )
                     remaining = MAX_ARCHIVE_SIZE - downloaded + 1
-                    chunk = response.read(
+                    chunk = response.read1(
                         min(DOWNLOAD_CHUNK_SIZE, remaining)
                     )
                     if not chunk:
