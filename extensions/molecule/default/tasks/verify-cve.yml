@@ -171,7 +171,8 @@
       /tmp/ansible-cve-2026-98432-inconclusive-probe
 
 - name: >-
-    Verify inconclusive inspection did not register an include or sysupgrade entry
+    Verify inconclusive inspection did not register an include
+    or sysupgrade entry
   ansible.builtin.raw: |
     test -f /etc/cve_2026_98432.nft
     ! uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1
