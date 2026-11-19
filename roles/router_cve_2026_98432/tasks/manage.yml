@@ -489,8 +489,8 @@
       failed_when: false
 
     - name: Restore the previously active mitigation table
-      ansible.builtin.raw: >-
-        nft delete table ip cve_2026_98432 &&
+      ansible.builtin.raw: |
+        nft delete table ip cve_2026_98432 2>/dev/null || true
         nft -f /tmp/ansible-cve-2026-98432-previous.nft
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
