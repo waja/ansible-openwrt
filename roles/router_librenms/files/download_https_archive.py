@@ -5,7 +5,6 @@ import os
 import signal
 import sys
 import tempfile
-import time
 from urllib.error import URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
@@ -45,40 +44,37 @@ def download(url, destination):
         prefix=".librenms-archive-", dir=directory
     )
     try:
-        with os.fdopen(descriptor, "wb") as output:
-            opener = build_opener(HTTPSOnlyRedirectHandler)
-            with opener.open(url, timeout=SOCKET_TIMEOUT) as response:
-                if urlsplit(response.geturl()).scheme.lower() != "https":
-                    raise URLError("Archive response did not use HTTPS")
-                content_length = response.headers.get("Content-Length")
-                if content_length is not None:
-                    try:
-                        declared_size = int(content_length)
-                    except ValueError as error:
-                        raise ValueError(
-                            "Archive response has an invalid Content-Length"
-                        ) from error
-                    if (
-                        declared_size < 0
-                        or declared_size > MAX_ARCHIVE_SIZE
-                    ):
-                        raise ValueError(
-                            "Archive response exceeds maximum size of "
-                            f"{MAX_ARCHIVE_SIZE} bytes"
+        previous_handler = signal.signal(
+            signal.SIGALRM, _raise_download_timeout
+        )
+        signal.alarm(DOWNLOAD_TIMEOUT)
+        try:
+            with os.fdopen(descriptor, "wb") as output:
+                opener = build_opener(HTTPSOnlyRedirectHandler)
+                with opener.open(url, timeout=SOCKET_TIMEOUT) as response:
+                    if urlsplit(response.geturl()).scheme.lower() != "https":
+                        raise URLError(
+                            "Archive response did not use HTTPS"
                         )
-
-                downloaded = 0
-                deadline = time.monotonic() + DOWNLOAD_TIMEOUT
-                previous_handler = signal.signal(
-                    signal.SIGALRM, _raise_download_timeout
-                )
-                signal.alarm(DOWNLOAD_TIMEOUT)
-                try:
-                    while True:
-                        if time.monotonic() >= deadline:
-                            raise TimeoutError(
-                                "Archive download timed out"
+                    content_length = response.headers.get("Content-Length")
+                    if content_length is not None:
+                        try:
+                            declared_size = int(content_length)
+                        except ValueError as error:
+                            raise ValueError(
+                                "Archive response has an invalid Content-Length"
+                            ) from error
+                        if (
+                            declared_size < 0
+                            or declared_size > MAX_ARCHIVE_SIZE
+                        ):
+                            raise ValueError(
+                                "Archive response exceeds maximum size of "
+                                f"{MAX_ARCHIVE_SIZE} bytes"
                             )
+
+                    downloaded = 0
+                    while True:
                         remaining = MAX_ARCHIVE_SIZE - downloaded + 1
                         chunk = response.read1(
                             min(DOWNLOAD_CHUNK_SIZE, remaining)
@@ -92,9 +88,9 @@ def download(url, destination):
                                 f"{MAX_ARCHIVE_SIZE} bytes"
                             )
                         output.write(chunk)
-                finally:
-                    signal.alarm(0)
-                    signal.signal(signal.SIGALRM, previous_handler)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous_handler)
         os.replace(temporary_path, destination)
     finally:
         if os.path.exists(temporary_path):
