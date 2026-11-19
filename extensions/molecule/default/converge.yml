@@ -1432,19 +1432,43 @@
         router_cve_2026_98432_state: present
         router_cve_2026_98432_apply_runtime_changes: false
 
-    - name: Verify standalone CVE mitigation UCI include
+    - name: Read standalone CVE mitigation UCI include options
       community.openwrt.uci:
         command: get
-        key: firewall.ansible_cve_2026_98432.path
+        key: "firewall.ansible_cve_2026_98432.{{ item }}"
+      loop:
+        - type
+        - path
+        - position
+        - enabled
       register: router_cve_2026_98432_test_include
       changed_when: false
 
-    - name: Assert CVE mitigation is configured
+    - name: Assert CVE mitigation UCI include is enabled at ruleset scope
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_test_include.results[0].result == 'nftables'
+          - >-
+            router_cve_2026_98432_test_include.results[1].result
+            == '/etc/cve_2026_98432.nft'
+          - router_cve_2026_98432_test_include.results[2].result == 'ruleset-post'
+          - router_cve_2026_98432_test_include.results[3].result == '1'
+
+    - name: Render the staged firewall ruleset
+      community.openwrt.command:
+        cmd: fw4 print
+      register: router_cve_2026_98432_fw4_print
+      changed_when: false
+
+    - name: Assert fw4 includes the standalone table at ruleset scope
       ansible.builtin.assert:
         that:
           - >-
-            router_cve_2026_98432_test_include.result
-            == '/etc/cve_2026_98432.nft'
+            router_cve_2026_98432_fw4_print.stdout
+            is search('(?s)table ip cve_2026_98432 \\{')
+          - >-
+            router_cve_2026_98432_fw4_print.stdout
+            is search('ip protocol tcp ip hdrlength 6-15 counter drop')
 
     - name: Read the installed CVE mitigation ruleset
       community.openwrt.slurp:
