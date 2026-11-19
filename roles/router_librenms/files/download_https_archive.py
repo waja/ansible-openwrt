@@ -16,8 +16,35 @@ DOWNLOAD_TIMEOUT = 300
 SOCKET_TIMEOUT = 60
 
 
+class DownloadTimeout(Exception):
+    """Raised when the total archive download deadline expires."""
+
+
+class _RedirectResponse:
+    """Close a redirect response without buffering its body."""
+
+    def __init__(self, response):
+        self.response = response
+
+    def read(self, *_args, **_kwargs):
+        return b""
+
+    def close(self):
+        self.response.close()
+
+
 class HTTPSOnlyRedirectHandler(HTTPRedirectHandler):
     """Reject redirects that would send the request over a non-HTTPS scheme."""
+
+    def http_error_302(self, request, response, code, message, headers):
+        # urllib's implementation calls response.read() without a size limit.
+        return super().http_error_302(
+            request, _RedirectResponse(response), code, message, headers
+        )
+
+    http_error_301 = http_error_303 = http_error_307 = http_error_308 = (
+        http_error_302
+    )
 
     def redirect_request(
         self, request, file_pointer, code, message, headers, new_url
@@ -31,7 +58,7 @@ class HTTPSOnlyRedirectHandler(HTTPRedirectHandler):
 
 def _raise_download_timeout(_signum, _frame):
     """Interrupt a download when its total time budget expires."""
-    raise TimeoutError("Archive download timed out")
+    raise DownloadTimeout("Archive download timed out")
 
 
 def download(url, destination):
