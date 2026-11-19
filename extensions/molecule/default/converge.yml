@@ -1456,6 +1456,7 @@
 
     - name: Seed duplicate CVE sysupgrade entries and an unrelated entry
       ansible.builtin.raw: |
+        set -e
         touch /etc/sysupgrade.conf
         sed -i '\|^/etc/cve_2026_98432\.nft$|d' /etc/sysupgrade.conf
         printf '%s\n' \
