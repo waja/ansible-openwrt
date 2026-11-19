@@ -2277,10 +2277,10 @@
             | default(false) | bool
 
     - name: Read mitigation include and ruleset after rejected removal
-      community.openwrt.command:
-        cmd: >-
-          uci show firewall.ansible_cve_2026_98432 &&
-          sha256sum /etc/cve_2026_98432.nft
+      ansible.builtin.raw: >-
+        uci show firewall.ansible_cve_2026_98432 &&
+        sha256sum /etc/cve_2026_98432.nft &&
+        grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
       register: router_cve_2026_98432_after_rejected_removal
       changed_when: false
 
