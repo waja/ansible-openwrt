@@ -1576,6 +1576,7 @@
 
     - name: Verify duplicate-free sysupgrade preservation
       ansible.builtin.raw: |
+        set -e
         test "{{ router_cve_2026_98432_sysupgrade_count.stdout | trim }}" = 1
         grep -Fxq /etc/molecule-preserve.conf /etc/sysupgrade.conf
       changed_when: false
