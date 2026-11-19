@@ -1,5 +1,6 @@
 """Tests for bounded HTTPS archive downloads."""
 
+import socket
 import sys
 import tempfile
 import unittest
@@ -136,7 +137,9 @@ class DownloadArchiveTests(unittest.TestCase):
             ) as register, mock.patch.object(
                 download_https_archive.signal, "alarm", alarm
             ):
-                with self.assertRaisesRegex(TimeoutError, "timed out"):
+                with self.assertRaisesRegex(
+                    download_https_archive.DownloadTimeout, "timed out"
+                ):
                     download_https_archive.download(
                         "https://example.invalid/archive.tar.gz",
                         Path(temporary) / "archive.tar.gz",
@@ -169,6 +172,53 @@ class DownloadArchiveTests(unittest.TestCase):
 
     def test_deadline_is_armed_during_chunked_body_reads(self):
         self._assert_download_deadline("read")
+
+    def test_deadline_exception_is_not_caught_by_address_retries(self):
+        addresses = [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("192.0.2.1", 443)),
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("192.0.2.2", 443)),
+        ]
+        connection = mock.Mock()
+        connection.connect.side_effect = download_https_archive.DownloadTimeout(
+            "deadline"
+        )
+        with mock.patch.object(socket, "getaddrinfo", return_value=addresses), (
+            mock.patch.object(socket, "socket", return_value=connection)
+        ):
+            with self.assertRaises(download_https_archive.DownloadTimeout):
+                socket.create_connection(("example.invalid", 443), timeout=1)
+        connection.connect.assert_called_once_with(("192.0.2.1", 443))
+        connection.close.assert_called_once()
+
+    def test_socket_errors_still_allow_address_fallback(self):
+        addresses = [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("192.0.2.1", 443)),
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("192.0.2.2", 443)),
+        ]
+        first = mock.Mock()
+        first.connect.side_effect = OSError("unreachable")
+        second = mock.Mock()
+        with mock.patch.object(socket, "getaddrinfo", return_value=addresses), (
+            mock.patch.object(
+                socket, "socket", side_effect=[first, second]
+            )
+        ):
+            self.assertIs(
+                socket.create_connection(("example.invalid", 443), timeout=1),
+                second,
+            )
+        first.connect.assert_called_once_with(("192.0.2.1", 443))
+        second.connect.assert_called_once_with(("192.0.2.2", 443))
+        first.close.assert_called_once()
+
+    def test_redirect_response_does_not_read_body(self):
+        response = mock.Mock()
+        wrapped = download_https_archive._RedirectResponse(response)
+        self.assertEqual(wrapped.read(), b"")
+        self.assertEqual(wrapped.read(1024), b"")
+        response.read.assert_not_called()
+        wrapped.close()
+        response.close.assert_called_once()
 
     def test_rejects_download_larger_than_limit_without_content_length(self):
         with tempfile.TemporaryDirectory() as temporary:
