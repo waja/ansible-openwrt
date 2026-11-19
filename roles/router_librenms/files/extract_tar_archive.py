@@ -87,6 +87,22 @@ class BoundedTarInfo(tarfile.TarInfo):
         member.sparse = list(zip(sparse[::2], sparse[1::2]))
 
 
+def _open_streaming_archive(archive_path):
+    """Open a tar stream without retaining every TarInfo object."""
+    options = {"mode": "r|*", "tarinfo": BoundedTarInfo}
+    try:
+        return tarfile.open(archive_path, stream=True, **options)
+    except TypeError as error:
+        if "stream" not in str(error):
+            raise
+        # Python before 3.13 lacks the stream argument. Clear the first
+        # member cached by TarFile.__init__, then enable streaming manually.
+        archive = tarfile.open(archive_path, **options)
+        archive.stream = True
+        archive.members.clear()
+        return archive
+
+
 def _expanded_member_size(member):
     """Return the logical size, including GNU sparse file metadata."""
     size = member.size
@@ -126,9 +142,7 @@ def extract_archive(archive_path, destination):
     roots = set()
     member_count = 0
     expanded_size = 0
-    with tarfile.open(
-        archive_path, mode="r|*", tarinfo=BoundedTarInfo
-    ) as archive:
+    with _open_streaming_archive(archive_path) as archive:
         for member in archive:
             member_count += 1
             if member_count > MAX_ARCHIVE_MEMBERS:
