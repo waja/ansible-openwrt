@@ -272,3 +272,4 @@
     - /tmp/ansible-cve-2026-98432-no-table
     - /tmp/ansible-cve-2026-98432-failing-fw4-check
     - /tmp/ansible-cve-2026-98432-inconclusive-probe
+    - /tmp/ansible-cve-2026-98432-expected.nft
