@@ -237,9 +237,32 @@ class ExtractArchiveTests(unittest.TestCase):
         with mock.patch(
             "extract_tar_archive.MAX_TOTAL_METADATA_SIZE", 1024
         ):
-            BoundedTarInfo()._proc_gnusparse_10(member, archive, {})
+            BoundedTarInfo()._proc_gnusparse_10(member, {}, archive)
         self.assertEqual(archive._metadata_size, 1024)
         self.assertEqual(member.sparse, [(0, 1)])
+
+    def test_extracts_gnu_sparse_10_archive(self):
+        with tarfile.open(
+            self.archive, "w:", format=tarfile.PAX_FORMAT
+        ) as archive:
+            member = tarfile.TarInfo("agent-main/sparse")
+            member.pax_headers = {
+                "GNU.sparse.major": "1",
+                "GNU.sparse.minor": "0",
+                "GNU.sparse.realsize": "3",
+            }
+            sparse_map = b"1\n0\n3\n"
+            payload = (
+                sparse_map
+                + b"\0" * (tarfile.BLOCKSIZE - len(sparse_map))
+                + b"abc"
+            )
+            member.size = len(payload)
+            archive.addfile(member, io.BytesIO(payload))
+        extract_archive(self.archive, self.destination)
+        self.assertEqual(
+            (self.destination / "sparse").read_bytes(), b"abc"
+        )
 
     def test_counts_sparse_logical_size_towards_expansion_limit(self):
         member = tarfile.TarInfo("agent-main/sparse")
