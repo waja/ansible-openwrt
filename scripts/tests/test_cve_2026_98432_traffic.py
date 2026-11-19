@@ -63,6 +63,67 @@ while True:
     )
 
 
+def wait_for_listeners(
+    servers: list[tuple[subprocess.Popen[str], int, str, int]],
+    timeout: float = 5.0,
+) -> None:
+    probe = """
+import socket
+import sys
+
+family = int(sys.argv[1])
+address = sys.argv[2]
+port = int(sys.argv[3])
+client = socket.socket(family, socket.SOCK_STREAM)
+client.settimeout(0.2)
+try:
+    client.connect((address, port))
+except OSError:
+    sys.exit(1)
+finally:
+    client.close()
+"""
+    pending = list(servers)
+    deadline = time.monotonic() + timeout
+    while pending:
+        remaining = []
+        for process, family, address, port in pending:
+            if process.poll() is not None:
+                error = process.stderr.read() if process.stderr else ""
+                raise RuntimeError(
+                    f"Listener {address}:{port} exited before becoming ready: "
+                    f"{error.strip() or process.returncode}"
+                )
+            result = subprocess.run(
+                [
+                    "ip", "netns", "exec", CLIENT, sys.executable, "-c", probe,
+                    str(family), address, str(port),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            if result.returncode == 0:
+                continue
+            if result.returncode != 1:
+                raise RuntimeError(
+                    f"Listener probe for {address}:{port} failed: "
+                    f"{result.stderr or result.stdout}"
+                )
+            remaining.append((process, family, address, port))
+        pending = remaining
+        if pending and time.monotonic() >= deadline:
+            endpoints = ", ".join(
+                f"{address}:{port}" for _, _, address, port in pending
+            )
+            raise TimeoutError(
+                f"Listeners did not become ready within {timeout}s: {endpoints}"
+            )
+        if pending:
+            time.sleep(0.05)
+
+
 def connect(
     address: str, port: int, *, ipv6: bool = False, ip_options: bool = False
 ) -> bool:
@@ -215,7 +276,11 @@ def main() -> int:
             start_server(SERVER, socket.AF_INET, "198.51.100.2", FORWARD_PORT),
             start_server(SERVER, socket.AF_INET6, "fd00:2::2", IPV6_PORT),
         ])
-        time.sleep(0.5)
+        wait_for_listeners([
+            (servers[0], socket.AF_INET, "192.0.2.1", INPUT_PORT),
+            (servers[1], socket.AF_INET, "198.51.100.2", FORWARD_PORT),
+            (servers[2], socket.AF_INET6, "fd00:2::2", IPV6_PORT),
+        ])
 
         # Ordinary IPv4 TCP must continue to work on both paths.
         if not connect("192.0.2.1", INPUT_PORT):
