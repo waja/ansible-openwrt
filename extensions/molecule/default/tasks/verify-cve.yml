@@ -146,6 +146,7 @@
 
 - name: Verify failed installation left no owned configuration
   ansible.builtin.raw: |
+    set -e
     if uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1; then
       echo "Mitigation UCI include remains after failed installation"
       exit 1
