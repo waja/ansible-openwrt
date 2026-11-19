@@ -11,6 +11,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parents[1] / "files"))
 
 from extract_tar_archive import (
+    BoundedTarInfo,
     _expanded_member_size,
     extract_archive,
 )
@@ -197,6 +198,30 @@ class ExtractArchiveTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(ValueError, "Archive metadata"):
                 extract_archive(self.archive, self.destination)
+
+    def test_rejects_sparse_map_over_cumulative_metadata_limit(self):
+        archive = mock.Mock()
+        archive.fileobj = io.BytesIO(b"1\n0\n1\n" + b"\0" * 506)
+        archive._metadata_size = 512
+        member = tarfile.TarInfo("agent-main/sparse")
+        with mock.patch(
+            "extract_tar_archive.MAX_TOTAL_METADATA_SIZE", 512
+        ):
+            with self.assertRaisesRegex(ValueError, "metadata"):
+                BoundedTarInfo()._proc_gnusparse_10(member, archive, {})
+        self.assertEqual(archive.fileobj.tell(), 0)
+
+    def test_counts_sparse_map_towards_cumulative_metadata_limit(self):
+        archive = mock.Mock()
+        archive.fileobj = io.BytesIO(b"1\n0\n1\n" + b"\0" * 506)
+        archive._metadata_size = 512
+        member = tarfile.TarInfo("agent-main/sparse")
+        with mock.patch(
+            "extract_tar_archive.MAX_TOTAL_METADATA_SIZE", 1024
+        ):
+            BoundedTarInfo()._proc_gnusparse_10(member, archive, {})
+        self.assertEqual(archive._metadata_size, 1024)
+        self.assertEqual(member.sparse, [(0, 1)])
 
     def test_counts_sparse_logical_size_towards_expansion_limit(self):
         member = tarfile.TarInfo("agent-main/sparse")
