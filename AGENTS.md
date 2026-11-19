@@ -214,6 +214,21 @@ other contributors or its history is already in use.
 - Keep shared interfaces narrowly scoped to demonstrated requirements.
   Avoid speculative options and configurability.
 
+### Failure handling and recovery
+
+- Define the guarantees a change must provide before designing recovery or
+  rollback logic.
+- Do not attempt to provide atomic transactions across independent state
+  stores unless the underlying systems explicitly support them.
+- Prefer forward operations with clear ownership and validation over custom
+  snapshot, rollback, and recovery frameworks.
+- On failure, restore only state owned by the operation and only when the
+  previous state can be restored safely.
+- Do not add defensive handling for hypothetical failure combinations
+  without a demonstrated risk or requirement.
+- If complete recovery cannot be guaranteed, fail clearly, preserve
+  diagnostics, and leave the system in a documented, repairable state.
+
 ### Reference project research
 
 For every new implementation PR, review `docs/reference-projects.md`
