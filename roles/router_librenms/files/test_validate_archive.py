@@ -206,7 +206,7 @@ class ArchiveValidationTests(unittest.TestCase):
             archive.addfile(member, io.BytesIO(b"x"))
 
         archive_data = bytearray(gzip.decompress(self.archive_path.read_bytes()))
-        record = archive_data.index(b"comment=x\\n")
+        record = archive_data.index(b"comment=x\n")
         archive_data[record - 3 : record - 1] = b"00"
         self.archive_path.write_bytes(gzip.compress(archive_data))
 
