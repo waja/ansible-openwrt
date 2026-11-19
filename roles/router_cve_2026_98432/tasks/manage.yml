@@ -228,6 +228,25 @@
       - router_cve_2026_98432_include_export.stdout | trim != ''
   when: router_cve_2026_98432_include.result | default('') == 'include'
 
+- name: Refuse updating an enabled include when runtime inspection is inconclusive
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (
+          router_cve_2026_98432_state == 'present'
+          and not (router_cve_2026_98432_apply_runtime_changes | bool)
+          and not (router_cve_2026_98432_runtime_table_probe_conclusive | bool)
+          and router_cve_2026_98432_include.result | default('') == 'include'
+          and (
+            router_cve_2026_98432_include_options.results[3].result
+            | default('1', true)
+          ) != '0'
+        )
+    fail_msg: >-
+      The existing CVE include is enabled but the live nftables table could not
+      be inspected. Refusing to replace its ruleset; retry with runtime
+      inspection enabled.
+
 - name: Refuse removal when runtime changes are disabled
   ansible.builtin.assert:
     that:
