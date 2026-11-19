@@ -105,6 +105,7 @@
 
 - name: Prepare an absent mitigation state for failed installation
   ansible.builtin.raw: |
+    set -e
     uci -q delete firewall.ansible_cve_2026_98432 || true
     uci commit firewall
     rm -f /etc/cve_2026_98432.nft
