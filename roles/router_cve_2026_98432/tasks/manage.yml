@@ -440,6 +440,7 @@
         uci -q delete firewall.ansible_cve_2026_98432 &&
         uci import firewall < /tmp/ansible-cve-2026-98432-previous.uci &&
         uci commit firewall
+      changed_when: true
       when: router_cve_2026_98432_include.result | default('') == 'include'
 
     - name: Remove the temporary UCI recovery file
@@ -497,6 +498,7 @@
       ansible.builtin.raw: |
         nft delete table ip cve_2026_98432 2>/dev/null || true
         nft -f /tmp/ansible-cve-2026-98432-previous.nft
+      changed_when: true
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
