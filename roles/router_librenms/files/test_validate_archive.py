@@ -161,6 +161,21 @@ class ArchiveValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveValidationError, "second zero"):
             validate_archive(self.archive_path)
 
+    def test_rejects_global_pax_path_override(self):
+        with tarfile.open(
+            self.archive_path,
+            "w:gz",
+            format=tarfile.PAX_FORMAT,
+            pax_headers={"path": "overridden-root"},
+        ) as archive:
+            for name in REQUIRED:
+                member = tarfile.TarInfo("source-root/" + name)
+                member.size = 1
+                archive.addfile(member, io.BytesIO(b"x"))
+
+        with self.assertRaisesRegex(ArchiveValidationError, "Global PAX"):
+            validate_archive(self.archive_path)
+
     def test_rejects_invalid_header_after_required_files(self):
         entries = [(name, tarfile.REGTYPE, b"x") for name in REQUIRED]
         entries.append(("extra", tarfile.REGTYPE, b"x"))
