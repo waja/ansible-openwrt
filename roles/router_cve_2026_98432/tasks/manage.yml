@@ -186,11 +186,14 @@
         )
       - >-
         router_cve_2026_98432_include.result != 'include'
-        or router_cve_2026_98432_active_table.rc | default(1) != 0
+        or router_cve_2026_98432_include_options.results[3].result == '0'
         or (
-          router_cve_2026_98432_include_options.results[3].result != '0'
+          router_cve_2026_98432_active_table.rc == 0
           and router_cve_2026_98432_active_table.stdout is search(
             router_cve_2026_98432_rule_pattern
+          )
+          and router_cve_2026_98432_active_table.stdout is not search(
+            'flags.*dormant'
           )
         )
       - >-
