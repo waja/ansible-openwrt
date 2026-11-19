@@ -169,8 +169,9 @@
       ansible.builtin.set_fact:
         router_cve_2026_98432_remove_validation_rollback: >-
           {{
-            ansible_failed_task.name
-            == 'Report the failed mitigation update'
+            ansible_failed_task.name == 'Report the original failed mitigation update'
+            and 'Validate the resulting fw4 ruleset'
+            in ansible_failed_result.msg
           }}
 
 - name: Assert failed removal restored the previous state
