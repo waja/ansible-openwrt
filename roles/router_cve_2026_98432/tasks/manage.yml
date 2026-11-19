@@ -540,7 +540,7 @@
       community.openwrt.lineinfile:
         path: /etc/sysupgrade.conf
         line: /etc/cve_2026_98432.nft
-        regexp: '^/etc/cve_2026_98432\\.nft$'
+        regexp: '^/etc/cve_2026_98432\.nft$'
         state: >-
           {{
             'present'
