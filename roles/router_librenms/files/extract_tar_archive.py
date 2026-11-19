@@ -36,9 +36,14 @@ class BoundedTarInfo(tarfile.TarInfo):
 
     def _proc_gnusparse_10(self, member, archive, pax_headers):
         """Bound the sparse map read from the archive data stream."""
-        metadata_size = 0
+        metadata_size = tarfile.BLOCKSIZE
+        total = getattr(archive, "_metadata_size", 0) + metadata_size
+        if (
+            metadata_size > MAX_MEMBER_METADATA_SIZE
+            or total > MAX_TOTAL_METADATA_SIZE
+        ):
+            raise ValueError("Archive metadata exceeds maximum size")
         buffer = archive.fileobj.read(tarfile.BLOCKSIZE)
-        metadata_size += len(buffer)
         fields, buffer = buffer.split(b"\n", 1)
         fields = int(fields)
         sparse = []
