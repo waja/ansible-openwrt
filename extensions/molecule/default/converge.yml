@@ -1549,3 +1549,8 @@
         that:
           - router_cve_2026_98432_sysupgrade_count.stdout | int == 1
           - router_cve_2026_98432_installed_sysupgrade.rc == 0
+
+    - name: Remove the temporary expected CVE ruleset
+      ansible.builtin.file:
+        path: /tmp/ansible-cve-2026-98432-expected.nft
+        state: absent
