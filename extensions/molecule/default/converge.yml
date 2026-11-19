@@ -1508,39 +1508,34 @@
         that:
           - router_cve_2026_98432_staged_changes.stdout | trim == ''
 
-    - name: Temporarily enable the staged include for fw4 rendering
-      community.openwrt.uci:
-        command: set
-        key: firewall.ansible_cve_2026_98432.enabled
-        value: '1'
-        autocommit: true
+    - name: Validate fw4 rendering with a temporary include enable
+      block:
+        - name: Temporarily enable the staged include for fw4 rendering
+          community.openwrt.uci:
+            command: set
+            key: firewall.ansible_cve_2026_98432.enabled
+            value: '1'
+            autocommit: true
 
-      when: not router_cve_2026_98432_fixture_marker.stat.exists
+        - name: Render the staged firewall ruleset
+          community.openwrt.command:
+            cmd: fw4 print
+          register: router_cve_2026_98432_fw4_print
+          changed_when: false
 
-    - name: Render the staged firewall ruleset
-      community.openwrt.command:
-        cmd: fw4 print
-      register: router_cve_2026_98432_fw4_print
-      changed_when: false
-
-      when: not router_cve_2026_98432_fixture_marker.stat.exists
-
-    - name: Assert fw4 includes the standalone ruleset at ruleset scope
-      ansible.builtin.assert:
-        that:
-          - >-
-            router_cve_2026_98432_fw4_print.stdout
-            is search('include "/etc/cve_2026_98432\\.nft"')
-
-      when: not router_cve_2026_98432_fixture_marker.stat.exists
-
-    - name: Restore the staged include to its disabled state
-      community.openwrt.uci:
-        command: set
-        key: firewall.ansible_cve_2026_98432.enabled
-        value: '0'
-        autocommit: true
-
+        - name: Assert fw4 includes the standalone ruleset at ruleset scope
+          ansible.builtin.assert:
+            that:
+              - >-
+                router_cve_2026_98432_fw4_print.stdout
+                is search('include "/etc/cve_2026_98432\\.nft"')
+      always:
+        - name: Restore the staged include to its disabled state
+          community.openwrt.uci:
+            command: set
+            key: firewall.ansible_cve_2026_98432.enabled
+            value: '0'
+            autocommit: true
       when: not router_cve_2026_98432_fixture_marker.stat.exists
 
     - name: Read the installed CVE mitigation ruleset
