@@ -182,7 +182,9 @@ class ExtractArchiveTests(unittest.TestCase):
                 extract_archive(self.archive, self.destination)
 
     def test_rejects_cumulative_pax_metadata(self):
-        with tarfile.open(self.archive, "w:gz", format=tarfile.PAX_FORMAT) as archive:
+        with tarfile.open(
+            self.archive, "w:gz", format=tarfile.PAX_FORMAT
+        ) as archive:
             for name in ("agent-main/one", "agent-main/two"):
                 member = tarfile.TarInfo(name)
                 member.pax_headers = {"comment": "x" * 300}
