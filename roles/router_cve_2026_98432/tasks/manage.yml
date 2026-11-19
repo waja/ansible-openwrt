@@ -530,7 +530,7 @@
           - router_cve_2026_98432_restored_table.rc == 0
           - >-
             router_cve_2026_98432_restored_table.stdout
-            is search(router_cve_2026_98432_rule_pattern)
+            is search('(?s)table ip cve_2026_98432 \\{')
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
