@@ -1425,14 +1425,8 @@
             - /tmp/ansible-molecule-owut
             - /tmp/ansible-molecule-owut-mode
 
-    - name: Establish the owned CVE mitigation before testing sysupgrade duplicates
-      ansible.builtin.include_role:
-        name: router_cve_2026_98432
-      vars:
-        router_cve_2026_98432_state: present
-        router_cve_2026_98432_apply_runtime_changes: false
-
-    - name: Install CVE mitigation before testing sysupgrade duplicate handling
+    - name: >-
+        Install CVE mitigation before testing sysupgrade duplicate handling
       ansible.builtin.include_role:
         name: router_cve_2026_98432
       vars:
@@ -1536,15 +1530,19 @@
 
     - name: Copy the shipped CVE ruleset for exact comparison
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../../roles/router_cve_2026_98432/files/mitigation.nft"
+        src: >-
+          {{ playbook_dir }}/../../../roles/router_cve_2026_98432/files/mitigation.nft
         dest: /tmp/ansible-cve-2026-98432-expected.nft
         mode: '0600'
 
     - name: Verify the installed ruleset matches the shipped asset
-      ansible.builtin.raw: cmp -s /etc/cve_2026_98432.nft /tmp/ansible-cve-2026-98432-expected.nft
+      ansible.builtin.raw: >-
+        cmp -s /etc/cve_2026_98432.nft
+        /tmp/ansible-cve-2026-98432-expected.nft
       changed_when: false
 
-    - name: Verify the CVE sysupgrade entry is unique and unrelated entries remain
+    - name: >-
+        Verify the CVE sysupgrade entry is unique and unrelated entries remain
       ansible.builtin.assert:
         that:
           - router_cve_2026_98432_sysupgrade_count.stdout | int == 1
