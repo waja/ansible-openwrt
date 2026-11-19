@@ -77,6 +77,19 @@
     chmod 0755 /tmp/ansible-cve-2026-98432-no-table
   changed_when: true
 
+- name: Create a failing fw4 check that adds an unrelated sysupgrade entry
+  ansible.builtin.raw: |
+    cat > /tmp/ansible-cve-2026-98432-failing-fw4-check <<'EOF'
+    #!/bin/sh
+    entry=/etc/molecule-added-during-rollback.conf
+    if ! grep -Fxq "$entry" /etc/sysupgrade.conf; then
+      printf '%s\\n' "$entry" >> /etc/sysupgrade.conf
+    fi
+    exit 1
+    EOF
+    chmod 0755 /tmp/ansible-cve-2026-98432-failing-fw4-check
+  changed_when: true
+
 - name: Prepare an absent mitigation state for failed installation
   ansible.builtin.raw: |
     uci -q delete firewall.ansible_cve_2026_98432 || true
@@ -97,7 +110,7 @@
         router_cve_2026_98432_apply_runtime_changes: true
         router_cve_2026_98432_runtime_table_probe_command: >-
           /tmp/ansible-cve-2026-98432-no-table
-        router_cve_2026_98432_fw4_check_command: /bin/false
+        router_cve_2026_98432_fw4_check_command: /tmp/ansible-cve-2026-98432-failing-fw4-check
   rescue:
     - name: Record failed installation rollback
       ansible.builtin.set_fact:
@@ -133,6 +146,7 @@
       echo "Mitigation sysupgrade entry remains after failed installation"
       exit 1
     fi
+    grep -Fxq /etc/molecule-added-during-rollback.conf /etc/sysupgrade.conf
   changed_when: false
 
 - name: Stage mitigation again before testing failed removal
@@ -158,6 +172,7 @@
     sha256sum /etc/cve_2026_98432.nft
     grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
     grep -Fx /etc/molecule-preserve.conf /etc/sysupgrade.conf
+    grep -Fx /etc/molecule-added-during-rollback.conf /etc/sysupgrade.conf
   register: router_cve_2026_98432_before_failed_removal
   changed_when: false
 
@@ -171,7 +186,7 @@
         router_cve_2026_98432_apply_runtime_changes: true
         router_cve_2026_98432_runtime_table_probe_command: >-
           /tmp/ansible-cve-2026-98432-no-table
-        router_cve_2026_98432_fw4_check_command: /bin/false
+        router_cve_2026_98432_fw4_check_command: /tmp/ansible-cve-2026-98432-failing-fw4-check
   rescue:
     - name: Record failed removal rollback
       ansible.builtin.set_fact:
@@ -199,6 +214,7 @@
     sha256sum /etc/cve_2026_98432.nft
     grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
     grep -Fx /etc/molecule-preserve.conf /etc/sysupgrade.conf
+    grep -Fx /etc/molecule-added-during-rollback.conf /etc/sysupgrade.conf
   register: router_cve_2026_98432_after_failed_removal
   changed_when: false
 
@@ -209,7 +225,10 @@
         router_cve_2026_98432_after_failed_removal.stdout
         == router_cve_2026_98432_before_failed_removal.stdout
 
-- name: Remove the fake nft table probe
+- name: Remove temporary CVE verification probes
   community.openwrt.file:
-    path: /tmp/ansible-cve-2026-98432-no-table
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /tmp/ansible-cve-2026-98432-no-table
+    - /tmp/ansible-cve-2026-98432-failing-fw4-check
