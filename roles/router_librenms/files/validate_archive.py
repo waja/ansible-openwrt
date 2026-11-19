@@ -27,7 +27,18 @@ class ArchiveValidationError(ValueError):
 
 
 class StrictTarInfo(tarfile.TarInfo):
-    """Reject malformed headers instead of letting tarfile stop iteration."""
+    """Reject malformed headers and unsafe global PAX overrides."""
+
+    def _proc_pax(self, archive):
+        member = super()._proc_pax(archive)
+        if self.type == tarfile.XGLTYPE and {
+            "path",
+            "linkpath",
+        }.intersection(archive.pax_headers):
+            raise ArchiveValidationError(
+                "Global PAX headers must not override member paths or links"
+            )
+        return member
 
     @classmethod
     def frombuf(cls, buf, encoding, errors):
@@ -48,6 +59,7 @@ class StrictTarInfo(tarfile.TarInfo):
             raise ArchiveValidationError(
                 f"Invalid tar header: {error}"
             ) from error
+
 
 class BoundedReader:
     """Limit bytes read from a decompressed archive stream."""
