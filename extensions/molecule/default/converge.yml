@@ -1444,7 +1444,7 @@
       register: router_cve_2026_98432_test_include
       changed_when: false
 
-    - name: Assert CVE mitigation UCI include is enabled at ruleset scope
+    - name: Assert CVE mitigation UCI include is staged but disabled
       ansible.builtin.assert:
         that:
           - router_cve_2026_98432_test_include.results[0].result == 'nftables'
