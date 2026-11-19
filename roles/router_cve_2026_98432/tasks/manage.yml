@@ -615,7 +615,8 @@
             router_cve_2026_98432_uci_remove_new.failed
             | default(false) == false
           - >-
-            router_cve_2026_98432_ruleset_restore.failed | default(false) == false
+            router_cve_2026_98432_ruleset_restore.failed
+            | default(false) == false
           - >-
             router_cve_2026_98432_ruleset_remove_new.failed
             | default(false) == false
