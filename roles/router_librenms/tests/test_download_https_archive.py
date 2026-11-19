@@ -93,6 +93,20 @@ class DownloadArchiveTests(unittest.TestCase):
                 self.download(temporary, FakeResponse([b"ab", b"cd"], "2"))
             self.assertEqual(list(Path(temporary).iterdir()), [])
 
+    def test_enforces_total_download_deadline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            response = FakeResponse([b"a", b"b"])
+            with mock.patch.object(
+                download_https_archive, "DOWNLOAD_TIMEOUT", 10
+            ), mock.patch.object(
+                download_https_archive.time,
+                "monotonic",
+                side_effect=[0, 0, 11],
+            ):
+                with self.assertRaisesRegex(TimeoutError, "timed out"):
+                    self.download(temporary, response)
+            self.assertEqual(list(Path(temporary).iterdir()), [])
+
     def test_rejects_download_larger_than_limit_without_content_length(self):
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, "maximum size"):
