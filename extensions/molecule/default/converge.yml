@@ -1503,6 +1503,7 @@
           - router_cve_2026_98432_staged_changes.stdout | trim == ''
 
     - name: Validate fw4 rendering with a temporary include enable
+      when: not router_cve_2026_98432_fixture_marker.stat.exists
       block:
         - name: Temporarily enable the staged include for fw4 rendering
           community.openwrt.uci:
@@ -1530,12 +1531,12 @@
             key: firewall.ansible_cve_2026_98432.enabled
             value: '0'
             autocommit: true
-      when: not router_cve_2026_98432_fixture_marker.stat.exists
-
+ 
     - name: Mark the duplicate-entry fixture as seeded
       ansible.builtin.file:
         path: /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
         state: touch
+        mode: '0600'
       when: not router_cve_2026_98432_fixture_marker.stat.exists
 
     - name: Read the installed CVE mitigation ruleset
