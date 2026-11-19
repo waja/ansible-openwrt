@@ -1502,6 +1502,7 @@
 
     - name: Verify the staged include is present in the persistent firewall file
       ansible.builtin.raw: |
+        set -e
         grep -Fq "config include 'ansible_cve_2026_98432'" /etc/config/firewall
         grep -Fq "option type 'nftables'" /etc/config/firewall
         grep -Fq "option path '/etc/cve_2026_98432.nft'" /etc/config/firewall
