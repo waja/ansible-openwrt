@@ -1,3 +1,4 @@
+---
 - name: Reject an omitted CVE mitigation state
   block:
     - name: Include CVE mitigation role without an explicit state
