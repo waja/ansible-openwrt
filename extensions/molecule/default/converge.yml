@@ -1443,7 +1443,8 @@
       vars:
         router_cve_2026_98432_state: present
         router_cve_2026_98432_apply_runtime_changes: false
-        router_cve_2026_98432_runtime_table_probe_command: /tmp/ansible-cve-2026-98432-no-table
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-no-table
 
     - name: Check whether the duplicate-entry fixture has already run
       ansible.builtin.stat:
@@ -1469,7 +1470,8 @@
       vars:
         router_cve_2026_98432_state: present
         router_cve_2026_98432_apply_runtime_changes: false
-        router_cve_2026_98432_runtime_table_probe_command: /tmp/ansible-cve-2026-98432-no-table
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-no-table
 
     - name: Read standalone CVE mitigation UCI include options
       community.openwrt.uci:
