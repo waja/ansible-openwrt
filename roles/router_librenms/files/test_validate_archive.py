@@ -161,6 +161,58 @@ class ArchiveValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveValidationError, "second zero"):
             validate_archive(self.archive_path)
 
+    def test_accepts_valid_local_pax_metadata(self):
+        with tarfile.open(
+            self.archive_path, "w:gz", format=tarfile.PAX_FORMAT
+        ) as archive:
+            for name in REQUIRED:
+                member = tarfile.TarInfo("source-root/" + name)
+                member.size = 1
+                archive.addfile(member, io.BytesIO(b"x"))
+            member = tarfile.TarInfo("source-root/extra")
+            member.size = 1
+            member.pax_headers = {"comment": "valid metadata"}
+            archive.addfile(member, io.BytesIO(b"x"))
+
+        validate_archive(self.archive_path)
+
+    def test_rejects_local_pax_size_override(self):
+        with tarfile.open(
+            self.archive_path, "w:gz", format=tarfile.PAX_FORMAT
+        ) as archive:
+            for name in REQUIRED:
+                member = tarfile.TarInfo("source-root/" + name)
+                member.size = 1
+                archive.addfile(member, io.BytesIO(b"x"))
+            member = tarfile.TarInfo("source-root/extra")
+            member.size = 0
+            member.pax_headers = {"size": "512"}
+            archive.addfile(member)
+
+        with self.assertRaisesRegex(ArchiveValidationError, "PAX size"):
+            validate_archive(self.archive_path)
+
+    def test_rejects_malformed_pax_metadata_after_required_files(self):
+        with tarfile.open(
+            self.archive_path, "w:gz", format=tarfile.PAX_FORMAT
+        ) as archive:
+            for name in REQUIRED:
+                member = tarfile.TarInfo("source-root/" + name)
+                member.size = 1
+                archive.addfile(member, io.BytesIO(b"x"))
+            member = tarfile.TarInfo("source-root/extra")
+            member.size = 1
+            member.pax_headers = {"comment": "x"}
+            archive.addfile(member, io.BytesIO(b"x"))
+
+        archive_data = bytearray(gzip.decompress(self.archive_path.read_bytes()))
+        record = archive_data.index(b"comment=x\\n")
+        archive_data[record - 3 : record - 1] = b"00"
+        self.archive_path.write_bytes(gzip.compress(archive_data))
+
+        with self.assertRaisesRegex(ArchiveValidationError, "Invalid PAX"):
+            validate_archive(self.archive_path)
+
     def test_rejects_global_pax_path_override(self):
         with tarfile.open(
             self.archive_path,
