@@ -140,6 +140,8 @@ def _validate_sparse_extents(member):
 
 def _validate_member(member, roots):
     """Validate a member type and path and record its top-level directory."""
+    if member.islnk():
+        raise ValueError(f"Hard links are not supported: {member.name!r}")
     if not (member.isfile() or member.isdir() or member.issym()):
         raise ValueError(
             f"Unsupported archive member type: {member.type!r}"
