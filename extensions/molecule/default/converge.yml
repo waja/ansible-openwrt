@@ -1461,7 +1461,9 @@
           - >-
             router_cve_2026_98432_test_include.results[1].result
             == '/etc/cve_2026_98432.nft'
-          - router_cve_2026_98432_test_include.results[2].result == 'ruleset-post'
+          - >-
+            router_cve_2026_98432_test_include.results[2].result
+            == 'ruleset-post'
           - router_cve_2026_98432_test_include.results[3].result == '0'
 
     - name: Temporarily enable the staged include for fw4 rendering
