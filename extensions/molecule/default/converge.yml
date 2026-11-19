@@ -1425,6 +1425,17 @@
             - /tmp/ansible-molecule-owut
             - /tmp/ansible-molecule-owut-mode
 
+    - name: Provide a conclusive absent-table probe for the staged CVE test
+      community.openwrt.copy:
+        content: |
+          #!/bin/sh
+          echo "nft: No such file or directory" >&2
+          exit 1
+        dest: /tmp/ansible-cve-2026-98432-no-table
+        owner: root
+        group: root
+        mode: '0755'
+
     - name: >-
         Install CVE mitigation before testing sysupgrade duplicate handling
       ansible.builtin.include_role:
@@ -1432,6 +1443,7 @@
       vars:
         router_cve_2026_98432_state: present
         router_cve_2026_98432_apply_runtime_changes: false
+        router_cve_2026_98432_runtime_table_probe_command: /tmp/ansible-cve-2026-98432-no-table
 
     - name: Check whether the duplicate-entry fixture has already run
       ansible.builtin.stat:
@@ -1457,6 +1469,7 @@
       vars:
         router_cve_2026_98432_state: present
         router_cve_2026_98432_apply_runtime_changes: false
+        router_cve_2026_98432_runtime_table_probe_command: /tmp/ansible-cve-2026-98432-no-table
 
     - name: Read standalone CVE mitigation UCI include options
       community.openwrt.uci:
