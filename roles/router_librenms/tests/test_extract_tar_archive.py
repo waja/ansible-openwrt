@@ -10,7 +10,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "files"))
 
-from extract_tar_archive import extract_archive
+from extract_tar_archive import (\n    BoundedTarInfo,\n    _expanded_member_size,\n    extract_archive,\n)
 
 
 class ExtractArchiveTests(unittest.TestCase):
@@ -163,6 +163,39 @@ class ExtractArchiveTests(unittest.TestCase):
         with mock.patch("extract_tar_archive.MAX_EXPANDED_SIZE", 1):
             with self.assertRaisesRegex(ValueError, "expanded size"):
                 extract_archive(self.archive, self.destination)
+
+    def test_rejects_oversized_pax_metadata(self):
+        with tarfile.open(self.archive, "w:gz", format=tarfile.PAX_FORMAT) as archive:
+            member = tarfile.TarInfo("agent-main/file")
+            member.pax_headers = {"comment": "x" * 1024}
+            member.size = 1
+            archive.addfile(member, io.BytesIO(b"x"))
+        with mock.patch(
+            "extract_tar_archive.MAX_MEMBER_METADATA_SIZE", 512
+        ):
+            with self.assertRaisesRegex(ValueError, "metadata exceeds"):
+                extract_archive(self.archive, self.destination)
+
+    def test_rejects_cumulative_pax_metadata(self):
+        with tarfile.open(self.archive, "w:gz", format=tarfile.PAX_FORMAT) as archive:
+            for name in ("agent-main/one", "agent-main/two"):
+                member = tarfile.TarInfo(name)
+                member.pax_headers = {"comment": "x" * 300}
+                member.size = 1
+                archive.addfile(member, io.BytesIO(b"x"))
+        with mock.patch(
+            "extract_tar_archive.MAX_MEMBER_METADATA_SIZE", 512
+        ), mock.patch(
+            "extract_tar_archive.MAX_TOTAL_METADATA_SIZE", 512
+        ):
+            with self.assertRaisesRegex(ValueError, "Archive metadata"):
+                extract_archive(self.archive, self.destination)
+
+    def test_counts_sparse_logical_size_towards_expansion_limit(self):
+        member = tarfile.TarInfo("agent-main/sparse")
+        member.size = 1
+        member.pax_headers = {"GNU.sparse.realsize": "100"}
+        self.assertEqual(_expanded_member_size(member), 100)
 
     def test_requires_empty_destination(self):
         (self.destination / "existing").touch()
