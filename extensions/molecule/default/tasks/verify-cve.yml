@@ -180,8 +180,14 @@
   ansible.builtin.raw: |
     set -e
     test -f /etc/cve_2026_98432.nft
-    ! uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1
-    ! grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+    if uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1; then
+      echo "Mitigation UCI include unexpectedly exists"
+      exit 1
+    fi
+    if grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf; then
+      echo "Mitigation sysupgrade entry unexpectedly exists"
+      exit 1
+    fi
     test -z "$(uci changes firewall)"
   changed_when: false
 
