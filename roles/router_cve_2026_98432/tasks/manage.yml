@@ -545,7 +545,7 @@
     - name: Restore the previously active mitigation table atomically
       ansible.builtin.raw: |
         {
-          printf '%s\n' 'table ip cve_2026_98432' 'delete table ip cve_2026_98432'
+          printf '%s\n' 'add table ip cve_2026_98432' 'delete table ip cve_2026_98432'
           cat /tmp/ansible-cve-2026-98432-previous.nft
         } > /tmp/ansible-cve-2026-98432-restore.nft &&
         nft -f /tmp/ansible-cve-2026-98432-restore.nft
@@ -559,7 +559,7 @@
 
     - name: Remove the table created by the failed installation atomically
       ansible.builtin.raw: |
-        printf '%s\n' 'table ip cve_2026_98432' 'delete table ip cve_2026_98432' |
+        printf '%s\n' 'add table ip cve_2026_98432' 'delete table ip cve_2026_98432' |
         nft -f -
       register: router_cve_2026_98432_table_remove_new
       changed_when: true
