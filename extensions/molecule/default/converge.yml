@@ -1447,9 +1447,11 @@
           /tmp/ansible-cve-2026-98432-no-table
 
     - name: Check whether the duplicate-entry fixture has already run
-      ansible.builtin.stat:
-        path: /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
+      ansible.builtin.raw: >-
+        test -f /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
       register: router_cve_2026_98432_fixture_marker
+      changed_when: false
+      failed_when: false
 
 
     - name: Seed duplicate CVE sysupgrade entries and an unrelated entry
@@ -1461,7 +1463,7 @@
           /etc/cve_2026_98432.nft \
           /etc/molecule-preserve.conf >> /etc/sysupgrade.conf
       changed_when: true
-      when: not router_cve_2026_98432_fixture_marker.stat.exists
+      when: router_cve_2026_98432_fixture_marker.rc != 0
 
 
     - name: Configure CVE mitigation without changing the running firewall
@@ -1518,7 +1520,7 @@
           - router_cve_2026_98432_staged_changes.stdout | trim == ''
 
     - name: Validate fw4 rendering with a temporary include enable
-      when: not router_cve_2026_98432_fixture_marker.stat.exists
+      when: router_cve_2026_98432_fixture_marker.rc != 0
       block:
         - name: Temporarily enable the staged include for fw4 rendering
           community.openwrt.uci:
@@ -1548,11 +1550,11 @@
             autocommit: true
 
     - name: Mark the duplicate-entry fixture as seeded
-      ansible.builtin.file:
-        path: /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
-        state: touch
-        mode: '0600'
-      when: not router_cve_2026_98432_fixture_marker.stat.exists
+      ansible.builtin.raw: >-
+        touch /tmp/ansible-molecule-cve-2026-98432-fixture-seeded &&
+        chmod 0600 /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
+      changed_when: true
+      when: router_cve_2026_98432_fixture_marker.rc != 0
 
     - name: Read the installed CVE mitigation ruleset
       community.openwrt.slurp:
