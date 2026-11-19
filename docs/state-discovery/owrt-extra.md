@@ -46,14 +46,17 @@ comparison cannot identify later manual changes to either setting; review
 the recorded values separately if either setting is relevant.
 
 The script mounts a temporary overlay on `/rom`, runs
-`config_generate` and the remaining factory `uci-defaults` scripts
-in that reference, and compares the result with the live system. This is
+`config_generate` and the applicable factory `uci-defaults` scripts
+in that reference, and compares the result with the live system.
+The hardware-specific `70-rootpt-resize` and `80-rootfs-resize`
+defaults are retained in the reference but skipped: they can modify
+block devices and reboot the router. This is
 a best-effort reconstruction, not a pristine copy of the router's original
 factory state. Device-specific initialization and unavailable hardware can
-affect the result. Errors are written to `/tmp/owrt-diff/chroot.log`. The script
-checks the exit status of `config_generate`, each `uci-defaults`
-script, and `uci commit`; failures mark the reference as incomplete even
-if later commands succeed.
+affect the result. Errors are written to `/tmp/owrt-diff/chroot.log`. The script checks the exit status of `config_generate`, each executed
+`uci-defaults` script, and `uci commit`; failures mark the reference
+as incomplete even if later commands succeed. The two resize defaults
+listed above are not executed and therefore have no exit-status check.
 
 ## Run the discovery
 
