@@ -122,6 +122,11 @@
       echo "Mitigation UCI include remains after failed installation"
       exit 1
     fi
+    if grep -Fq "config include 'ansible_cve_2026_98432'" /etc/config/firewall; then
+      echo "Persistent mitigation UCI include remains after failed installation"
+      exit 1
+    fi
+    test -z "$(uci changes firewall)" || exit 1
     test ! -e /etc/cve_2026_98432.nft || exit 1
     if grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf; then
       echo "Mitigation sysupgrade entry remains after failed installation"
@@ -146,6 +151,7 @@
 - name: Capture complete state before failed removal
   ansible.builtin.raw: |
     uci show firewall.ansible_cve_2026_98432
+    grep -F "config include 'ansible_cve_2026_98432'" /etc/config/firewall
     uci show firewall | grep -v ansible_cve_2026_98432
     uci changes firewall
     sha256sum /etc/cve_2026_98432.nft
@@ -186,6 +192,7 @@
 - name: Verify failed removal preserved UCI, ruleset, and sysupgrade state
   ansible.builtin.raw: |
     uci show firewall.ansible_cve_2026_98432
+    grep -F "config include 'ansible_cve_2026_98432'" /etc/config/firewall
     uci show firewall | grep -v ansible_cve_2026_98432
     uci changes firewall
     sha256sum /etc/cve_2026_98432.nft
