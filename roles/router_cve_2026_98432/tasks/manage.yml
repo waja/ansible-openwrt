@@ -126,7 +126,7 @@
 - name: Define the expected active nftables rule
   ansible.builtin.set_fact:
     router_cve_2026_98432_rule_pattern: >-
-      (?s)chain pre \\{[^}]*type filter hook prerouting priority (?:raw )?-310;
+      (?s)chain pre \{[^}]*type filter hook prerouting priority (?:raw )?-310;
       [^}]*ip protocol tcp ip hdrlength 6-15 counter
       (?: packets [0-9]+ bytes [0-9]+)? drop
 
@@ -224,7 +224,32 @@
       community.openwrt.lineinfile:
         path: /etc/sysupgrade.conf
         line: /etc/cve_2026_98432.nft
-        regexp: '^/etc/cve_2026_98432\.nft
+        regexp: '^/etc/cve_2026_98432\.nft$'
+        create: true
+        state: present
+      register: router_cve_2026_98432_sysupgrade_change
+      when: router_cve_2026_98432_state == 'present'
+
+    - name: Count owned sysupgrade entries
+      community.openwrt.command:
+        cmd: grep -Fxc /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+      register: router_cve_2026_98432_sysupgrade_entry_count
+      changed_when: false
+      failed_when: false
+      when: router_cve_2026_98432_state == 'present'
+
+    - name: Collapse duplicate owned sysupgrade entries
+      community.openwrt.command:
+        cmd: >-
+          awk '$0 != "/etc/cve_2026_98432.nft" || !seen++'
+          /etc/sysupgrade.conf > /tmp/ansible-cve-2026-98432-sysupgrade.conf &&
+          cat /tmp/ansible-cve-2026-98432-sysupgrade.conf
+          > /etc/sysupgrade.conf &&
+          rm -f /tmp/ansible-cve-2026-98432-sysupgrade.conf
+      when:
+        - router_cve_2026_98432_state == 'present'
+        - router_cve_2026_98432_sysupgrade_entry_count.stdout | int > 1
+
     - name: Remove the fw4 include
       community.openwrt.uci:
         command: absent
