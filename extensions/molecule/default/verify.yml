@@ -2352,6 +2352,13 @@
         router_cve_2026_98432_state: present
         router_cve_2026_98432_apply_runtime_changes: false
 
+    - name: Add an extra owned UCI include option before failed removal
+      community.openwrt.uci:
+        command: set
+        key: firewall.ansible_cve_2026_98432.name
+        value: Molecule preserved include option
+        autocommit: true
+
     - name: Capture complete state before failed removal
       ansible.builtin.raw: |
         uci show firewall.ansible_cve_2026_98432
