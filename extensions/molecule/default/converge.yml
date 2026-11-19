@@ -1561,7 +1561,10 @@
     - name: Copy the shipped CVE ruleset for exact comparison
       community.openwrt.copy:
         src: >-
-          {{ playbook_dir }}/../../../roles/router_cve_2026_98432/files/mitigation.nft
+          {{
+            playbook_dir ~ '/../../../roles/'
+            ~ 'router_cve_2026_98432/files/mitigation.nft'
+          }}
         dest: /tmp/ansible-cve-2026-98432-expected.nft
         owner: root
         group: root
