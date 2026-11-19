@@ -537,6 +537,16 @@
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
         - router_cve_2026_98432_active_table.rc == 0
 
+    - name: Read nftables tables after failed installation recovery
+      community.openwrt.command:
+        cmd: nft list tables
+      register: router_cve_2026_98432_tables_after_recovery
+      changed_when: false
+      when:
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
+        - router_cve_2026_98432_active_table.rc != 0
+
     - name: Verify the mitigation table is absent after failed installation
       ansible.builtin.assert:
         that:
