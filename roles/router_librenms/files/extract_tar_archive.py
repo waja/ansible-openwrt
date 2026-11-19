@@ -100,6 +100,19 @@ def _open_streaming_archive(archive_path):
         archive = tarfile.open(archive_path, **options)
         archive.stream = True
         archive.members.clear()
+        next_member = archive.next
+
+        def next_without_caching():
+            member = next_member()
+            if (
+                member is not None
+                and archive.members
+                and archive.members[-1] is member
+            ):
+                archive.members.pop()
+            return member
+
+        archive.next = next_without_caching
         return archive
 
 
