@@ -2319,18 +2319,24 @@
           vars:
             router_cve_2026_98432_state: present
             router_cve_2026_98432_apply_runtime_changes: true
-            router_cve_2026_98432_runtime_table_probe_command: /tmp/ansible-cve-2026-98432-no-table
+            router_cve_2026_98432_runtime_table_probe_command: >-
+              /tmp/ansible-cve-2026-98432-no-table
             router_cve_2026_98432_fw4_check_command: /bin/false
       rescue:
         - name: Record failed installation rollback
           ansible.builtin.set_fact:
             router_cve_2026_98432_install_validation_rollback: >-
-              {{ ansible_failed_task.name == 'Report the failed mitigation update' }}
+              {{
+                ansible_failed_task.name
+                == 'Report the failed mitigation update'
+              }}
 
     - name: Assert failed installation restored the absent state
       ansible.builtin.assert:
         that:
-          - router_cve_2026_98432_install_validation_rollback | default(false) | bool
+          - >-
+            router_cve_2026_98432_install_validation_rollback
+            | default(false) | bool
 
     - name: Verify failed installation left no owned configuration
       ansible.builtin.raw: |
@@ -2387,7 +2393,9 @@
     - name: Assert failed removal restored the previous state
       ansible.builtin.assert:
         that:
-          - router_cve_2026_98432_remove_validation_rollback | default(false) | bool
+          - >-
+            router_cve_2026_98432_remove_validation_rollback
+            | default(false) | bool
 
     - name: Verify failed removal preserved UCI, ruleset, and sysupgrade state
       ansible.builtin.raw: |
