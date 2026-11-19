@@ -18,9 +18,14 @@ class FakeSocket:
         pass
 
 
-class FakeFile:
+class FakeRaw:
     def __init__(self):
         self._sock = FakeSocket()
+
+
+class FakeFile:
+    def __init__(self):
+        self.raw = FakeRaw()
 
 
 class FakeResponse:
