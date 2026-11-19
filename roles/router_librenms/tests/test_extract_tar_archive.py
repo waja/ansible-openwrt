@@ -168,6 +168,13 @@ class ExtractArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "expanded size"):
                 extract_archive(self.archive, self.destination)
 
+    def test_rejects_negative_extension_size_before_reading(self):
+        archive = mock.Mock()
+        member = tarfile.TarInfo("pax-header")
+        member.size = -512
+        with self.assertRaisesRegex(ValueError, "invalid size"):
+            BoundedTarInfo._check_metadata_size(member, archive)
+
     def test_rejects_oversized_pax_metadata(self):
         with tarfile.open(
             self.archive, "w:gz", format=tarfile.PAX_FORMAT
