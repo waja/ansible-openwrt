@@ -157,6 +157,20 @@
       Existing state conflicts with this role or is not owned by it; resolve
       it manually.
 
+- name: Capture the complete owned UCI include
+  ansible.builtin.raw: >-
+    uci export firewall |
+    sed -n "/^config .* 'ansible_cve_2026_98432'$/,/^$/p"
+  register: router_cve_2026_98432_include_export
+  changed_when: false
+  when: router_cve_2026_98432_include.result | default('') == 'include'
+
+- name: Verify the owned UCI include backup is complete
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_include_export.stdout | trim != ''
+  when: router_cve_2026_98432_include.result | default('') == 'include'
+
 - name: Refuse removal when runtime changes are disabled
   ansible.builtin.assert:
     that:
@@ -192,6 +206,17 @@
   changed_when: false
   failed_when: false
   check_mode: false
+
+- name: Back up the previous sysupgrade configuration
+  community.openwrt.slurp:
+    src: /etc/sysupgrade.conf
+  register: router_cve_2026_98432_sysupgrade_backup
+  changed_when: false
+  when: router_cve_2026_98432_sysupgrade_file_exists.rc == 0
+
+- name: Reset the runtime recovery marker for this invocation
+  ansible.builtin.set_fact:
+    router_cve_2026_98432_runtime_reload_attempted: false
 
 - name: Apply the requested mitigation state
   block:
@@ -229,6 +254,26 @@
         state: present
       register: router_cve_2026_98432_sysupgrade_change
       when: router_cve_2026_98432_state == 'present'
+
+    - name: Count owned sysupgrade entries
+      community.openwrt.command:
+        cmd: grep -Fxc /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+      register: router_cve_2026_98432_sysupgrade_entry_count
+      changed_when: false
+      failed_when: false
+      when: router_cve_2026_98432_state == 'present'
+
+    - name: Collapse duplicate owned sysupgrade entries
+      ansible.builtin.raw: >-
+        awk '$0 != "/etc/cve_2026_98432.nft" || !seen++'
+        /etc/sysupgrade.conf > /tmp/ansible-cve-2026-98432-sysupgrade.conf &&
+        cat /tmp/ansible-cve-2026-98432-sysupgrade.conf
+        > /etc/sysupgrade.conf &&
+        rm -f /tmp/ansible-cve-2026-98432-sysupgrade.conf
+      changed_when: true
+      when:
+        - router_cve_2026_98432_state == 'present'
+        - router_cve_2026_98432_sysupgrade_entry_count.stdout | int > 1
 
     - name: Remove the fw4 include
       community.openwrt.uci:
@@ -365,23 +410,26 @@
         - router_cve_2026_98432_active_table.rc == 0
 
   rescue:
-    - name: Restore the previous UCI include
-      community.openwrt.uci:
-        command: section
-        config: firewall
-        type: include
-        name: ansible_cve_2026_98432
-        value:
-          type: "{{ router_cve_2026_98432_include_options.results[0].result }}"
-          path: "{{ router_cve_2026_98432_include_options.results[1].result }}"
-          position: >-
-            {{ router_cve_2026_98432_include_options.results[2].result }}
-          enabled: >-
-            {{
-              router_cve_2026_98432_include_options.results[3].result
-              | default('1', true)
-            }}
-        autocommit: true
+    - name: Stage the complete previous UCI include for recovery
+      community.openwrt.copy:
+        content: "{{ router_cve_2026_98432_include_export.stdout }}"
+        dest: /tmp/ansible-cve-2026-98432-previous.uci
+        owner: root
+        group: root
+        mode: '0600'
+      when: router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Restore the complete previous UCI include
+      ansible.builtin.raw: >-
+        uci -q delete firewall.ansible_cve_2026_98432 &&
+        uci import firewall < /tmp/ansible-cve-2026-98432-previous.uci &&
+        uci commit firewall
+      when: router_cve_2026_98432_include.result | default('') == 'include'
+
+    - name: Remove the temporary UCI recovery file
+      community.openwrt.file:
+        path: /tmp/ansible-cve-2026-98432-previous.uci
+        state: absent
       when: router_cve_2026_98432_include.result | default('') == 'include'
 
     - name: Remove an include created by the failed run
@@ -407,25 +455,20 @@
         state: absent
       when: router_cve_2026_98432_file_exists.rc != 0
 
-    - name: Restore the sysupgrade entry
-      community.openwrt.lineinfile:
-        path: /etc/sysupgrade.conf
-        line: /etc/cve_2026_98432.nft
-        regexp: '^/etc/cve_2026_98432\.nft$'
-        create: true
-        state: >-
-          {{
-            'present'
-            if router_cve_2026_98432_sysupgrade_entry.rc == 0
-            else 'absent'
-          }}
+    - name: Restore the previous sysupgrade configuration
+      community.openwrt.copy:
+        content: "{{ router_cve_2026_98432_sysupgrade_backup.content | b64decode }}"
+        dest: /etc/sysupgrade.conf
+        owner: root
+        group: root
+        mode: '0600'
+      when: router_cve_2026_98432_sysupgrade_file_exists.rc == 0
 
-    - name: Remove an empty sysupgrade file created by the failed run
+    - name: Remove sysupgrade configuration created by the failed run
       community.openwrt.file:
         path: /etc/sysupgrade.conf
         state: absent
-      when:
-        - router_cve_2026_98432_sysupgrade_file_exists.rc != 0
+      when: router_cve_2026_98432_sysupgrade_file_exists.rc != 0
 
     - name: Reload the restored firewall configuration
       community.openwrt.service:
@@ -437,10 +480,9 @@
       failed_when: false
 
     - name: Restore the previously active mitigation table
-      community.openwrt.command:
-        cmd: >-
-          nft delete table ip cve_2026_98432 &&
-          nft -f /tmp/ansible-cve-2026-98432-previous.nft
+      ansible.builtin.raw: >-
+        nft delete table ip cve_2026_98432 &&
+        nft -f /tmp/ansible-cve-2026-98432-previous.nft
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
