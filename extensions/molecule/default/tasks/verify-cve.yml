@@ -197,6 +197,7 @@
 
 - name: Capture complete state before failed removal
   ansible.builtin.raw: |
+    set -e
     uci show firewall.ansible_cve_2026_98432
     grep -F "config include 'ansible_cve_2026_98432'" /etc/config/firewall
     uci show firewall | grep -v ansible_cve_2026_98432
