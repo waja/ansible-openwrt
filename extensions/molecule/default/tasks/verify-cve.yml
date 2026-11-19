@@ -110,7 +110,7 @@
     uci commit firewall
     rm -f /etc/cve_2026_98432.nft
     if test -f /etc/sysupgrade.conf; then
-      sed -i '\|^/etc/cve_2026_98432[.]nft$|d' /etc/sysupgrade.conf
+      sed -i '/^\/etc\/cve_2026_98432[.]nft$/d' /etc/sysupgrade.conf
     fi
   changed_when: true
 
