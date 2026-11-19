@@ -1452,7 +1452,14 @@
             router_cve_2026_98432_test_include.results[1].result
             == '/etc/cve_2026_98432.nft'
           - router_cve_2026_98432_test_include.results[2].result == 'ruleset-post'
-          - router_cve_2026_98432_test_include.results[3].result == '1'
+          - router_cve_2026_98432_test_include.results[3].result == '0'
+
+    - name: Temporarily enable the staged include for fw4 rendering
+      community.openwrt.uci:
+        command: set
+        key: firewall.ansible_cve_2026_98432.enabled
+        value: '1'
+        autocommit: true
 
     - name: Render the staged firewall ruleset
       community.openwrt.command:
@@ -1469,6 +1476,13 @@
           - >-
             router_cve_2026_98432_fw4_print.stdout
             is search('ip protocol tcp ip hdrlength 6-15 counter drop')
+
+    - name: Restore the staged include to its disabled state
+      community.openwrt.uci:
+        command: set
+        key: firewall.ansible_cve_2026_98432.enabled
+        value: '0'
+        autocommit: true
 
     - name: Read the installed CVE mitigation ruleset
       community.openwrt.slurp:
