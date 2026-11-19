@@ -99,46 +99,76 @@ class DownloadArchiveTests(unittest.TestCase):
                 self.download(temporary, FakeResponse([b"ab", b"cd"], "2"))
             self.assertEqual(list(Path(temporary).iterdir()), [])
 
-    def test_deadline_is_active_before_response_headers(self):
+    def _assert_download_deadline(self, timeout_stage):
         with tempfile.TemporaryDirectory() as temporary:
-            handler = download_https_archive._raise_download_timeout
+            previous_handler = object()
+            registered_handlers = []
+            alarm = mock.Mock()
+
+            def register_handler(_signum, handler):
+                registered_handlers.append(handler)
+                return previous_handler
+
+            def trigger_timeout():
+                self.assertEqual(alarm.call_args_list, [mock.call(
+                    download_https_archive.DOWNLOAD_TIMEOUT
+                )])
+                registered_handlers[0](None, None)
+
+            response = FakeResponse(
+                [b"a"],
+                on_read=(
+                    trigger_timeout if timeout_stage == "read" else None
+                ),
+            )
             opener = FakeOpener(
-                FakeResponse([]),
-                on_open=lambda: handler(None, None),
+                response,
+                on_open=(
+                    trigger_timeout if timeout_stage == "open" else None
+                ),
             )
             with mock.patch.object(
                 download_https_archive, "build_opener",
                 return_value=opener,
             ), mock.patch.object(
-                download_https_archive.signal, "alarm"
+                download_https_archive.signal, "signal",
+                side_effect=register_handler,
+            ) as register, mock.patch.object(
+                download_https_archive.signal, "alarm", alarm
             ):
                 with self.assertRaisesRegex(TimeoutError, "timed out"):
                     download_https_archive.download(
                         "https://example.invalid/archive.tar.gz",
                         Path(temporary) / "archive.tar.gz",
                     )
+
+            self.assertEqual(
+                alarm.call_args_list,
+                [
+                    mock.call(download_https_archive.DOWNLOAD_TIMEOUT),
+                    mock.call(0),
+                ],
+            )
+            self.assertEqual(
+                register.call_args_list,
+                [
+                    mock.call(
+                        download_https_archive.signal.SIGALRM,
+                        download_https_archive._raise_download_timeout,
+                    ),
+                    mock.call(
+                        download_https_archive.signal.SIGALRM,
+                        previous_handler,
+                    ),
+                ],
+            )
             self.assertEqual(list(Path(temporary).iterdir()), [])
 
-    def test_deadline_is_active_during_chunked_body_reads(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            response = FakeResponse(
-                [b"a"],
-                on_read=lambda: download_https_archive._raise_download_timeout(
-                    None, None
-                ),
-            )
-            with mock.patch.object(
-                download_https_archive, "build_opener",
-                return_value=FakeOpener(response),
-            ), mock.patch.object(
-                download_https_archive.signal, "alarm"
-            ):
-                with self.assertRaisesRegex(TimeoutError, "timed out"):
-                    download_https_archive.download(
-                        "https://example.invalid/archive.tar.gz",
-                        Path(temporary) / "archive.tar.gz",
-                    )
-            self.assertEqual(list(Path(temporary).iterdir()), [])
+    def test_deadline_is_armed_before_response_headers(self):
+        self._assert_download_deadline("open")
+
+    def test_deadline_is_armed_during_chunked_body_reads(self):
+        self._assert_download_deadline("read")
 
     def test_rejects_download_larger_than_limit_without_content_length(self):
         with tempfile.TemporaryDirectory() as temporary:
