@@ -11,29 +11,11 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "files"))
 import download_https_archive
 
 
-class FakeSocket:
-    """Track socket timeout updates made by the downloader."""
-
-    def settimeout(self, _timeout):
-        pass
-
-
-class FakeRaw:
-    def __init__(self):
-        self._sock = FakeSocket()
-
-
-class FakeFile:
-    def __init__(self):
-        self.raw = FakeRaw()
-
-
 class FakeResponse:
     """Small response double for download limit tests."""
 
     def __init__(self, chunks, content_length=None):
         self.chunks = iter(chunks)
-        self.fp = FakeFile()
         self.headers = (
             {} if content_length is None
             else {"Content-Length": content_length}
