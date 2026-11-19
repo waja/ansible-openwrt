@@ -72,7 +72,9 @@ def extract_archive(archive_path, destination):
     roots = set()
     member_count = 0
     expanded_size = 0
-    with tarfile.open(\n        archive_path, mode="r|*", tarinfo=BoundedTarInfo\n    ) as archive:
+    with tarfile.open(
+        archive_path, mode="r|*", tarinfo=BoundedTarInfo
+    ) as archive:
         for member in archive:
             member_count += 1
             if member_count > MAX_ARCHIVE_MEMBERS:
@@ -104,7 +106,9 @@ def extract_archive(archive_path, destination):
         return tarfile.data_filter(stripped, path)
 
     # Reopen the archive: streaming mode avoids caching every TarInfo object.
-    with tarfile.open(\n        archive_path, mode="r|*", tarinfo=BoundedTarInfo\n    ) as archive:
+    with tarfile.open(
+        archive_path, mode="r|*", tarinfo=BoundedTarInfo
+    ) as archive:
         archive.extractall(
             path=os.fspath(destination),
             filter=safe_filter,
