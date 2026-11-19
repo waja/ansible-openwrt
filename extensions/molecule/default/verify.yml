@@ -2364,6 +2364,7 @@
         uci show firewall.ansible_cve_2026_98432
         sha256sum /etc/cve_2026_98432.nft
         grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+        grep -Fx /etc/molecule-preserve.conf /etc/sysupgrade.conf
       register: router_cve_2026_98432_before_failed_removal
       changed_when: false
 
@@ -2393,6 +2394,7 @@
         uci show firewall.ansible_cve_2026_98432
         sha256sum /etc/cve_2026_98432.nft
         grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+        grep -Fx /etc/molecule-preserve.conf /etc/sysupgrade.conf
       register: router_cve_2026_98432_after_failed_removal
       changed_when: false
 
