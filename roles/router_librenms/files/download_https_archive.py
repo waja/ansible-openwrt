@@ -67,7 +67,7 @@ def download(url, destination):
                     time_left = deadline - time.monotonic()
                     if time_left <= 0:
                         raise TimeoutError("Archive download timed out")
-                    response.fp._sock.settimeout(
+                    response.fp.raw._sock.settimeout(
                         min(SOCKET_TIMEOUT, time_left)
                     )
                     remaining = MAX_ARCHIVE_SIZE - downloaded + 1
