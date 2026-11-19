@@ -483,7 +483,9 @@
         router_cve_2026_98432_original_failure_task: >-
           {{ ansible_failed_task.name | default('Unknown task') }}
         router_cve_2026_98432_original_failure_message: >-
-          {{ ansible_failed_result.msg | default('No diagnostic was provided') }}
+          {{
+            ansible_failed_result.msg | default('No diagnostic was provided')
+          }}
 
     - name: Stage the previous owned UCI include for recovery
       community.openwrt.copy:
@@ -519,7 +521,8 @@
 
     - name: Restore the previous ruleset file
       community.openwrt.copy:
-        content: "{{ router_cve_2026_98432_ruleset_backup.content | b64decode }}"
+        content: >-
+          {{ router_cve_2026_98432_ruleset_backup.content | b64decode }}
         dest: /etc/cve_2026_98432.nft
         owner: root
         group: root
@@ -608,12 +611,23 @@
       ansible.builtin.assert:
         that:
           - router_cve_2026_98432_uci_restore.rc | default(0) == 0
-          - router_cve_2026_98432_uci_remove_new.failed | default(false) == false
-          - router_cve_2026_98432_ruleset_restore.failed | default(false) == false
-          - router_cve_2026_98432_ruleset_remove_new.failed | default(false) == false
-          - router_cve_2026_98432_sysupgrade_restore.failed | default(false) == false
-          - router_cve_2026_98432_sysupgrade_empty_file_cleanup.rc | default(0) == 0
-          - router_cve_2026_98432_firewall_restore.failed | default(false) == false
+          - >-
+            router_cve_2026_98432_uci_remove_new.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_ruleset_restore.failed | default(false) == false
+          - >-
+            router_cve_2026_98432_ruleset_remove_new.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_sysupgrade_restore.failed
+            | default(false) == false
+          - >-
+            router_cve_2026_98432_sysupgrade_empty_file_cleanup.rc
+            | default(0) == 0
+          - >-
+            router_cve_2026_98432_firewall_restore.failed
+            | default(false) == false
           - router_cve_2026_98432_table_remove_new.rc | default(0) == 0
           - >-
             router_cve_2026_98432_table_after_recovery.rc | default(0) == 0
