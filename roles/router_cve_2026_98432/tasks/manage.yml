@@ -158,10 +158,9 @@
       it manually.
 
 - name: Capture the complete owned UCI include
-  community.openwrt.command:
-    cmd: >-
-      uci export firewall |
-      sed -n "/^config .* 'ansible_cve_2026_98432'$/,/^$/p"
+  ansible.builtin.raw: >-
+    uci export firewall |
+    sed -n "/^config .* 'ansible_cve_2026_98432'$/,/^$/p"
   register: router_cve_2026_98432_include_export
   changed_when: false
   when: router_cve_2026_98432_include.result | default('') == 'include'
@@ -248,13 +247,13 @@
       when: router_cve_2026_98432_state == 'present'
 
     - name: Collapse duplicate owned sysupgrade entries
-      community.openwrt.command:
-        cmd: >-
-          awk '$0 != "/etc/cve_2026_98432.nft" || !seen++'
-          /etc/sysupgrade.conf > /tmp/ansible-cve-2026-98432-sysupgrade.conf &&
-          cat /tmp/ansible-cve-2026-98432-sysupgrade.conf
-          > /etc/sysupgrade.conf &&
-          rm -f /tmp/ansible-cve-2026-98432-sysupgrade.conf
+      ansible.builtin.raw: >-
+        awk '$0 != "/etc/cve_2026_98432.nft" || !seen++'
+        /etc/sysupgrade.conf > /tmp/ansible-cve-2026-98432-sysupgrade.conf &&
+        cat /tmp/ansible-cve-2026-98432-sysupgrade.conf
+        > /etc/sysupgrade.conf &&
+        rm -f /tmp/ansible-cve-2026-98432-sysupgrade.conf
+      changed_when: true
       when:
         - router_cve_2026_98432_state == 'present'
         - router_cve_2026_98432_sysupgrade_entry_count.stdout | int > 1
@@ -404,11 +403,10 @@
       when: router_cve_2026_98432_include.result | default('') == 'include'
 
     - name: Restore the complete previous UCI include
-      community.openwrt.command:
-        cmd: >-
-          uci -q delete firewall.ansible_cve_2026_98432;
-          uci import firewall < /tmp/ansible-cve-2026-98432-previous.uci;
-          uci commit firewall
+      ansible.builtin.raw: >-
+        uci -q delete firewall.ansible_cve_2026_98432;
+        uci import firewall < /tmp/ansible-cve-2026-98432-previous.uci;
+        uci commit firewall
       when: router_cve_2026_98432_include.result | default('') == 'include'
 
     - name: Remove the temporary UCI recovery file
@@ -470,10 +468,9 @@
       failed_when: false
 
     - name: Restore the previously active mitigation table
-      community.openwrt.command:
-        cmd: >-
-          nft delete table ip cve_2026_98432 &&
-          nft -f /tmp/ansible-cve-2026-98432-previous.nft
+      ansible.builtin.raw: >-
+        nft delete table ip cve_2026_98432 &&
+        nft -f /tmp/ansible-cve-2026-98432-previous.nft
       when:
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_runtime_reload_attempted | default(false) | bool
