@@ -61,6 +61,7 @@ roles that may be prerequisites; review the selected tasks before execution.
 | `router_package_audit` | Compare installed packages with a saved baseline | [Package audit](roles/router_package_audit.md) |
 | `router_storage` | Detect and optionally expand root storage | [Storage](roles/router_storage.md) |
 | `router_owut` | Optional read-only firmware update checks | [OWUT](roles/router_owut.md) |
+| `router_cve_2026_98432` | Explicitly managed temporary CVE-2026-98432 firewall workaround | [CVE mitigation](roles/router_cve_2026_98432.md) |
 
 ## Reference projects
 

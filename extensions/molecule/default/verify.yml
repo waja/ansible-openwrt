@@ -2223,3 +2223,6 @@
           - >-
             router_firewall_ambiguous_redirect_failure
             == 'Reject ambiguous anonymous firewall redirect matches'
+
+    - name: Verify CVE mitigation behavior and rollback
+      ansible.builtin.include_tasks: tasks/verify-cve.yml

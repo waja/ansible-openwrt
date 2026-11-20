@@ -1,0 +1,364 @@
+# extensions/molecule/default/tasks/verify-cve.yml
+---
+- name: Reject an omitted CVE mitigation state
+  block:
+    - name: Include CVE mitigation role without an explicit state
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_apply_runtime_changes: true
+  rescue:
+    - name: Record missing-state rejection
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_missing_state_rejected: >-
+          {{
+            ansible_failed_task.name
+            == 'Validate requested mitigation state'
+          }}
+
+- name: Assert an explicit CVE mitigation state is required
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_missing_state_rejected | default(false) | bool
+
+- name: Capture mitigation include and ruleset before rejected removal
+  ansible.builtin.raw: >-
+    uci show firewall.ansible_cve_2026_98432 &&
+    sha256sum /etc/cve_2026_98432.nft &&
+    grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+  register: router_cve_2026_98432_before_rejected_removal
+  changed_when: false
+
+- name: Confirm configuration-only removal is rejected as unsafe
+  block:
+    - name: Attempt CVE mitigation removal without runtime inspection
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: absent
+        router_cve_2026_98432_apply_runtime_changes: false
+  rescue:
+    - name: Record configuration-only removal rejection
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_unsafe_removal_rejected: >-
+          {{
+            ansible_failed_task.name
+            == 'Refuse removal when runtime changes are disabled'
+          }}
+
+- name: Assert configuration-only removal is rejected
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_unsafe_removal_rejected
+        | default(false) | bool
+
+- name: Read mitigation include and ruleset after rejected removal
+  ansible.builtin.raw: >-
+    uci show firewall.ansible_cve_2026_98432 &&
+    sha256sum /etc/cve_2026_98432.nft &&
+    grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+  register: router_cve_2026_98432_after_rejected_removal
+  changed_when: false
+
+- name: Verify rejected removal preserved mitigation configuration
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_after_rejected_removal.stdout
+        == router_cve_2026_98432_before_rejected_removal.stdout
+
+- name: Create a probe that reports the mitigation table absent
+  ansible.builtin.raw: |
+    set -e
+    cat > /tmp/ansible-cve-2026-98432-no-table <<'EOF'
+    #!/bin/sh
+    echo "No such file or directory" >&2
+    exit 1
+    EOF
+    chmod 0755 /tmp/ansible-cve-2026-98432-no-table
+  changed_when: true
+
+- name: Create a failing fw4 check that adds an unrelated sysupgrade entry
+  ansible.builtin.raw: |
+    set -e
+    cat > /tmp/ansible-cve-2026-98432-failing-fw4-check <<'EOF'
+    #!/bin/sh
+    entry=/etc/molecule-added-during-rollback.conf
+    if ! grep -Fxq "$entry" /etc/sysupgrade.conf; then
+      printf '%s\n' "$entry" >> /etc/sysupgrade.conf
+    fi
+    exit 1
+    EOF
+    chmod 0755 /tmp/ansible-cve-2026-98432-failing-fw4-check
+  changed_when: true
+
+- name: Create an inconclusive runtime table probe
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      echo "Operation not permitted" >&2
+      exit 1
+    dest: /tmp/ansible-cve-2026-98432-inconclusive-probe
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Prepare an absent mitigation state for failed installation
+  ansible.builtin.raw: |
+    set -e
+    uci -q delete firewall.ansible_cve_2026_98432 || true
+    uci commit firewall
+    rm -f /etc/cve_2026_98432.nft
+    if test -f /etc/sysupgrade.conf; then
+      sed -i '/^\/etc\/cve_2026_98432[.]nft$/d' /etc/sysupgrade.conf
+    fi
+  changed_when: true
+
+- name: Force fw4 validation failure during installation
+  block:
+    - name: Attempt installation with a failing fw4 check
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: present
+        router_cve_2026_98432_apply_runtime_changes: true
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-no-table
+        router_cve_2026_98432_fw4_check_command: >-
+          /tmp/ansible-cve-2026-98432-failing-fw4-check
+  rescue:
+    - name: Record failed installation rollback
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_install_validation_rollback: >-
+          {{
+            ansible_failed_task.name
+            == 'Report the original failed mitigation update'
+            and 'Validate the resulting fw4 ruleset'
+            in ansible_failed_result.msg
+          }}
+
+- name: Assert failed installation restored the absent state
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_install_validation_rollback
+        | default(false) | bool
+
+- name: Verify failed installation left no owned configuration
+  ansible.builtin.raw: |
+    set -e
+    if uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1; then
+      echo "Mitigation UCI include remains after failed installation"
+      exit 1
+    fi
+    if grep -Fq \
+      "config include 'ansible_cve_2026_98432'" /etc/config/firewall; then
+      echo "Persistent mitigation UCI include remains after failed installation"
+      exit 1
+    fi
+    test -z "$(uci changes firewall)" || exit 1
+    test ! -e /etc/cve_2026_98432.nft || exit 1
+    if grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf; then
+      echo "Mitigation sysupgrade entry remains after failed installation"
+      exit 1
+    fi
+    grep -Fxq /etc/molecule-added-during-rollback.conf /etc/sysupgrade.conf
+  changed_when: false
+
+- name: Stage only the ruleset when runtime inspection is inconclusive
+  ansible.builtin.include_role:
+    name: router_cve_2026_98432
+  vars:
+    router_cve_2026_98432_state: present
+    router_cve_2026_98432_apply_runtime_changes: false
+    router_cve_2026_98432_runtime_table_probe_command: >-
+      /tmp/ansible-cve-2026-98432-inconclusive-probe
+
+- name: >-
+    Verify inconclusive inspection did not register an include
+    or sysupgrade entry
+  ansible.builtin.raw: |
+    set -e
+    test -f /etc/cve_2026_98432.nft
+    if uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1; then
+      echo "Mitigation UCI include unexpectedly exists"
+      exit 1
+    fi
+    if grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf; then
+      echo "Mitigation sysupgrade entry unexpectedly exists"
+      exit 1
+    fi
+    test -z "$(uci changes firewall)"
+  changed_when: false
+
+- name: Reset the staged-only state before testing failed removal
+  ansible.builtin.raw: |
+    set -e
+    uci -q delete firewall.ansible_cve_2026_98432 || true
+    uci commit firewall
+    if test -f /etc/sysupgrade.conf; then
+      sed -i '/^\/etc\/cve_2026_98432[.]nft$/d' /etc/sysupgrade.conf
+    fi
+    rm -f /etc/cve_2026_98432.nft
+  changed_when: true
+
+- name: Stage mitigation again before testing failed removal
+  ansible.builtin.include_role:
+    name: router_cve_2026_98432
+  vars:
+    router_cve_2026_98432_state: present
+    router_cve_2026_98432_apply_runtime_changes: false
+    router_cve_2026_98432_runtime_table_probe_command: >-
+      /tmp/ansible-cve-2026-98432-no-table
+
+- name: Remove the explicit enabled option to test fw4's default
+  community.openwrt.uci:
+    command: absent
+    key: firewall.ansible_cve_2026_98432.enabled
+    autocommit: true
+
+- name: Preserve an existing include's implicit enabled state
+  ansible.builtin.include_role:
+    name: router_cve_2026_98432
+  vars:
+    router_cve_2026_98432_state: present
+    router_cve_2026_98432_apply_runtime_changes: false
+    router_cve_2026_98432_runtime_table_probe_command: >-
+      /tmp/ansible-cve-2026-98432-no-table
+
+- name: Verify the implicit enabled state was preserved
+  community.openwrt.command:
+    cmd: uci -q get firewall.ansible_cve_2026_98432.enabled
+  register: router_cve_2026_98432_implicit_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Assert an existing include without enabled remains enabled
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_implicit_enabled.stdout | trim == '1'
+
+- name: Create a probe that reports a conflicting nftables table
+  ansible.builtin.raw: |
+    cat > /tmp/ansible-cve-2026-98432-foreign-table-probe <<'EOF'
+    #!/bin/sh
+    cat <<'TABLE'
+    table ip cve_2026_98432 {
+      chain pre {
+        type filter hook prerouting priority raw - 10; policy accept;
+        ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
+        counter accept
+      }
+    }
+    TABLE
+    EOF
+    chmod 0755 /tmp/ansible-cve-2026-98432-foreign-table-probe
+  changed_when: true
+
+- name: Refuse a same-named table containing foreign rules
+  block:
+    - name: Attempt to manage a conflicting nftables table
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: present
+        router_cve_2026_98432_apply_runtime_changes: true
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-foreign-table-probe
+  rescue:
+    - name: Record conflicting table rejection
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_foreign_table_rejected: >-
+          {{
+            ansible_failed_task.name
+            == 'Refuse a foreign or modified same-named nftables table'
+          }}
+
+- name: Assert foreign nftables table was rejected
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_foreign_table_rejected | default(false) | bool
+
+- name: Add an extra owned UCI include option before failed removal
+  community.openwrt.uci:
+    command: set
+    key: firewall.ansible_cve_2026_98432.name
+    value: Molecule preserved include option
+    autocommit: true
+
+- name: Capture complete state before failed removal
+  ansible.builtin.raw: |
+    set -e
+    uci show firewall.ansible_cve_2026_98432
+    grep -F "config include 'ansible_cve_2026_98432'" /etc/config/firewall
+    uci show firewall | grep -v ansible_cve_2026_98432
+    uci changes firewall
+    sha256sum /etc/cve_2026_98432.nft
+    grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+    grep -Fx /etc/molecule-preserve.conf /etc/sysupgrade.conf
+    grep -Fx /etc/molecule-added-during-rollback.conf /etc/sysupgrade.conf
+  register: router_cve_2026_98432_before_failed_removal
+  changed_when: false
+
+- name: Force fw4 validation failure during removal
+  block:
+    - name: Attempt removal with a failing fw4 check
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: absent
+        router_cve_2026_98432_apply_runtime_changes: true
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-no-table
+        router_cve_2026_98432_fw4_check_command: >-
+          /tmp/ansible-cve-2026-98432-failing-fw4-check
+  rescue:
+    - name: Record failed removal rollback
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_remove_validation_rollback: >-
+          {{
+            ansible_failed_task.name
+            == 'Report the original failed mitigation update'
+            and 'Validate the resulting fw4 ruleset'
+            in ansible_failed_result.msg
+          }}
+
+- name: Assert failed removal restored the previous state
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_remove_validation_rollback
+        | default(false) | bool
+
+- name: Verify failed removal preserved UCI, ruleset, and sysupgrade state
+  ansible.builtin.raw: |
+    set -e
+    uci show firewall.ansible_cve_2026_98432
+    grep -F "config include 'ansible_cve_2026_98432'" /etc/config/firewall
+    uci show firewall | grep -v ansible_cve_2026_98432
+    uci changes firewall
+    sha256sum /etc/cve_2026_98432.nft
+    grep -Fx /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+    grep -Fx /etc/molecule-preserve.conf /etc/sysupgrade.conf
+    grep -Fx /etc/molecule-added-during-rollback.conf /etc/sysupgrade.conf
+  register: router_cve_2026_98432_after_failed_removal
+  changed_when: false
+
+- name: Assert failed removal restored exact persistent state
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_after_failed_removal.stdout
+        == router_cve_2026_98432_before_failed_removal.stdout
+
+- name: Remove temporary CVE verification probes
+  community.openwrt.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/ansible-cve-2026-98432-no-table
+    - /tmp/ansible-cve-2026-98432-failing-fw4-check
+    - /tmp/ansible-cve-2026-98432-inconclusive-probe
+    - /tmp/ansible-cve-2026-98432-foreign-table-probe
+    - /tmp/ansible-cve-2026-98432-expected.nft

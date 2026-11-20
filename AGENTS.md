@@ -119,6 +119,15 @@ or CI workflows.
   allowlist only after `script-tests.yml` exercises it. Shell lint covers
   all files under `scripts/`.
 - Keep scheduled smoke tests and manual `workflow_dispatch` available.
+- The Molecule workflow runs on pull requests, pushes to `development` and
+  `master`, scheduled runs, and manual `workflow_dispatch`; the traffic test
+  runs on every invocation.
+- The `cve-mitigation-traffic` job installs `iproute2`, `nftables`, and
+  `python3`, then runs
+  `sudo python3 scripts/tests/test_cve_2026_98432_traffic.py` in a network
+  namespace. It checks the production mitigation ruleset's IPv4 INPUT/FORWARD
+  filtering and IPv6 compatibility. The `molecule-status` aggregate depends
+  on this job and fails if it does not succeed.
 - Do not add workflow-level path filters that can leave required checks
   pending; keep the aggregate `Molecule` status job active for every PR.
 
@@ -223,6 +232,21 @@ other contributors or its history is already in use.
   it into a shared collection utility rather than duplicating implementations.
 - Keep shared interfaces narrowly scoped to demonstrated requirements.
   Avoid speculative options and configurability.
+
+### Failure handling and recovery
+
+- Define the guarantees a change must provide before designing recovery or
+  rollback logic.
+- Do not attempt to provide atomic transactions across independent state
+  stores unless the underlying systems explicitly support them.
+- Prefer forward operations with clear ownership and validation over custom
+  snapshot, rollback, and recovery frameworks.
+- On failure, restore only state owned by the operation and only when the
+  previous state can be restored safely.
+- Do not add defensive handling for hypothetical failure combinations
+  without a demonstrated risk or requirement.
+- If complete recovery cannot be guaranteed, fail clearly, preserve
+  diagnostics, and leave the system in a documented, repairable state.
 
 ### Reference project research
 

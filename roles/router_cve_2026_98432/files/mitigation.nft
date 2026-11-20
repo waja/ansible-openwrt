@@ -1,0 +1,7 @@
+destroy table ip cve_2026_98432
+table ip cve_2026_98432 {
+    chain pre {
+        type filter hook prerouting priority -310; policy accept;
+        ip protocol tcp ip hdrlength 6-15 counter drop
+    }
+}
