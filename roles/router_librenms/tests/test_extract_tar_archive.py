@@ -49,6 +49,30 @@ class ExtractArchiveTests(unittest.TestCase):
                     member.size = len(data)
                     archive.addfile(member, io.BytesIO(data))
 
+    def test_does_not_retain_members_with_global_pax_metadata(self):
+        global_headers = {f"test.key.{index}": "value" for index in range(128)}
+        with self.archive.open("wb") as output:
+            output.write(tarfile.TarInfo.create_pax_global_header(global_headers))
+            with tarfile.open(
+                fileobj=output, mode="w:", format=tarfile.PAX_FORMAT
+            ) as archive:
+                for index in range(20):
+                    archive.addfile(tarfile.TarInfo(f"agent-main/file-{index}"))
+
+        original_extract = tarfile.TarFile.extract
+        cached_member_counts = []
+
+        def tracking_extract(archive, member, *args, **kwargs):
+            cached_member_counts.append(len(archive.members))
+            return original_extract(archive, member, *args, **kwargs)
+
+        with mock.patch.object(tarfile.TarFile, "extract", tracking_extract):
+            extract_archive(self.archive, self.destination)
+
+        self.assertEqual(len(cached_member_counts), 20)
+        self.assertLessEqual(max(cached_member_counts), 1)
+        self.assertEqual(len(list(self.destination.iterdir())), 20)
+
     def test_extracts_git_archive_with_global_pax_and_long_paths(self):
         repository = self.root / "repository"
         long_directory = "a" * 110
@@ -69,7 +93,7 @@ class ExtractArchiveTests(unittest.TestCase):
             ["git", "-C", str(repository), "add", "."], check=True
         )
         subprocess.run(
-            ["git", "-C", str(repository), "commit", "-qm", "fixture"],
+            ["git", "-C", str(repository), "commit", "--no-gpg-sign", "-qm", "fixture"],
             check=True,
         )
         with self.archive.open("wb") as output:
