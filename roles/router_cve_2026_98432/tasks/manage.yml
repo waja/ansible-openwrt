@@ -172,6 +172,20 @@
       policy accept;\s*ip protocol tcp ip hdrlength 6-15
       counter(?: packets [0-9]+ bytes [0-9]+)? drop\s*[}]\s*[}]\s*\Z
 
+- name: Refuse a foreign or modified same-named nftables table
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_active_table.stdout is search(
+          router_cve_2026_98432_table_pattern
+        )
+    fail_msg: >-
+      The existing nftables table is not exactly the role-owned mitigation;
+      refusing to overwrite or remove it.
+  when:
+    - router_cve_2026_98432_apply_runtime_changes | bool
+    - router_cve_2026_98432_active_table.rc == 0
+
 - name: Refuse an unexpected or conflicting mitigation state
   ansible.builtin.assert:
     that:
