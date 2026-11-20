@@ -200,6 +200,15 @@ class ExtractArchiveTests(unittest.TestCase):
         with self.assertRaises(tarfile.FilterError):
             extract_archive(self.archive, self.destination)
 
+    def test_rejects_non_file_members_with_payload(self):
+        with tarfile.open(self.archive, "w:") as archive:
+            member = tarfile.TarInfo("agent-main/directory")
+            member.type = tarfile.DIRTYPE
+            member.size = 4
+            archive.addfile(member, io.BytesIO(b"data"))
+        with self.assertRaisesRegex(ValueError, "non-file archive members"):
+            extract_archive(self.archive, self.destination)
+
     def test_rejects_hard_links(self):
         self.create_archive([
             ("agent-main/file", "data", "file", ""),
@@ -281,6 +290,29 @@ class ExtractArchiveTests(unittest.TestCase):
                 extract_archive(self.archive, self.destination)
 
     def test_rejects_too_many_members(self):
+        self.create_archive([
+            ("agent-main/one", "1", "file", ""),
+            ("agent-main/two", "2", "file", ""),
+            ("agent-main/three", "3", "file", ""),
+        ])
+        original_next = tarfile.TarFile.next
+        next_calls = 0
+
+        def tracking_next(archive):
+            nonlocal next_calls
+            next_calls += 1
+            return original_next(archive)
+
+        with mock.patch(
+            "extract_tar_archive.MAX_ARCHIVE_MEMBERS", 1
+        ), mock.patch.object(tarfile.TarFile, "next", tracking_next):
+            with self.assertRaisesRegex(ValueError, "too many members"):
+                extract_archive(self.archive, self.destination)
+
+        # open() preloads the first member; the loop reads only the second
+        # before stopping at the configured limit.
+        self.assertEqual(next_calls, 3)
+
         self.create_archive([
             ("agent-main/one", "1", "file", ""),
             ("agent-main/two", "2", "file", ""),
