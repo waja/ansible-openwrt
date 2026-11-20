@@ -117,6 +117,27 @@ class ExtractArchiveTests(unittest.TestCase):
         with self.assertRaises(tarfile.FilterError):
             extract_archive(self.archive, self.destination)
 
+    def test_rejects_old_gnu_sparse_member_before_reading_payload(self):
+        member = tarfile.TarInfo("agent-main/sparse")
+        member.type = tarfile.GNUTYPE_SPARSE
+        member.size = 1024 * 1024
+        header = bytearray(member.tobuf(tarfile.GNU_FORMAT))
+        header[386:398] = tarfile.itn(0, 12, tarfile.GNU_FORMAT)
+        header[398:410] = tarfile.itn(1, 12, tarfile.GNU_FORMAT)
+        header[482] = 0
+        header[483:495] = tarfile.itn(1, 12, tarfile.GNU_FORMAT)
+        header[148:156] = b"        "
+        checksum = tarfile.calc_chksums(header)[0]
+        header[148:156] = f"{checksum:06o}\\0 ".encode()
+
+        with self.archive.open("wb") as archive:
+            archive.write(header)
+            archive.write(b"\\0" * member.size)
+            archive.write(b"\\0" * (2 * tarfile.BLOCKSIZE))
+
+        with self.assertRaisesRegex(ValueError, "Old GNU sparse"):
+            extract_archive(self.archive, self.destination)
+
     def test_rejects_unsupported_member_type_during_validation(self):
         with tarfile.open(self.archive, "w:gz") as archive:
             member = tarfile.TarInfo("agent-main/unsupported")
