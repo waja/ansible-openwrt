@@ -473,6 +473,8 @@ jobs:
   cve-mitigation-traffic:
     name: CVE mitigation traffic
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -496,6 +498,7 @@ jobs:
       - sanity
       - units
       - molecule
+      - cve-mitigation-traffic
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -522,6 +525,7 @@ jobs:
           SANITY_RESULT: ${{ needs.sanity.result }}
           UNITS_RESULT: ${{ needs.units.result }}
           MOLECULE_RESULT: ${{ needs.molecule.result }}
+          CVE_MITIGATION_TRAFFIC_RESULT: ${{ needs.cve-mitigation-traffic.result }}
         run: |
           python - <<'PY'
           import json
@@ -676,6 +680,10 @@ jobs:
                   'Molecule matrix was skipped without an explicit '
                   'Markdown-only change result or scheduled/manual event.'
               )
+
+          traffic_result = os.environ['CVE_MITIGATION_TRAFFIC_RESULT']
+          if traffic_result != 'success':
+              errors.append(f'CVE mitigation traffic: {traffic_result}')
 
           if any(
               row['status'] in ('FAIL', 'CANCELLED', 'NO RESULT', 'BLOCKED')
