@@ -213,10 +213,10 @@
       /tmp/ansible-cve-2026-98432-no-table
 
 - name: Remove the explicit enabled option to test fw4's default
-  ansible.builtin.raw: |
-    uci -q delete firewall.ansible_cve_2026_98432.enabled
-    uci commit firewall
-  changed_when: true
+  community.openwrt.uci:
+    command: absent
+    key: firewall.ansible_cve_2026_98432.enabled
+    autocommit: true
 
 - name: Preserve an existing include's implicit enabled state
   ansible.builtin.include_role:
@@ -228,7 +228,7 @@
       /tmp/ansible-cve-2026-98432-no-table
 
 - name: Verify the implicit enabled state was preserved
-  ansible.builtin.command:
+  community.openwrt.command:
     cmd: uci -q get firewall.ansible_cve_2026_98432.enabled
   register: router_cve_2026_98432_implicit_enabled
   changed_when: false
@@ -272,7 +272,7 @@
         router_cve_2026_98432_foreign_table_rejected: >-
           {{
             ansible_failed_task.name
-            == 'Refuse an unexpected or conflicting mitigation state'
+            == 'Refuse a foreign or modified same-named nftables table'
           }}
 
 - name: Assert foreign nftables table was rejected
