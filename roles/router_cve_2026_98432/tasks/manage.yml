@@ -327,7 +327,9 @@
                   router_cve_2026_98432_include_options.results[3].result
                   | default('1', true)
                 )
-                if router_cve_2026_98432_include.result | default('') == 'include'
+                if (
+                  router_cve_2026_98432_include.result | default('')
+                ) == 'include'
                 else '0'
               )
             }}
@@ -526,7 +528,11 @@
       ignore_errors: true
       when:
         - router_cve_2026_98432_include.result | default('') == 'include'
-        - not (router_cve_2026_98432_recovery_file_cleanup.failed | default(false))
+        - >-
+          not (
+            router_cve_2026_98432_recovery_file_cleanup.failed
+            | default(false)
+          )
 
     - name: Restore the previous owned UCI include
       ansible.builtin.raw: |
@@ -541,7 +547,11 @@
       failed_when: false
       when:
         - router_cve_2026_98432_include.result | default('') == 'include'
-        - not (router_cve_2026_98432_recovery_file_cleanup.failed | default(true))
+        - >-
+          not (
+            router_cve_2026_98432_recovery_file_cleanup.failed
+            | default(true)
+          )
         - not (router_cve_2026_98432_uci_stage.failed | default(true))
 
     - name: Remove an include created by the failed run
