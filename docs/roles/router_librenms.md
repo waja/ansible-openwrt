@@ -45,6 +45,9 @@ per-interface wireless sensors.
 
 ## Prerequisites
 
+The Ansible controller must use Python 3.10.12 or later. The archive
+extractor relies on `tarfile` APIs introduced in that Python release.
+
 The role expects the SNMP daemon to be installed and managed by
 `router_packages` and `router_base`. Configure a non-default SNMP
 community with `router_snmpd_enabled` and
