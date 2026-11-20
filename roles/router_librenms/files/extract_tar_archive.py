@@ -151,7 +151,9 @@ def extract_archive(archive_path, destination):
                 if member.isfile():
                     extracted_size += member.size
                     if extracted_size > MAX_EXPANDED_SIZE:
-                        raise ValueError("Archive exceeds maximum expanded size")
+                        raise ValueError(
+                            "Archive exceeds maximum expanded size"
+                        )
                 archive.extract(
                     member,
                     path=os.fspath(destination),
