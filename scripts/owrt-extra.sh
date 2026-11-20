@@ -336,6 +336,12 @@ build_ref() {
                     rm -f "$f"
                     continue
                     ;;
+                /etc/uci-defaults/70-rootpt-resize|/etc/uci-defaults/80-rootfs-resize)
+                    echo "SKIP: $f (hardware-specific resize and reboot risk)"
+                    # These defaults can modify block devices and reboot.
+                    # Do not execute them in the reconstructed factory state.
+                    continue
+                    ;;
             esac
             (
                 . "$f"
@@ -644,17 +650,105 @@ if [ -s "$T/feedout" ]; then redact_text "$T/feedout"; else echo "   (identical 
 # --- APK system audit ------------------------------------------------------
 print_section "3a. APK system audit findings"
 APK_AUDIT="$OUT/apk-audit-system.txt"
+APK_AUDIT_CLASSIFIED="$OUT/apk-audit-classification.txt"
+
+# Explain only the two verified artefacts; keep all other findings open.
+is_expected_apk_audit_line() {
+    line=$1
+    status=${line%% *}
+    path=${line#* }
+    case "$line" in
+        *" "*) ;;
+        *) path= ;;
+    esac
+    case "$status:$path" in
+        "X:rom/note") [ "$ROM_NOTE_EXPECTED" = 1 ] ;;
+        "U:usr/bin/cmp") [ "$CMP_OVERLAP_EXPECTED" = 1 ] ;;
+        *) return 1 ;;
+    esac
+}
+
+classify_apk_audit() {
+    APK_EXPECTED=0
+    APK_OPEN=0
+
+    # /rom is SquashFS; its image's /rom/note appears below the mountpoint.
+    if awk '$2 == "/rom" && $3 == "squashfs" { found=1 }
+        END { exit !found }' /proc/mounts && [ -f /rom/rom/note ]; then
+        ROM_NOTE_EXPECTED=1
+    else
+        ROM_NOTE_EXPECTED=0
+    fi
+
+    # diffutils provides GNU cmp through a symlink at the BusyBox-owned path.
+    if [ "$(readlink /usr/bin/cmp 2>/dev/null)" = /usr/libexec/cmp-gnu ] &&
+       [ -x /usr/libexec/cmp-gnu ] &&
+       apk info --who-owns /usr/bin/cmp 2>/dev/null |
+           grep -Eq ' is owned by busybox-[0-9][^ ]*$' &&
+       apk info --who-owns /usr/libexec/cmp-gnu 2>/dev/null |
+           grep -Eq ' is owned by diffutils-[0-9][^ ]*$'; then
+        CMP_OVERLAP_EXPECTED=1
+    else
+        CMP_OVERLAP_EXPECTED=0
+    fi
+
+    {
+        echo "APK system audit classification"
+        echo "Raw evidence: $APK_AUDIT"
+        echo
+        echo "Expected / explained:"
+    } > "$APK_AUDIT_CLASSIFIED" || return 1
+
+    while IFS= read -r line; do
+        if is_expected_apk_audit_line "$line"; then
+            case "${line%% *}:${line#* }" in
+                "X:rom/note")
+                    reason="mountpoint artefact: /rom hides image /rom/note" ;;
+                *)
+                    reason="verified BusyBox/diffutils GNU cmp overlap" ;;
+            esac
+            printf 'EXPECTED  %s  (%s)\n' "$line" "$reason" \
+                >> "$APK_AUDIT_CLASSIFIED" || return 1
+            APK_EXPECTED=$((APK_EXPECTED + 1))
+        fi
+    done < "$APK_AUDIT"
+
+    [ "$APK_EXPECTED" -gt 0 ] ||
+        echo "(none)" >> "$APK_AUDIT_CLASSIFIED" || return 1
+
+    {
+        echo
+        echo "Open findings (require review):"
+    } >> "$APK_AUDIT_CLASSIFIED" || return 1
+
+    while IFS= read -r line; do
+        if ! is_expected_apk_audit_line "$line"; then
+            printf 'OPEN      %s\n' "$line" \
+                >> "$APK_AUDIT_CLASSIFIED" || return 1
+            APK_OPEN=$((APK_OPEN + 1))
+        fi
+    done < "$APK_AUDIT"
+
+    [ "$APK_OPEN" -gt 0 ] ||
+        echo "(none)" >> "$APK_AUDIT_CLASSIFIED" || return 1
+}
+
 if command -v apk >/dev/null 2>&1; then
     if apk audit --help 2>&1 | grep -q -- '--system'; then
         if apk audit --system > "$APK_AUDIT" 2>&1; then
-            if [ -s "$APK_AUDIT" ]; then
-                findings=$(wc -l < "$APK_AUDIT" | tr -d ' ')
-                echo "$findings APK system audit finding(s):"
-                redact_text "$APK_AUDIT"
+            if classify_apk_audit; then
+                findings=$((APK_EXPECTED + APK_OPEN))
+                printf '%s APK audit finding(s):\n' "$findings"
+                printf '  %s explained, %s open.\n' \
+                    "$APK_EXPECTED" "$APK_OPEN"
+                redact_text "$APK_AUDIT_CLASSIFIED"
+                echo "Raw output: $APK_AUDIT"
+                echo "Classification: $APK_AUDIT_CLASSIFIED"
             else
-                echo "(no differences reported)"
+                echo "WARNING: APK classification report write failed." >&2
+                exit 1
             fi
-            echo "Raw output: $APK_AUDIT"
+            [ -s "$APK_AUDIT" ] || echo "(no differences reported)"
         else
             rc=$?
             echo "WARNING: 'apk audit --system' exited with status $rc." >&2
