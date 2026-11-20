@@ -128,12 +128,12 @@ class ExtractArchiveTests(unittest.TestCase):
         header[483:495] = tarfile.itn(1, 12, tarfile.GNU_FORMAT)
         header[148:156] = b"        "
         checksum = tarfile.calc_chksums(header)[0]
-        header[148:156] = f"{checksum:06o}\\0 ".encode()
+        header[148:156] = f"{checksum:06o}\0 ".encode()
 
         with self.archive.open("wb") as archive:
             archive.write(header)
-            archive.write(b"\\0" * member.size)
-            archive.write(b"\\0" * (2 * tarfile.BLOCKSIZE))
+            archive.write(b"\0" * member.size)
+            archive.write(b"\0" * (2 * tarfile.BLOCKSIZE))
 
         with self.assertRaisesRegex(ValueError, "Old GNU sparse"):
             extract_archive(self.archive, self.destination)
