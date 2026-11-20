@@ -109,6 +109,9 @@ or CI workflows.
 - Keep script-specific smoke tests in their dedicated workflow. Script
   changes also run Molecule; avoid adding exceptions just to save that run.
 - Keep scheduled smoke tests and manual `workflow_dispatch` available.
+- The Molecule workflow runs on pull requests, pushes to `development` and
+  `master`, scheduled runs, and manual `workflow_dispatch`; the traffic test
+  runs on every invocation.
 - The `cve-mitigation-traffic` job installs `iproute2`, `nftables`, and
   `python3`, then runs
   `sudo python3 scripts/tests/test_cve_2026_98432_traffic.py` in a network

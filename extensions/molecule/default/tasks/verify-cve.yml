@@ -1,3 +1,4 @@
+# extensions/molecule/default/tasks/verify-cve.yml
 ---
 - name: Reject an omitted CVE mitigation state
   block:
@@ -211,6 +212,74 @@
     router_cve_2026_98432_runtime_table_probe_command: >-
       /tmp/ansible-cve-2026-98432-no-table
 
+- name: Remove the explicit enabled option to test fw4's default
+  ansible.builtin.raw: |
+    uci -q delete firewall.ansible_cve_2026_98432.enabled
+    uci commit firewall
+  changed_when: true
+
+- name: Preserve an existing include's implicit enabled state
+  ansible.builtin.include_role:
+    name: router_cve_2026_98432
+  vars:
+    router_cve_2026_98432_state: present
+    router_cve_2026_98432_apply_runtime_changes: false
+    router_cve_2026_98432_runtime_table_probe_command: >-
+      /tmp/ansible-cve-2026-98432-no-table
+
+- name: Verify the implicit enabled state was preserved
+  ansible.builtin.command:
+    cmd: uci -q get firewall.ansible_cve_2026_98432.enabled
+  register: router_cve_2026_98432_implicit_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Assert an existing include without enabled remains enabled
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_implicit_enabled.stdout | trim == '1'
+
+- name: Create a probe that reports a conflicting nftables table
+  ansible.builtin.raw: |
+    cat > /tmp/ansible-cve-2026-98432-foreign-table-probe <<'EOF'
+    #!/bin/sh
+    cat <<'TABLE'
+    table ip cve_2026_98432 {
+      chain pre {
+        type filter hook prerouting priority raw - 10; policy accept;
+        ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
+        counter accept
+      }
+    }
+    TABLE
+    EOF
+    chmod 0755 /tmp/ansible-cve-2026-98432-foreign-table-probe
+  changed_when: true
+
+- name: Refuse a same-named table containing foreign rules
+  block:
+    - name: Attempt to manage a conflicting nftables table
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: present
+        router_cve_2026_98432_apply_runtime_changes: true
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-foreign-table-probe
+  rescue:
+    - name: Record conflicting table rejection
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_foreign_table_rejected: >-
+          {{
+            ansible_failed_task.name
+            == 'Refuse an unexpected or conflicting mitigation state'
+          }}
+
+- name: Assert foreign nftables table was rejected
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_foreign_table_rejected | default(false) | bool
+
 - name: Add an extra owned UCI include option before failed removal
   community.openwrt.uci:
     command: set
@@ -291,4 +360,5 @@
     - /tmp/ansible-cve-2026-98432-no-table
     - /tmp/ansible-cve-2026-98432-failing-fw4-check
     - /tmp/ansible-cve-2026-98432-inconclusive-probe
+    - /tmp/ansible-cve-2026-98432-foreign-table-probe
     - /tmp/ansible-cve-2026-98432-expected.nft

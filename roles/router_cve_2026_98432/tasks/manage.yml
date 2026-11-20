@@ -164,12 +164,13 @@
       Unable to inspect the mitigation table; refusing to assume it is absent.
   when: router_cve_2026_98432_apply_runtime_changes | bool
 
-- name: Define the expected active nftables rule
+- name: Define the expected complete nftables table
   ansible.builtin.set_fact:
-    router_cve_2026_98432_rule_pattern: >-
-      (?s)chain pre [{][^}]*type filter hook prerouting priority
-      (?:-310|raw - 10);[^}]*ip protocol tcp ip hdrlength 6-15
-      counter(?: packets [0-9]+ bytes [0-9]+)? +drop
+    router_cve_2026_98432_table_pattern: >-
+      (?s)\A\s*table ip cve_2026_98432 [{]\s*chain pre [{]\s*
+      type filter hook prerouting priority (?:-310|raw - 10);
+      policy accept;\s*ip protocol tcp ip hdrlength 6-15
+      counter(?: packets [0-9]+ bytes [0-9]+)? drop\s*[}]\s*[}]\s*\Z
 
 - name: Refuse an unexpected or conflicting mitigation state
   ansible.builtin.assert:
@@ -186,19 +187,12 @@
         )
       - >-
         router_cve_2026_98432_include.result != 'include'
-        or router_cve_2026_98432_include_options.results[3].result == '0'
         or not (router_cve_2026_98432_runtime_table_probe_conclusive | bool)
-        or (
-          router_cve_2026_98432_apply_runtime_changes | bool
-          and router_cve_2026_98432_runtime_table_absent | bool
-        )
+        or router_cve_2026_98432_runtime_table_absent | bool
         or (
           router_cve_2026_98432_active_table.rc == 0
           and router_cve_2026_98432_active_table.stdout is search(
-            router_cve_2026_98432_rule_pattern
-          )
-          and router_cve_2026_98432_active_table.stdout is not search(
-            'flags.*dormant'
+            router_cve_2026_98432_table_pattern
           )
         )
       - >-
@@ -275,6 +269,15 @@
   failed_when: false
   check_mode: false
 
+- name: Refuse an inconclusive sysupgrade entry check
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_sysupgrade_entry.rc in [0, 1]
+        or router_cve_2026_98432_sysupgrade_file_exists.rc != 0
+    fail_msg: >-
+      Unable to inspect /etc/sysupgrade.conf; refusing to change its contents.
+
 - name: Reset the runtime recovery marker for this invocation
   ansible.builtin.set_fact:
     router_cve_2026_98432_runtime_reload_attempted: false
@@ -306,8 +309,12 @@
               '1'
               if router_cve_2026_98432_apply_runtime_changes | bool
               else (
-                router_cve_2026_98432_include_options.results[3].result
-                | default('0', true)
+                (
+                  router_cve_2026_98432_include_options.results[3].result
+                  | default('1', true)
+                )
+                if router_cve_2026_98432_include.result | default('') == 'include'
+                else '0'
               )
             }}
         autocommit: true
@@ -402,10 +409,7 @@
             and (
               router_cve_2026_98432_active_table.rc != 0
               or router_cve_2026_98432_active_table.stdout is not search(
-                router_cve_2026_98432_rule_pattern
-              )
-              or router_cve_2026_98432_active_table.stdout is search(
-                'flags.*dormant'
+                router_cve_2026_98432_table_pattern
               )
             )
           )
@@ -470,11 +474,7 @@
         that:
           - >-
             router_cve_2026_98432_active_rules.stdout is search(
-              router_cve_2026_98432_rule_pattern
-            )
-          - >-
-            router_cve_2026_98432_active_rules.stdout is not search(
-              'flags.*dormant'
+              router_cve_2026_98432_table_pattern
             )
         fail_msg: The expected CVE mitigation rule is not active in nftables.
       when:
@@ -493,6 +493,14 @@
             ansible_failed_result.msg | default('No diagnostic was provided')
           }}
 
+    - name: Remove a stale UCI recovery file
+      community.openwrt.file:
+        path: /tmp/ansible-cve-2026-98432-previous.uci
+        state: absent
+      register: router_cve_2026_98432_recovery_file_cleanup
+      ignore_errors: true
+      when: router_cve_2026_98432_include.result | default('') == 'include'
+
     - name: Stage the previous owned UCI include for recovery
       community.openwrt.copy:
         content: "{{ router_cve_2026_98432_include_export.stdout }}"
@@ -500,8 +508,11 @@
         owner: root
         group: root
         mode: '0600'
-      failed_when: false
-      when: router_cve_2026_98432_include.result | default('') == 'include'
+      register: router_cve_2026_98432_uci_stage
+      ignore_errors: true
+      when:
+        - router_cve_2026_98432_include.result | default('') == 'include'
+        - not (router_cve_2026_98432_recovery_file_cleanup.failed | default(false))
 
     - name: Restore the previous owned UCI include
       ansible.builtin.raw: |
@@ -514,7 +525,10 @@
       register: router_cve_2026_98432_uci_restore
       changed_when: true
       failed_when: false
-      when: router_cve_2026_98432_include.result | default('') == 'include'
+      when:
+        - router_cve_2026_98432_include.result | default('') == 'include'
+        - not (router_cve_2026_98432_recovery_file_cleanup.failed | default(true))
+        - not (router_cve_2026_98432_uci_stage.failed | default(true))
 
     - name: Remove an include created by the failed run
       community.openwrt.uci:
@@ -618,6 +632,14 @@
         that:
           - router_cve_2026_98432_uci_restore.rc | default(0) == 0
           - >-
+            router_cve_2026_98432_include.result | default('') != 'include'
+            or (
+              router_cve_2026_98432_recovery_file_cleanup.failed
+              | default(false) == false
+              and router_cve_2026_98432_uci_stage.failed
+              | default(false) == false
+            )
+          - >-
             router_cve_2026_98432_uci_remove_new.failed
             | default(false) == false
           - >-
@@ -641,7 +663,7 @@
             or not (router_cve_2026_98432_runtime_reload_attempted | bool)
           - >-
             router_cve_2026_98432_table_after_recovery.stdout | default('')
-            is search(router_cve_2026_98432_rule_pattern)
+            is search(router_cve_2026_98432_table_pattern)
             or router_cve_2026_98432_active_table.rc != 0
             or not (router_cve_2026_98432_runtime_reload_attempted | bool)
           - router_cve_2026_98432_tables_after_recovery.rc | default(0) == 0
