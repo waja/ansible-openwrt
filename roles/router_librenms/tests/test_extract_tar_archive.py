@@ -111,7 +111,9 @@ class ExtractArchiveTests(unittest.TestCase):
             env=self.git_env,
         )
         subprocess.run(
-            ["git", "-C", str(repository), "add", "."], check=True
+            ["git", "-C", str(repository), "add", "."],
+            check=True,
+            env=self.git_env,
         )
         subprocess.run(
             ["git", "-C", str(repository), "commit", "--no-gpg-sign", "-qm", "fixture"],
