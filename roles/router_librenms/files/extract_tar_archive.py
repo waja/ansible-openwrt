@@ -59,6 +59,8 @@ def _validate_member(member, roots):
     parts = path.parts
     if member.size < 0:
         raise ValueError("Archive member has an invalid size")
+    if not member.isfile() and member.size:
+        raise ValueError("Non-file archive members must have zero size")
     if path.is_absolute() or not parts or ".." in parts:
         raise ValueError(f"Unsafe archive path: {member.name!r}")
     roots.add(parts[0])
@@ -73,61 +75,89 @@ def extract_archive(archive_path, destination):
 
     if not destination.is_dir() or any(destination.iterdir()):
         raise ValueError("Destination must be an empty directory")
-    if archive_path.stat().st_size > MAX_ARCHIVE_SIZE:
-        raise ValueError("Archive exceeds maximum compressed size")
-
     roots = set()
     member_count = 0
     expanded_size = 0
-    with tarfile.open(archive_path, mode="r:*", tarinfo=BoundedTarInfo) as archive:
-        # TarFile caches members by default. Clear that cache while validating
-        # so the member limit is enforced before the rest of the archive is read.
-        archive.members.clear()
-        member = archive.next()
-        while member is not None:
-            member_count += 1
-            if member_count > MAX_ARCHIVE_MEMBERS:
-                raise ValueError("Archive contains too many members")
-            _validate_member(member, roots)
-            if member.isfile():
-                expanded_size += member.size
-                if expanded_size > MAX_EXPANDED_SIZE:
-                    raise ValueError("Archive exceeds maximum expanded size")
+
+    # Keep one file descriptor across both passes. This prevents replacing the
+    # path between validation and extraction; the second pass rechecks limits
+    # and member policy in case the opened file is modified in place.
+    with archive_path.open("rb") as archive_file:
+        if os.fstat(archive_file.fileno()).st_size > MAX_ARCHIVE_SIZE:
+            raise ValueError("Archive exceeds maximum compressed size")
+
+        with tarfile.open(
+            fileobj=archive_file, mode="r:*", tarinfo=BoundedTarInfo
+        ) as archive:
+            # TarFile caches the first member on open. Keep firstmember intact
+            # while clearing the list cache to bound PAX metadata retention.
             archive.members.clear()
             member = archive.next()
+            while member is not None:
+                member_count += 1
+                if member_count > MAX_ARCHIVE_MEMBERS:
+                    raise ValueError("Archive contains too many members")
+                _validate_member(member, roots)
+                if member.isfile():
+                    expanded_size += member.size
+                    if expanded_size > MAX_EXPANDED_SIZE:
+                        raise ValueError("Archive exceeds maximum expanded size")
+                archive.members.clear()
+                member = archive.next()
 
-        if member_count == 0:
-            raise ValueError("Archive is empty")
-        if len(roots) != 1:
-            raise ValueError("Archive must contain one top-level directory")
-        root = next(iter(roots))
+            if member_count == 0:
+                raise ValueError("Archive is empty")
+            if len(roots) != 1:
+                raise ValueError("Archive must contain one top-level directory")
+            root = next(iter(roots))
 
-    def safe_filter(member, path):
-        """Strip the archive root and apply Python's safe data filter."""
-        parts = PurePosixPath(member.name).parts
-        if parts[0] != root:
-            raise ValueError("Archive contains inconsistent root paths")
-        if len(parts) == 1:
-            return None
-        if member.islnk():
-            raise ValueError(f"Hard links are not supported: {member.name!r}")
-        stripped = member.replace(
-            name=PurePosixPath(*parts[1:]).as_posix()
-        )
-        return tarfile.data_filter(stripped, path)
+        archive_file.seek(0)
+        if os.fstat(archive_file.fileno()).st_size > MAX_ARCHIVE_SIZE:
+            raise ValueError("Archive exceeds maximum compressed size")
 
-    # Reopen only after validation. Extract one member at a time and clear
-    # tarfile's cache so global PAX headers are not retained per member.
-    with tarfile.open(archive_path, mode="r:*", tarinfo=BoundedTarInfo) as archive:
-        member = archive.next()
-        while member is not None:
-            archive.extract(
-                member,
-                path=os.fspath(destination),
-                filter=safe_filter,
+        def safe_filter(member, path):
+            """Strip the archive root and apply Python's safe data filter."""
+            parts = PurePosixPath(member.name).parts
+            if parts[0] != root:
+                raise ValueError("Archive contains inconsistent root paths")
+            if len(parts) == 1:
+                return None
+            stripped = member.replace(
+                name=PurePosixPath(*parts[1:]).as_posix()
             )
+            return tarfile.data_filter(stripped, path)
+
+        # Recheck each member while extracting. This keeps the limits and
+        # member policy effective if the opened file changes between passes.
+        extracted_count = 0
+        extracted_size = 0
+        extraction_roots = set()
+        with tarfile.open(
+            fileobj=archive_file, mode="r:*", tarinfo=BoundedTarInfo
+        ) as archive:
             archive.members.clear()
             member = archive.next()
+            while member is not None:
+                extracted_count += 1
+                if extracted_count > MAX_ARCHIVE_MEMBERS:
+                    raise ValueError("Archive contains too many members")
+                _validate_member(member, extraction_roots)
+                if extraction_roots != {root}:
+                    raise ValueError("Archive contains inconsistent root paths")
+                if member.isfile():
+                    extracted_size += member.size
+                    if extracted_size > MAX_EXPANDED_SIZE:
+                        raise ValueError("Archive exceeds maximum expanded size")
+                archive.extract(
+                    member,
+                    path=os.fspath(destination),
+                    filter=safe_filter,
+                )
+                archive.members.clear()
+                member = archive.next()
+
+            if extracted_count == 0:
+                raise ValueError("Archive is empty")
 
 
 if __name__ == "__main__":
