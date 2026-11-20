@@ -84,9 +84,9 @@
           tags:
             - molecule-idempotence-notest
       vars:
-        router_firewall_input: ACCEPT
-        router_firewall_forward: ACCEPT
-        router_firewall_output: ACCEPT
+        router_firewall_default_input: ACCEPT
+        router_firewall_default_forward: ACCEPT
+        router_firewall_default_output: ACCEPT
         router_firewall_apply_runtime_changes: false
       tags:
         - molecule-idempotence-notest
@@ -106,9 +106,15 @@
       ansible.builtin.include_role:
         name: router_firewall
       vars:
-        router_firewall_input: ACCEPT
-        router_firewall_forward: ACCEPT
-        router_firewall_output: ACCEPT
+        router_firewall_default_input: ACCEPT
+        router_firewall_default_forward: ACCEPT
+        router_firewall_default_output: ACCEPT
+        router_firewall_default_synflood_protect: true
+        router_firewall_default_synflood_rate: 30/s
+        router_firewall_default_synflood_burst: 60
+        router_firewall_default_drop_invalid: true
+        router_firewall_default_flow_offloading: true
+        router_firewall_default_flow_offloading_hw: false
         router_firewall_apply_runtime_changes: false
         router_firewall_zones:
           guest_test:
@@ -163,6 +169,24 @@
               in router_firewall_uci.result
           - >-
               "firewall.@defaults[0].output='ACCEPT'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].synflood_protect='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].synflood_rate='30/s'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].synflood_burst='60'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].drop_invalid='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].flow_offloading='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].flow_offloading_hw='0'"
               in router_firewall_uci.result
           - >-
               ("firewall.ansible_router_firewall_dropbear_extra_wan."
@@ -249,8 +273,15 @@
       changed_when: false
 
     - name: Validate generated firewall rules with fw4
-      ansible.builtin.raw: fw4 print >/dev/null
+      ansible.builtin.raw: fw4 print
+      register: router_firewall_ruleset
       changed_when: false
+
+    - name: Verify configured global defaults affect the generated ruleset
+      ansible.builtin.assert:
+        that:
+          - "'invalid : drop' in router_firewall_ruleset.stdout"
+          - "'syn_flood' in router_firewall_ruleset.stdout"
 
     - name: Apply router packages role
       ansible.builtin.include_role:

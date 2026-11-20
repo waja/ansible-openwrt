@@ -1,12 +1,89 @@
 # roles/router_firewall/tasks/main.yml
 ---
-- name: Validate firewall default policies
+- name: Reject legacy firewall policy variables
   ansible.builtin.assert:
     that:
-      - router_firewall_input in ['ACCEPT', 'REJECT', 'DROP']
-      - router_firewall_forward in ['ACCEPT', 'REJECT', 'DROP']
-      - router_firewall_output in ['ACCEPT', 'REJECT', 'DROP']
-    fail_msg: Firewall default policies must be ACCEPT, REJECT, or DROP.
+      - item not in vars
+    fail_msg: >-
+      {{ item }} is no longer supported. Rename it to the matching
+      router_firewall_default_<policy> variable. The role no longer writes
+      implicit policy defaults; omitted values preserve the existing
+      firewall configuration.
+  loop:
+    - router_firewall_input
+    - router_firewall_forward
+    - router_firewall_output
+
+- name: Define supported global firewall default options
+  ansible.builtin.set_fact:
+    router_firewall_supported_default_options:
+      - input
+      - forward
+      - output
+      - synflood_protect
+      - synflood_rate
+      - synflood_burst
+      - drop_invalid
+      - flow_offloading
+      - flow_offloading_hw
+  changed_when: false
+
+- name: Reject unsupported firewall default variables
+  ansible.builtin.assert:
+    that:
+      - item in router_firewall_supported_default_options
+    fail_msg: >-
+      router_firewall_default_{{ item }} is not supported by this role.
+      Only verified OpenWrt 25.12 firewall4 defaults are exposed; arbitrary
+      UCI pass-through is intentionally not supported.
+  loop: >-
+    {{
+      vars.keys()
+      | select('match', '^router_firewall_default_')
+      | map('regex_replace', '^router_firewall_default_', '')
+      | difference(router_firewall_supported_default_options)
+      | list
+    }}
+
+- name: Validate explicitly supplied firewall default values
+  ansible.builtin.assert:
+    that:
+      - >-
+        item not in ['input', 'forward', 'output'] or
+        vars['router_firewall_default_' ~ item] is none or
+        vars['router_firewall_default_' ~ item] in ['ACCEPT', 'REJECT', 'DROP']
+      - >-
+        item not in [
+          'synflood_protect', 'drop_invalid',
+          'flow_offloading', 'flow_offloading_hw'
+        ] or
+        vars['router_firewall_default_' ~ item] is none or
+        vars['router_firewall_default_' ~ item] is boolean
+      - >-
+        item != 'synflood_rate' or
+        vars['router_firewall_default_' ~ item] is none or
+        (
+          vars['router_firewall_default_' ~ item] is string and
+          vars['router_firewall_default_' ~ item] is match(
+            '^[1-9][0-9]*/(s|second|m|minute|h|hour|d|day)$'
+          )
+        )
+      - >-
+        item != 'synflood_burst' or
+        vars['router_firewall_default_' ~ item] is none or
+        (
+          vars['router_firewall_default_' ~ item] is integer and
+          vars['router_firewall_default_' ~ item] is not boolean and
+          vars['router_firewall_default_' ~ item] >= 0
+        )
+    fail_msg: >-
+      Invalid value for router_firewall_default_{{ item }}. Use ACCEPT,
+      REJECT, or DROP for policies; booleans for boolean options; a positive
+      rate such as 25/s, 25/second, 25/m, or 25/minute for synflood_rate;
+      and a non-negative integer for synflood_burst. Explicit null removes
+      an option.
+  loop: "{{ router_firewall_supported_default_options }}"
+  when: ("router_firewall_default_" ~ item) in vars
 
 - name: Validate firewall zone configuration
   ansible.builtin.assert:
@@ -390,16 +467,7 @@
 
 - name: Initialize firewall UCI operations
   ansible.builtin.set_fact:
-    router_firewall_operations:
-      - command: set
-        key: firewall.@defaults[0].input
-        value: "{{ router_firewall_input }}"
-      - command: set
-        key: firewall.@defaults[0].forward
-        value: "{{ router_firewall_forward }}"
-      - command: set
-        key: firewall.@defaults[0].output
-        value: "{{ router_firewall_output }}"
+    router_firewall_operations: []
   changed_when: false
 
 - name: Add operations for declarative firewall zones
@@ -527,7 +595,37 @@
     - router_firewall_dropbear_rule.result | default('') == 'rule'
   changed_when: false
 
+- name: Add operations for explicitly supplied global firewall defaults
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + (
+          [{
+            'command': 'absent',
+            'key': 'firewall.@defaults[0].' ~ item
+          }]
+          if vars['router_firewall_default_' ~ item] is none
+          else [{
+            'command': 'set',
+            'key': 'firewall.@defaults[0].' ~ item,
+            'value': (
+              '1' if vars['router_firewall_default_' ~ item]
+              else '0'
+            ) if item in [
+              'synflood_protect', 'drop_invalid',
+              'flow_offloading', 'flow_offloading_hw'
+            ] else vars['router_firewall_default_' ~ item]
+          }]
+        )
+      }}
+  loop: "{{ router_firewall_supported_default_options }}"
+  loop_control:
+    label: "{{ item }}"
+  when: ("router_firewall_default_" ~ item) in vars
+  changed_when: false
+
 - name: Apply firewall configuration in one UCI transaction
+  when: router_firewall_operations | length > 0
   block:
     - name: Apply staged firewall configuration and commit once
       community.openwrt.uci:
@@ -547,6 +645,5 @@
         msg: >-
           Applying the firewall configuration failed. Uncommitted UCI changes
           were reverted; inspect the preceding UCI error before retrying.
-
 - name: Flush firewall reload handler after applying configuration
   ansible.builtin.meta: flush_handlers

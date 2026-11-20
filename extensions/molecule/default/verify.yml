@@ -8,9 +8,9 @@
       ansible.builtin.include_role:
         name: router_firewall
       vars:
-        router_firewall_input: ACCEPT
-        router_firewall_forward: ACCEPT
-        router_firewall_output: ACCEPT
+        router_firewall_default_input: ACCEPT
+        router_firewall_default_forward: ACCEPT
+        router_firewall_default_output: ACCEPT
         router_firewall_apply_runtime_changes: false
         router_firewall_dropbear_extra_ports:
           - 2222
@@ -2223,3 +2223,6 @@
           - >-
             router_firewall_ambiguous_redirect_failure
             == 'Reject ambiguous anonymous firewall redirect matches'
+
+    - name: Verify global firewall default semantics
+      ansible.builtin.include_tasks: verify_firewall_defaults.yml
