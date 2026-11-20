@@ -35,7 +35,9 @@ class BoundedTarInfo(tarfile.TarInfo):
             tarfile.GNUTYPE_LONGLINK,
             tarfile.GNUTYPE_SPARSE,
         ):
-            raise ValueError("GNU longname and sparse entries are not supported")
+            raise ValueError(
+                "GNU longname and sparse entries are not supported"
+            )
         return super()._proc_member(archive)
 
     def _proc_gnusparse_01(self, member, pax_headers):
@@ -101,7 +103,9 @@ def extract_archive(archive_path, destination):
                 if member.isfile():
                     expanded_size += member.size
                     if expanded_size > MAX_EXPANDED_SIZE:
-                        raise ValueError("Archive exceeds maximum expanded size")
+                        raise ValueError(
+                            "Archive exceeds maximum expanded size"
+                        )
                 archive.members.clear()
                 member = archive.next()
 
