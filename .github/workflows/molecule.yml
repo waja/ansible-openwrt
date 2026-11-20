@@ -525,7 +525,8 @@ jobs:
           SANITY_RESULT: ${{ needs.sanity.result }}
           UNITS_RESULT: ${{ needs.units.result }}
           MOLECULE_RESULT: ${{ needs.molecule.result }}
-          CVE_MITIGATION_TRAFFIC_RESULT: ${{ needs.cve-mitigation-traffic.result }}
+          CVE_MITIGATION_TRAFFIC_RESULT: >-
+            ${{ needs.cve-mitigation-traffic.result }}
         run: |
           python - <<'PY'
           import json
