@@ -67,7 +67,9 @@ class ExtractArchiveTests(unittest.TestCase):
     def test_does_not_retain_members_with_global_pax_metadata(self):
         global_headers = {f"test.key.{index}": "value" for index in range(128)}
         with self.archive.open("wb") as output:
-            output.write(tarfile.TarInfo.create_pax_global_header(global_headers))
+            output.write(
+                tarfile.TarInfo.create_pax_global_header(global_headers)
+            )
             with tarfile.open(
                 fileobj=output, mode="w:", format=tarfile.PAX_FORMAT
             ) as archive:
@@ -116,13 +118,19 @@ class ExtractArchiveTests(unittest.TestCase):
             env=self.git_env,
         )
         subprocess.run(
-            ["git", "-C", str(repository), "commit", "--no-gpg-sign", "-qm", "fixture"],
+            [
+                "git", "-C", str(repository), "commit",
+                "--no-gpg-sign", "-qm", "fixture",
+            ],
             check=True,
             env=self.git_env,
         )
         with self.archive.open("wb") as output:
             subprocess.run(
-                ["git", "-C", str(repository), "archive", "--format=tar", "--prefix=source-root/", "HEAD"],
+                [
+                    "git", "-C", str(repository), "archive",
+                    "--format=tar", "--prefix=source-root/", "HEAD",
+                ],
                 check=True,
                 stdout=output,
                 env=self.git_env,
@@ -219,7 +227,9 @@ class ExtractArchiveTests(unittest.TestCase):
 
     def test_rejects_gnu_longname_entries(self):
         name = "agent-main/" + "a" * 120
-        with tarfile.open(self.archive, "w:", format=tarfile.GNU_FORMAT) as archive:
+        with tarfile.open(
+            self.archive, "w:", format=tarfile.GNU_FORMAT
+        ) as archive:
             member = tarfile.TarInfo(name)
             member.size = 1
             archive.addfile(member, io.BytesIO(b"x"))
