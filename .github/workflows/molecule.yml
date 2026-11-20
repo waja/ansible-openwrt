@@ -534,7 +534,9 @@ jobs:
           from pathlib import Path
 
           scenarios = ('default', 'network-static', 'network-dhcp')
-          versions = json.loads(os.environ.get('OPENWRT_VERSIONS') or '[]')
+          versions = json.loads(
+              os.environ.get('OPENWRT_VERSIONS') or '[]'
+          )
           results = {}
           errors = []
           for path in sorted(Path('matrix-results').glob('*/*.json')):
