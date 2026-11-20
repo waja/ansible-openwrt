@@ -116,10 +116,18 @@ def extract_archive(archive_path, destination):
         )
         return tarfile.data_filter(stripped, path)
 
-    # Reopen only after validation; extraction now caches at most the
-    # already-validated member limit.
+    # Reopen only after validation. Extract one member at a time and clear
+    # tarfile's cache so global PAX headers are not retained per member.
     with tarfile.open(archive_path, mode="r:*", tarinfo=BoundedTarInfo) as archive:
-        archive.extractall(path=os.fspath(destination), filter=safe_filter)
+        member = archive.next()
+        while member is not None:
+            archive.extract(
+                member,
+                path=os.fspath(destination),
+                filter=safe_filter,
+            )
+            archive.members.clear()
+            member = archive.next()
 
 
 if __name__ == "__main__":
