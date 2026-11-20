@@ -1,6 +1,7 @@
 """Tests for the LibreNMS archive extractor."""
 
 import io
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -10,29 +11,23 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "files"))
 
-from extract_tar_archive import (
-    BoundedTarInfo,
-    _open_streaming_archive,
-    _expanded_member_size,
-    _validate_sparse_extents,
-    extract_archive,
-)
+from extract_tar_archive import extract_archive
 
 
 class ExtractArchiveTests(unittest.TestCase):
-    """Exercise safe extraction of LibreNMS source archives."""
+    """Exercise safe extraction of Git source archives."""
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        self.archive = self.root / "source.tar.gz"
+        self.archive = self.root / "source.tar"
         self.destination = self.root / "destination"
         self.destination.mkdir()
 
     def tearDown(self):
         self.temporary.cleanup()
 
-    def create_archive(self, entries, mode="w:gz"):
+    def create_archive(self, entries, mode="w:"):
         """Create a tar archive from simple test entries."""
         with tarfile.open(self.archive, mode) as archive:
             for name, content, kind, target in entries:
@@ -54,6 +49,48 @@ class ExtractArchiveTests(unittest.TestCase):
                     member.size = len(data)
                     archive.addfile(member, io.BytesIO(data))
 
+    def test_extracts_git_archive_with_global_pax_and_long_paths(self):
+        repository = self.root / "repository"
+        long_directory = "a" * 110
+        (repository / long_directory).mkdir(parents=True)
+        (repository / long_directory / "script.sh").write_text("script")
+
+        subprocess.run(["git", "init", "-q", str(repository)], check=True)
+        subprocess.run(
+            ["git", "-C", str(repository), "config", "user.email",
+             "test@example.invalid"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repository), "config", "user.name", "Test"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repository), "add", "."], check=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repository), "commit", "-qm", "fixture"],
+            check=True,
+        )
+        with self.archive.open("wb") as output:
+            subprocess.run(
+                ["git", "-C", str(repository), "archive", "--format=tar", "--prefix=source-root/", "HEAD"],
+                check=True,
+                stdout=output,
+            )
+
+        with tarfile.open(self.archive) as archive:
+            self.assertIn("comment", archive.pax_headers)
+            self.assertTrue(
+                any("path" in member.pax_headers for member in archive)
+            )
+
+        extract_archive(self.archive, self.destination)
+        self.assertEqual(
+            (self.destination / long_directory / "script.sh").read_text(),
+            "script",
+        )
+
     def test_extracts_and_strips_top_level_directory(self):
         self.create_archive([
             ("agent-main/snmp", "", "directory", ""),
@@ -66,18 +103,14 @@ class ExtractArchiveTests(unittest.TestCase):
         self.assertFalse((self.destination / "agent-main").exists())
 
     def test_accepts_archive_without_explicit_root_entry(self):
-        self.create_archive([
-            ("agent-main/snmp/distro", "script", "file", ""),
-        ])
+        self.create_archive([("agent-main/snmp/distro", "script", "file", "")])
         extract_archive(self.archive, self.destination)
         self.assertEqual(
             (self.destination / "snmp/distro").read_text(), "script"
         )
 
     def test_accepts_uncompressed_tar(self):
-        self.create_archive(
-            [("agent-main/file", "data", "file", "")], mode="w:"
-        )
+        self.create_archive([("agent-main/file", "data", "file", "")])
         extract_archive(self.archive, self.destination)
         self.assertEqual((self.destination / "file").read_text(), "data")
 
@@ -93,9 +126,7 @@ class ExtractArchiveTests(unittest.TestCase):
         )
 
     def test_rejects_path_traversal(self):
-        self.create_archive([
-            ("agent-main/../../outside", "bad", "file", ""),
-        ])
+        self.create_archive([("agent-main/../../outside", "bad", "file", "")])
         with self.assertRaisesRegex(ValueError, "Unsafe archive path"):
             extract_archive(self.archive, self.destination)
         self.assertFalse((self.root / "outside").exists())
@@ -107,20 +138,32 @@ class ExtractArchiveTests(unittest.TestCase):
 
     def test_rejects_escaping_symlinks(self):
         self.create_archive([
-            (
-                "agent-main/snmp/link",
-                "",
-                "symlink",
-                "../../../../outside",
-            ),
+            ("agent-main/snmp/link", "", "symlink", "../../../../outside"),
         ])
         with self.assertRaises(tarfile.FilterError):
             extract_archive(self.archive, self.destination)
 
-    def test_rejects_old_gnu_sparse_member_before_reading_payload(self):
+    def test_rejects_hard_links(self):
+        self.create_archive([
+            ("agent-main/file", "data", "file", ""),
+            ("agent-main/link", "", "hardlink", "agent-main/file"),
+        ])
+        with self.assertRaisesRegex(ValueError, "Hard links"):
+            extract_archive(self.archive, self.destination)
+
+    def test_rejects_gnu_longname_entries(self):
+        name = "agent-main/" + "a" * 120
+        with tarfile.open(self.archive, "w:", format=tarfile.GNU_FORMAT) as archive:
+            member = tarfile.TarInfo(name)
+            member.size = 1
+            archive.addfile(member, io.BytesIO(b"x"))
+        with self.assertRaisesRegex(ValueError, "GNU longname"):
+            extract_archive(self.archive, self.destination)
+
+    def test_rejects_old_gnu_sparse_entries(self):
         member = tarfile.TarInfo("agent-main/sparse")
         member.type = tarfile.GNUTYPE_SPARSE
-        member.size = 1024 * 1024
+        member.size = 1
         header = bytearray(member.tobuf(tarfile.GNU_FORMAT))
         header[386:398] = tarfile.itn(0, 12, tarfile.GNU_FORMAT)
         header[398:410] = tarfile.itn(1, 12, tarfile.GNU_FORMAT)
@@ -132,27 +175,35 @@ class ExtractArchiveTests(unittest.TestCase):
 
         with self.archive.open("wb") as archive:
             archive.write(header)
-            archive.write(b"\0" * member.size)
+            archive.write(b"x")
             archive.write(b"\0" * (2 * tarfile.BLOCKSIZE))
 
-        with self.assertRaisesRegex(ValueError, "Old GNU sparse"):
+        with self.assertRaisesRegex(ValueError, "GNU longname and sparse"):
             extract_archive(self.archive, self.destination)
 
-    def test_rejects_unsupported_member_type_during_validation(self):
-        with tarfile.open(self.archive, "w:gz") as archive:
+    def test_rejects_pax_sparse_entries(self):
+        with tarfile.open(
+            self.archive, "w:", format=tarfile.PAX_FORMAT
+        ) as archive:
+            member = tarfile.TarInfo("agent-main/sparse")
+            member.pax_headers = {
+                "GNU.sparse.major": "1",
+                "GNU.sparse.minor": "0",
+                "GNU.sparse.realsize": "3",
+            }
+            payload = b"1\n0\n3\n" + b"\0" * (tarfile.BLOCKSIZE - 6) + b"abc"
+            member.size = len(payload)
+            archive.addfile(member, io.BytesIO(payload))
+        with self.assertRaisesRegex(ValueError, "GNU sparse"):
+            extract_archive(self.archive, self.destination)
+
+    def test_rejects_unsupported_member_type(self):
+        with tarfile.open(self.archive, "w:") as archive:
             member = tarfile.TarInfo("agent-main/unsupported")
             member.type = b"Z"
             member.size = 4
             archive.addfile(member, io.BytesIO(b"data"))
         with self.assertRaisesRegex(ValueError, "Unsupported archive member"):
-            extract_archive(self.archive, self.destination)
-
-    def test_rejects_hard_links(self):
-        self.create_archive([
-            ("agent-main/file", "data", "file", ""),
-            ("agent-main/link", "", "hardlink", "agent-main/file"),
-        ])
-        with self.assertRaisesRegex(ValueError, "Hard links"):
             extract_archive(self.archive, self.destination)
 
     def test_rejects_multiple_top_level_directories(self):
@@ -163,52 +214,6 @@ class ExtractArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "top-level directory"):
             extract_archive(self.archive, self.destination)
 
-    def test_legacy_streaming_fallback_does_not_cache_members(self):
-        self.create_archive([
-            (f"agent-main/file-{index}", "x", "file", "")
-            for index in range(10)
-        ])
-        original_open = tarfile.open
-
-        def open_without_stream_argument(*args, **kwargs):
-            if "stream" in kwargs:
-                raise TypeError("unexpected keyword argument 'stream'")
-            return original_open(*args, **kwargs)
-
-        with mock.patch(
-            "extract_tar_archive.tarfile.open",
-            side_effect=open_without_stream_argument,
-        ):
-            with _open_streaming_archive(self.archive) as archive:
-                for _member in archive:
-                    self.assertEqual(archive.members, [])
-
-    def test_streaming_archive_does_not_cache_members(self):
-        self.create_archive([
-            (f"agent-main/file-{index}", "x", "file", "")
-            for index in range(10)
-        ])
-        with _open_streaming_archive(self.archive) as archive:
-            list(archive)
-            self.assertTrue(archive.stream)
-            self.assertEqual(archive.members, [])
-
-    def test_global_pax_header_does_not_accumulate_member_objects(self):
-        with tarfile.open(
-            self.archive,
-            "w:gz",
-            format=tarfile.PAX_FORMAT,
-            pax_headers={f"global-{i}": "value" for i in range(100)},
-        ) as archive:
-            for index in range(100):
-                member = tarfile.TarInfo(f"agent-main/file-{index}")
-                member.size = 1
-                archive.addfile(member, io.BytesIO(b"x"))
-        with _open_streaming_archive(self.archive) as archive:
-            list(archive)
-            self.assertEqual(archive.members, [])
-            self.assertEqual(len(archive.pax_headers), 100)
-
     def test_rejects_oversized_archive(self):
         self.create_archive([("agent-main/file", "data", "file", "")])
         with mock.patch(
@@ -218,27 +223,14 @@ class ExtractArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "compressed size"):
                 extract_archive(self.archive, self.destination)
 
-    def test_rejects_too_many_members_before_scanning_the_archive(self):
+    def test_rejects_too_many_members(self):
         self.create_archive([
             ("agent-main/one", "1", "file", ""),
             ("agent-main/two", "2", "file", ""),
-            ("agent-main/three", "3", "file", ""),
         ])
-        original_next = tarfile.TarFile.next
-        calls = 0
-
-        def counting_next(archive):
-            nonlocal calls
-            calls += 1
-            return original_next(archive)
-
-        with (
-            mock.patch("extract_tar_archive.MAX_ARCHIVE_MEMBERS", 1),
-            mock.patch.object(tarfile.TarFile, "next", counting_next),
-        ):
+        with mock.patch("extract_tar_archive.MAX_ARCHIVE_MEMBERS", 1):
             with self.assertRaisesRegex(ValueError, "too many members"):
                 extract_archive(self.archive, self.destination)
-        self.assertEqual(calls, 3)
 
     def test_rejects_excessive_expanded_size(self):
         self.create_archive([("agent-main/file", "payload", "file", "")])
@@ -246,16 +238,9 @@ class ExtractArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "expanded size"):
                 extract_archive(self.archive, self.destination)
 
-    def test_rejects_negative_extension_size_before_reading(self):
-        archive = mock.Mock()
-        member = tarfile.TarInfo("pax-header")
-        member.size = -512
-        with self.assertRaisesRegex(ValueError, "invalid size"):
-            BoundedTarInfo._check_metadata_size(member, archive)
-
     def test_rejects_oversized_pax_metadata(self):
         with tarfile.open(
-            self.archive, "w:gz", format=tarfile.PAX_FORMAT
+            self.archive, "w:", format=tarfile.PAX_FORMAT
         ) as archive:
             member = tarfile.TarInfo("agent-main/file")
             member.pax_headers = {"comment": "x" * 1024}
@@ -269,7 +254,7 @@ class ExtractArchiveTests(unittest.TestCase):
 
     def test_rejects_cumulative_pax_metadata(self):
         with tarfile.open(
-            self.archive, "w:gz", format=tarfile.PAX_FORMAT
+            self.archive, "w:", format=tarfile.PAX_FORMAT
         ) as archive:
             for name in ("agent-main/one", "agent-main/two"):
                 member = tarfile.TarInfo(name)
@@ -283,81 +268,6 @@ class ExtractArchiveTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(ValueError, "Archive metadata"):
                 extract_archive(self.archive, self.destination)
-
-    def test_rejects_sparse_map_over_cumulative_metadata_limit(self):
-        archive = mock.Mock()
-        archive.fileobj = io.BytesIO(b"1\n0\n1\n" + b"\0" * 506)
-        archive._metadata_size = 512
-        member = tarfile.TarInfo("agent-main/sparse")
-        with mock.patch(
-            "extract_tar_archive.MAX_TOTAL_METADATA_SIZE", 512
-        ):
-            with self.assertRaisesRegex(ValueError, "metadata"):
-                BoundedTarInfo()._proc_gnusparse_10(member, {}, archive)
-        self.assertEqual(archive.fileobj.tell(), 0)
-
-    def test_counts_sparse_map_towards_cumulative_metadata_limit(self):
-        archive = mock.Mock()
-        archive.fileobj = io.BytesIO(b"1\n0\n1\n" + b"\0" * 506)
-        archive._metadata_size = 512
-        member = tarfile.TarInfo("agent-main/sparse")
-        with mock.patch(
-            "extract_tar_archive.MAX_TOTAL_METADATA_SIZE", 1024
-        ):
-            BoundedTarInfo()._proc_gnusparse_10(member, {}, archive)
-        self.assertEqual(archive._metadata_size, 1024)
-        self.assertEqual(member.sparse, [(0, 1)])
-
-    def test_extracts_gnu_sparse_10_archive(self):
-        with tarfile.open(
-            self.archive, "w:", format=tarfile.PAX_FORMAT
-        ) as archive:
-            member = tarfile.TarInfo("agent-main/sparse")
-            member.pax_headers = {
-                "GNU.sparse.major": "1",
-                "GNU.sparse.minor": "0",
-                "GNU.sparse.realsize": "3",
-            }
-            sparse_map = b"1\n0\n3\n"
-            payload = (
-                sparse_map
-                + b"\0" * (tarfile.BLOCKSIZE - len(sparse_map))
-                + b"abc"
-            )
-            member.size = len(payload)
-            archive.addfile(member, io.BytesIO(payload))
-        extract_archive(self.archive, self.destination)
-        self.assertEqual(
-            (self.destination / "sparse").read_bytes(), b"abc"
-        )
-
-    def test_rejects_sparse_extent_beyond_logical_size(self):
-        member = tarfile.TarInfo("agent-main/sparse")
-        member.size = 1
-        member.pax_headers = {"GNU.sparse.realsize": "1"}
-        member.sparse = [(0, 1), (1, 1)]
-        with self.assertRaisesRegex(ValueError, "exceeds logical file size"):
-            _validate_sparse_extents(member)
-
-    def test_rejects_negative_sparse_extents(self):
-        member = tarfile.TarInfo("agent-main/sparse")
-        member.size = 1
-        member.sparse = [(-1, 1)]
-        with self.assertRaisesRegex(ValueError, "negative extent"):
-            _validate_sparse_extents(member)
-
-    def test_rejects_overlapping_sparse_extents(self):
-        member = tarfile.TarInfo("agent-main/sparse")
-        member.size = 3
-        member.sparse = [(0, 2), (1, 1)]
-        with self.assertRaisesRegex(ValueError, "overlapping extents"):
-            _validate_sparse_extents(member)
-
-    def test_counts_sparse_logical_size_towards_expansion_limit(self):
-        member = tarfile.TarInfo("agent-main/sparse")
-        member.size = 1
-        member.pax_headers = {"GNU.sparse.realsize": "100"}
-        self.assertEqual(_expanded_member_size(member), 100)
 
     def test_requires_empty_destination(self):
         (self.destination / "existing").touch()
