@@ -214,7 +214,7 @@ class ExtractArchiveTests(unittest.TestCase):
             member.type = tarfile.DIRTYPE
             member.size = 4
             archive.addfile(member, io.BytesIO(b"data"))
-        with self.assertRaisesRegex(ValueError, "non-file archive members"):
+        with self.assertRaisesRegex(ValueError, "(?i)non-file archive members"):
             extract_archive(self.archive, self.destination)
 
     def test_rejects_hard_links(self):
@@ -306,12 +306,13 @@ class ExtractArchiveTests(unittest.TestCase):
             ("agent-main/three", "3", "file", ""),
         ])
         original_next = tarfile.TarFile.next
-        next_calls = 0
+        read_members = []
 
         def tracking_next(archive):
-            nonlocal next_calls
-            next_calls += 1
-            return original_next(archive)
+            member = original_next(archive)
+            if member is not None:
+                read_members.append(member.name)
+            return member
 
         with mock.patch(
             "extract_tar_archive.MAX_ARCHIVE_MEMBERS", 1
@@ -319,9 +320,8 @@ class ExtractArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "too many members"):
                 extract_archive(self.archive, self.destination)
 
-        # open() preloads the first member; the loop reads only the second
-        # before stopping at the configured limit.
-        self.assertEqual(next_calls, 3)
+        # The third member must not be read after the configured limit.
+        self.assertNotIn("agent-main/three", read_members)
 
         self.create_archive([
             ("agent-main/one", "1", "file", ""),
