@@ -163,6 +163,14 @@ class ExtractArchiveTests(unittest.TestCase):
         extract_archive(self.archive, self.destination)
         self.assertEqual((self.destination / "file").read_text(), "data")
 
+    def test_accepts_gzip_tar(self):
+        self.create_archive(
+            [("agent-main/file", "data", "file", "")],
+            mode="w:gz",
+        )
+        extract_archive(self.archive, self.destination)
+        self.assertEqual((self.destination / "file").read_text(), "data")
+
     def test_allows_safe_relative_symlinks(self):
         self.create_archive([
             ("agent-main/snmp", "", "directory", ""),
