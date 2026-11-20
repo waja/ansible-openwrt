@@ -1,6 +1,7 @@
 """Tests for the LibreNMS archive extractor."""
 
 import io
+import os
 import subprocess
 import sys
 import tarfile
@@ -23,6 +24,20 @@ class ExtractArchiveTests(unittest.TestCase):
         self.archive = self.root / "source.tar"
         self.destination = self.root / "destination"
         self.destination.mkdir()
+        self.git_env = os.environ.copy()
+        for name in (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_COMMON_DIR",
+            "GIT_NAMESPACE",
+            "GIT_PREFIX",
+            "GIT_CEILING_DIRECTORIES",
+            "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+        ):
+            self.git_env.pop(name, None)
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -79,15 +94,21 @@ class ExtractArchiveTests(unittest.TestCase):
         (repository / long_directory).mkdir(parents=True)
         (repository / long_directory / "script.sh").write_text("script")
 
-        subprocess.run(["git", "init", "-q", str(repository)], check=True)
+        subprocess.run(
+            ["git", "init", "-q", str(repository)],
+            check=True,
+            env=self.git_env,
+        )
         subprocess.run(
             ["git", "-C", str(repository), "config", "user.email",
              "test@example.invalid"],
             check=True,
+            env=self.git_env,
         )
         subprocess.run(
             ["git", "-C", str(repository), "config", "user.name", "Test"],
             check=True,
+            env=self.git_env,
         )
         subprocess.run(
             ["git", "-C", str(repository), "add", "."], check=True
@@ -95,12 +116,14 @@ class ExtractArchiveTests(unittest.TestCase):
         subprocess.run(
             ["git", "-C", str(repository), "commit", "--no-gpg-sign", "-qm", "fixture"],
             check=True,
+            env=self.git_env,
         )
         with self.archive.open("wb") as output:
             subprocess.run(
                 ["git", "-C", str(repository), "archive", "--format=tar", "--prefix=source-root/", "HEAD"],
                 check=True,
                 stdout=output,
+                env=self.git_env,
             )
 
         with tarfile.open(self.archive) as archive:
