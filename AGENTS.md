@@ -109,6 +109,12 @@ or CI workflows.
 - Keep script-specific smoke tests in their dedicated workflow. Script
   changes also run Molecule; avoid adding exceptions just to save that run.
 - Keep scheduled smoke tests and manual `workflow_dispatch` available.
+- The `cve-mitigation-traffic` job installs `iproute2`, `nftables`, and
+  `python3`, then runs
+  `sudo python3 scripts/tests/test_cve_2026_98432_traffic.py` in a network
+  namespace. It checks the production mitigation ruleset's IPv4 INPUT/FORWARD
+  filtering and IPv6 compatibility. The `molecule-status` aggregate depends
+  on this job and fails if it does not succeed.
 - Do not add workflow-level path filters that can leave required checks
   pending.
 
