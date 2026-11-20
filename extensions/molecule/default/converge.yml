@@ -1424,3 +1424,180 @@
           loop:
             - /tmp/ansible-molecule-owut
             - /tmp/ansible-molecule-owut-mode
+
+    - name: Provide a conclusive absent-table probe for the staged CVE test
+      community.openwrt.copy:
+        content: |
+          #!/bin/sh
+          echo "nft: No such file or directory" >&2
+          exit 1
+        dest: /tmp/ansible-cve-2026-98432-no-table
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: >-
+        Install CVE mitigation before testing sysupgrade duplicate handling
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: present
+        router_cve_2026_98432_apply_runtime_changes: false
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-no-table
+
+    - name: Check whether the duplicate-entry fixture has already run
+      ansible.builtin.raw: >-
+        test -f /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
+      register: router_cve_2026_98432_fixture_marker
+      changed_when: false
+      failed_when: false
+
+
+    - name: Seed duplicate CVE sysupgrade entries and an unrelated entry
+      ansible.builtin.raw: |
+        set -e
+        touch /etc/sysupgrade.conf
+        sed -i '\|^/etc/cve_2026_98432\.nft$|d' /etc/sysupgrade.conf
+        printf '%s\n' \
+          /etc/cve_2026_98432.nft \
+          /etc/cve_2026_98432.nft \
+          /etc/molecule-preserve.conf >> /etc/sysupgrade.conf
+      changed_when: true
+      when: router_cve_2026_98432_fixture_marker.rc != 0
+
+
+    - name: Configure CVE mitigation without changing the running firewall
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: present
+        router_cve_2026_98432_apply_runtime_changes: false
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-no-table
+
+    - name: Read standalone CVE mitigation UCI include options
+      community.openwrt.uci:
+        command: get
+        key: "firewall.ansible_cve_2026_98432.{{ item }}"
+      loop:
+        - type
+        - path
+        - position
+        - enabled
+      register: router_cve_2026_98432_test_include
+      changed_when: false
+
+    - name: Assert CVE mitigation UCI include is staged but disabled
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_test_include.results[0].result == 'nftables'
+          - >-
+            router_cve_2026_98432_test_include.results[1].result
+            == '/etc/cve_2026_98432.nft'
+          - >-
+            router_cve_2026_98432_test_include.results[2].result
+            == 'ruleset-post'
+          - router_cve_2026_98432_test_include.results[3].result == '0'
+
+    - name: Verify the staged include is present in the persistent firewall file
+      ansible.builtin.raw: |
+        set -e
+        grep -Fq "config include 'ansible_cve_2026_98432'" /etc/config/firewall
+        grep -Fq "option type 'nftables'" /etc/config/firewall
+        grep -Fq "option path '/etc/cve_2026_98432.nft'" /etc/config/firewall
+        grep -Fq "option position 'ruleset-post'" /etc/config/firewall
+        grep -Fq "option enabled '0'" /etc/config/firewall
+      changed_when: false
+
+    - name: Check for pending firewall UCI changes after staging
+      community.openwrt.command:
+        cmd: uci changes firewall
+      register: router_cve_2026_98432_staged_changes
+      changed_when: false
+
+    - name: Assert the staged include is committed to persistent UCI
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_staged_changes.stdout | trim == ''
+
+    - name: Validate fw4 rendering with a temporary include enable
+      when: router_cve_2026_98432_fixture_marker.rc != 0
+      block:
+        - name: Temporarily enable the staged include for fw4 rendering
+          community.openwrt.uci:
+            command: set
+            key: firewall.ansible_cve_2026_98432.enabled
+            value: '1'
+            autocommit: true
+
+        - name: Render the staged firewall ruleset
+          community.openwrt.command:
+            cmd: fw4 print
+          register: router_cve_2026_98432_fw4_print
+          changed_when: false
+
+        - name: Assert fw4 includes the standalone ruleset at ruleset scope
+          ansible.builtin.assert:
+            that:
+              - >-
+                router_cve_2026_98432_fw4_print.stdout
+                is search('include "/etc/cve_2026_98432\\.nft"')
+      always:
+        - name: Restore the staged include to its disabled state
+          community.openwrt.uci:
+            command: set
+            key: firewall.ansible_cve_2026_98432.enabled
+            value: '0'
+            autocommit: true
+
+    - name: Mark the duplicate-entry fixture as seeded
+      ansible.builtin.raw: >-
+        touch /tmp/ansible-molecule-cve-2026-98432-fixture-seeded &&
+        chmod 0600 /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
+      changed_when: true
+      when: router_cve_2026_98432_fixture_marker.rc != 0
+
+    - name: Copy the shipped CVE ruleset for exact comparison
+      community.openwrt.copy:
+        src: >-
+          {{
+            playbook_dir ~ '/../../../roles/'
+            ~ 'router_cve_2026_98432/files/mitigation.nft'
+          }}
+        dest: /tmp/ansible-cve-2026-98432-expected.nft
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Read the CVE mitigation sysupgrade entry
+      community.openwrt.command:
+        cmd: grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+      register: router_cve_2026_98432_installed_sysupgrade
+      changed_when: false
+
+    - name: Count the managed sysupgrade entry
+      community.openwrt.command:
+        cmd: grep -Fxc /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+      register: router_cve_2026_98432_sysupgrade_count
+      changed_when: false
+
+    - name: Verify duplicate-free sysupgrade preservation
+      ansible.builtin.raw: |
+        set -e
+        test "{{ router_cve_2026_98432_sysupgrade_count.stdout | trim }}" = 1
+        grep -Fxq /etc/molecule-preserve.conf /etc/sysupgrade.conf
+      changed_when: false
+
+    - name: Verify the installed ruleset matches the shipped asset
+      ansible.builtin.raw: >-
+        cmp -s /etc/cve_2026_98432.nft
+        /tmp/ansible-cve-2026-98432-expected.nft
+      changed_when: false
+
+    - name: >-
+        Verify the CVE sysupgrade entry is unique and unrelated entries remain
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_sysupgrade_count.stdout | int == 1
+          - router_cve_2026_98432_installed_sysupgrade.rc == 0

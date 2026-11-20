@@ -1,0 +1,4 @@
+# roles/router_cve_2026_98432/tasks/main.yml
+---
+- name: Manage CVE-2026-98432 mitigation
+  ansible.builtin.include_tasks: manage.yml
