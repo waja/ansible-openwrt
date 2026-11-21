@@ -2388,4 +2388,3 @@
           - >-
             router_firewall_defaults_before_idempotence.stdout
             == router_firewall_defaults_after_idempotence.stdout
-
