@@ -234,6 +234,25 @@
       Existing state conflicts with this role or is not owned by it; resolve
       it manually.
 
+- name: Refuse removal of a disabled include with an active table
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (
+          router_cve_2026_98432_state == 'absent'
+          and router_cve_2026_98432_apply_runtime_changes | bool
+          and router_cve_2026_98432_include.result | default('') == 'include'
+          and (
+            router_cve_2026_98432_include_options.results[3].result
+            | default('1', true)
+          ) == '0'
+          and router_cve_2026_98432_active_table.rc == 0
+        )
+    fail_msg: >-
+      The mitigation include is disabled while its nftables table is still
+      active. Enable the include or remove the stale runtime table manually
+      before retrying removal.
+
 - name: Capture the complete owned UCI include
   ansible.builtin.raw: >-
     uci export firewall |

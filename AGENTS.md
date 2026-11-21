@@ -658,6 +658,16 @@ with it.
   - The `17 6 * * 0` schedule tests the regular moving OpenWrt release image;
     the separate `17 7 * * 0` schedule tests the moving snapshot tag.
     Pull requests, pushes, and manual runs use the regular image.
+- `cve-mitigation-traffic`
+  - Runs on every workflow invocation, independently of whether the Molecule
+    matrix is skipped for Markdown-only changes.
+  - Installs `iproute2`, `nftables`, and `python3` on the Ubuntu runner.
+  - Runs `sudo python3 scripts/tests/test_cve_2026_98432_traffic.py` because
+    the test creates network namespaces and configures nftables.
+  - Covers IPv4 INPUT/FORWARD filtering and IPv6 compatibility.
+  - `molecule-status` depends on this job and fails if the traffic test does
+    not succeed.
+
 - `molecule-status`
   - Exposes the stable `Molecule` check. Configure branch protection to
     require this aggregate check, not the individual matrix jobs.
