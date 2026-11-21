@@ -33,7 +33,7 @@
       family='{{ router_firewall_forwarding.family | default('any', true) }}'.
       Resolve the duplicate UCI sections before retrying.
 
-- name: Derive a stable UCI section ID for a new forwarding
+- name: Derive a stable UCI section ID for the forwarding identity
   ansible.builtin.set_fact:
     router_firewall_forwarding_generated_section_id: >-
       router_fw_fwd_{{
@@ -52,21 +52,25 @@
   register: router_firewall_forwarding_generated_section
   changed_when: false
   failed_when: false
-  when: router_firewall_forwarding_matches | length == 0
+  when: >-
+    router_firewall_forwarding_matches | length == 0 or
+    router_firewall_forwarding_matches[0] is match('^@forwarding\\[')
 
 - name: Reject a conflicting generated forwarding section ID
   ansible.builtin.assert:
     that:
       - router_firewall_forwarding_generated_section.result | default('') == ''
     fail_msg: >-
-      Cannot create forwarding src='{{ router_firewall_forwarding.src }}',
+      Cannot manage forwarding src='{{ router_firewall_forwarding.src }}',
       dest='{{ router_firewall_forwarding.dest }}',
       family='{{ router_firewall_forwarding.family | default('any', true) }}':
       generated UCI section '{{ router_firewall_forwarding_generated_section_id }}'
       already exists with a different identity.
   when:
     - router_firewall_forwarding.state | default('present') == 'present'
-    - router_firewall_forwarding_matches | length == 0
+    - >-
+      router_firewall_forwarding_matches | length == 0 or
+      router_firewall_forwarding_matches[0] is match('^@forwarding\\[')
 
 - name: Collect the resolved forwarding for the shared UCI transaction
   ansible.builtin.set_fact:
@@ -84,12 +88,22 @@
           'enabled': router_firewall_forwarding.enabled | default(none),
           'enabled_supplied': router_firewall_forwarding.enabled is defined,
           'state': router_firewall_forwarding.state | default('present'),
-          'section_id': (
+          'original_section_id': (
             router_firewall_forwarding_matches[0]
             if router_firewall_forwarding_matches | length == 1
             else router_firewall_forwarding_generated_section_id
           ),
-          'matched': router_firewall_forwarding_matches | length == 1
+          'section_id': (
+            router_firewall_forwarding_generated_section_id
+            if router_firewall_forwarding_matches | length == 0 or
+               router_firewall_forwarding_matches[0] is match('^@forwarding\\[')
+            else router_firewall_forwarding_matches[0]
+          ),
+          'matched': router_firewall_forwarding_matches | length == 1,
+          'anonymous': (
+            router_firewall_forwarding_matches | length == 1 and
+            router_firewall_forwarding_matches[0] is match('^@forwarding\\[')
+          )
         }]
       }}
   changed_when: false
