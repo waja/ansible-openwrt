@@ -129,6 +129,79 @@
         router_firewall_ipv6_forwarding_id ~ ".enabled='0'"
         in router_firewall_forwarding_adoption.result
 
+- name: Derive IDs for multiple anonymous forwarding adoption
+  ansible.builtin.set_fact:
+    router_firewall_multi_forwarding_a_id: >-
+      router_fw_fwd_{{ ('guest_test|new_guest|ipv4') | hash('sha1')
+      | truncate(12, true, '') }}
+    router_firewall_multi_forwarding_b_id: >-
+      router_fw_fwd_{{ ('guest_test|new_guest2|ipv6') | hash('sha1')
+      | truncate(12, true, '') }}
+
+- name: Seed two anonymous forwardings for one role invocation
+  community.openwrt.uci:
+    autocommit: true
+    operations:
+      - command: add
+        config: firewall
+        type: forwarding
+      - command: set
+        key: firewall.@forwarding[-1].src
+        value: guest_test
+      - command: set
+        key: firewall.@forwarding[-1].dest
+        value: new_guest
+      - command: set
+        key: firewall.@forwarding[-1].family
+        value: ipv4
+      - command: add
+        config: firewall
+        type: forwarding
+      - command: set
+        key: firewall.@forwarding[-1].src
+        value: guest_test
+      - command: set
+        key: firewall.@forwarding[-1].dest
+        value: new_guest2
+      - command: set
+        key: firewall.@forwarding[-1].family
+        value: ipv6
+
+- name: Adopt multiple anonymous forwardings in one transaction
+  ansible.builtin.include_role:
+    name: router_firewall
+  vars:
+    router_firewall_apply_runtime_changes: false
+    router_firewall_zones:
+      new_guest2:
+        input: REJECT
+    router_firewall_forwardings:
+      - src: guest_test
+        dest: new_guest
+        family: ipv4
+        enabled: false
+      - src: guest_test
+        dest: new_guest2
+        family: ipv6
+        enabled: false
+
+- name: Read configuration after multiple anonymous forwarding adoption
+  community.openwrt.uci:
+    command: show
+    config: firewall
+  register: router_firewall_multiple_forwarding_adoption
+  changed_when: false
+
+- name: Verify multiple anonymous sections were renamed safely
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_multi_forwarding_a_id ~ '=forwarding'
+        in router_firewall_multiple_forwarding_adoption.result
+      - >-
+        router_firewall_multi_forwarding_b_id ~ '=forwarding'
+        in router_firewall_multiple_forwarding_adoption.result
+
 - name: Capture duplicate forwarding identity validation
   block:
     - name: Seed duplicate anonymous forwardings
