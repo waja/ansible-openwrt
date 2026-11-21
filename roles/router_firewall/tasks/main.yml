@@ -79,8 +79,9 @@
     fail_msg: >-
       Invalid value for router_firewall_default_{{ item }}. Use ACCEPT,
       REJECT, or DROP for policies; booleans for boolean options; a positive
-      rate such as 25/second, 25/minute, 25/hour, 25/day, or 25 (seconds) for synflood_rate;
-      and a non-negative integer for synflood_burst. Explicit null removes
+      SYN flood rate such as 25/second or 25 (fw4 interprets an omitted unit
+      as per second); and a non-negative integer for synflood_burst. Explicit
+      null removes an option.
       an option.
   loop: "{{ router_firewall_supported_default_options }}"
   when: ("router_firewall_default_" ~ item) in vars
