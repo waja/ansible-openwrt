@@ -690,46 +690,6 @@ router_firewall_zones:
     state: absent
 ```
 
-## Declarative inter-zone forwardings
-
-Declare inter-zone forwarding entries as a list. Each entry is identified by
-its source zone, destination zone, and effective address family (`any` when
-`family` is omitted or null):
-
-```yaml
-router_firewall_forwardings:
-  - src: lan
-    dest: wan
-    name: LAN to WAN
-
-  - src: guest
-    dest: wan
-    family: ipv4
-    enabled: false
-
-  - state: absent
-    src: old_lan
-    dest: wan
-    family: any
-```
-
-Existing named and anonymous UCI sections are matched by that identity tuple.
-An existing named section keeps its UCI section ID. A uniquely matched
-anonymous section is renamed to a deterministic ID derived from the identity
-tuple, so later updates and removals do not depend on anonymous section
-indexes. A deterministic ID is also used when creating a new forwarding.
-More than one matching section is an error. The optional `name` is
-descriptive and is not used for identity.
-
-Use `state: absent` to remove the exact identity. Use `enabled: false` to
-retain the section while disabling the forwarding. Omitted options remain
-unchanged; explicit `null` removes `family`, `name`, or `enabled`.
-Forwardings not listed remain untouched.
-
-Both source and destination must refer to an existing zone or a zone declared
-present in the same role invocation. A reference to a zone declared absent is
-rejected. The role does not create zones implicitly or cascade-delete
-forwardings when removing a zone.
 ## Additional Dropbear WAN access
 
 The role can create a dedicated WAN firewall rule for the additional
