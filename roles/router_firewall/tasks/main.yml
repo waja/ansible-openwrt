@@ -65,7 +65,7 @@
         (
           vars['router_firewall_default_' ~ item] is string and
           vars['router_firewall_default_' ~ item] is match(
-            '^[1-9][0-9]*(/(second|minute|hour|day))?
+            '^[1-9][0-9]*(/(second|minute|hour|day))?$'
           )
         )
       - >-
