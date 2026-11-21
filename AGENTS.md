@@ -344,6 +344,9 @@ for release versions, image tags, container names, paths, and CI matrix values.
 - Keep service reloads/restarts in handlers notified by the successful UCI
   task; do not use a generic commit handler because handler execution order
   does not guarantee a commit before every service handler.
+- Exception: the CVE-2026-98432 mitigation role performs synchronous firewall
+  reloads directly because fw4 validation, runtime verification, and recovery
+  must run in a strict sequence; do not defer these reloads to handlers.
 - If a configuration option is optional and cannot cleanly be included in
   the grouped operations, use a separate conditional UCI task with
   `autocommit: true`.

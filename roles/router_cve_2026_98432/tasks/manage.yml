@@ -217,6 +217,16 @@
       - >-
         router_cve_2026_98432_include.result == 'include'
         or (
+          router_cve_2026_98432_state == 'absent'
+          and (
+            router_cve_2026_98432_sysupgrade_entry.rc == 0
+            or (
+              router_cve_2026_98432_file_exists.rc == 0
+              and router_cve_2026_98432_staged_ruleset_matches | bool
+            )
+          )
+        )
+        or (
           router_cve_2026_98432_sysupgrade_entry.rc != 0
           and (
             router_cve_2026_98432_file_exists.rc != 0
@@ -244,8 +254,8 @@
           and router_cve_2026_98432_include.result | default('') == 'include'
           and (
             router_cve_2026_98432_include_options.results[3].result
-            | default('1', true)
-          ) == '0'
+            | default('1', true) | lower
+          ) in ['0', 'off', 'false', 'no']
           and router_cve_2026_98432_active_table.rc == 0
         )
     fail_msg: >-
@@ -363,17 +373,31 @@
         - router_cve_2026_98432_state == 'present'
         - router_cve_2026_98432_runtime_table_probe_conclusive | bool
 
-    - name: Preserve the ruleset through sysupgrade
-      community.openwrt.lineinfile:
-        path: /etc/sysupgrade.conf
-        line: /etc/cve_2026_98432.nft
-        regexp: '^/etc/cve_2026_98432\.nft$'
-        create: true
-        state: present
+    - name: Preserve the ruleset through sysupgrade atomically
+      ansible.builtin.raw: |
+        set -e
+        path=/etc/sysupgrade.conf
+        entry=/etc/cve_2026_98432.nft
+        [ ! -L "$path" ] || exit 1
+        tmp=$(mktemp "${path}.XXXXXX")
+        trap 'rm -f "$tmp"' EXIT
+        if [ -f "$path" ]; then
+          cp -p "$path" "$tmp"
+          awk -v entry="$entry" '
+            $0 != entry || !seen++ { print }
+            END { if (!seen) print entry }
+          ' "$path" > "$tmp"
+        else
+          chmod 0644 "$tmp"
+          printf '%s\n' "$entry" > "$tmp"
+        fi
+        if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+          exit 0
+        fi
+        mv -f "$tmp" "$path"
+        echo CHANGED
       register: router_cve_2026_98432_sysupgrade_change
-      when:
-        - router_cve_2026_98432_state == 'present'
-        - router_cve_2026_98432_runtime_table_probe_conclusive | bool
+      changed_when: "'CHANGED' in router_cve_2026_98432_sysupgrade_change.stdout"
 
     - name: Count owned sysupgrade entries
       community.openwrt.command:
@@ -411,28 +435,6 @@
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_include.result | default('') == 'include'
 
-    - name: Remove the sysupgrade entry
-      community.openwrt.lineinfile:
-        path: /etc/sysupgrade.conf
-        line: /etc/cve_2026_98432.nft
-        regexp: '^/etc/cve_2026_98432\.nft$'
-        state: absent
-      register: router_cve_2026_98432_sysupgrade_removed
-      when:
-        - router_cve_2026_98432_state == 'absent'
-        - router_cve_2026_98432_sysupgrade_entry.rc == 0
-
-    - name: Remove the owned ruleset file
-      community.openwrt.file:
-        path: /etc/cve_2026_98432.nft
-        state: absent
-      register: router_cve_2026_98432_ruleset_removed
-      when:
-        - router_cve_2026_98432_state == 'absent'
-        - >-
-          router_cve_2026_98432_include.result | default('') == 'include'
-          or router_cve_2026_98432_staged_ruleset_matches | bool
-
     - name: Reload fw4 when managed configuration changed
       when:
         - not ansible_check_mode
@@ -441,9 +443,7 @@
           router_cve_2026_98432_ruleset_change.changed | default(false)
           or router_cve_2026_98432_include_change.changed | default(false)
           or router_cve_2026_98432_sysupgrade_change.changed | default(false)
-          or router_cve_2026_98432_ruleset_removed.changed | default(false)
           or router_cve_2026_98432_include_removed.changed | default(false)
-          or router_cve_2026_98432_sysupgrade_removed.changed | default(false)
           or (
             router_cve_2026_98432_state == 'present'
             and (
@@ -469,8 +469,8 @@
             state: reloaded
 
     - name: Remove the standalone nftables table
-      community.openwrt.command:
-        cmd: nft delete table ip cve_2026_98432
+      ansible.builtin.raw: nft delete table ip cve_2026_98432 2>/dev/null || true
+      changed_when: true
       when:
         - not ansible_check_mode
         - router_cve_2026_98432_state == 'absent'
@@ -498,6 +498,40 @@
         - not ansible_check_mode
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_apply_runtime_changes | bool
+
+    - name: Remove the sysupgrade entry atomically
+      ansible.builtin.raw: |
+        set -e
+        path=/etc/sysupgrade.conf
+        entry=/etc/cve_2026_98432.nft
+        [ ! -L "$path" ] || exit 1
+        [ -f "$path" ] || exit 0
+        tmp=$(mktemp "${path}.XXXXXX")
+        trap 'rm -f "$tmp"' EXIT
+        cp -p "$path" "$tmp"
+        awk -v entry="$entry" '$0 != entry { print }' \
+          "$path" > "$tmp"
+        if cmp -s "$tmp" "$path"; then
+          exit 0
+        fi
+        mv -f "$tmp" "$path"
+        echo CHANGED
+      register: router_cve_2026_98432_sysupgrade_removed
+      changed_when: "'CHANGED' in router_cve_2026_98432_sysupgrade_removed.stdout"
+      when:
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_sysupgrade_entry.rc == 0
+
+    - name: Remove the owned ruleset file
+      community.openwrt.file:
+        path: /etc/cve_2026_98432.nft
+        state: absent
+      register: router_cve_2026_98432_ruleset_removed
+      when:
+        - router_cve_2026_98432_state == 'absent'
+        - >-
+          router_cve_2026_98432_include.result | default('') == 'include'
+          or router_cve_2026_98432_staged_ruleset_matches | bool
 
     - name: Read the active mitigation table
       community.openwrt.command:
@@ -607,19 +641,43 @@
       ignore_errors: true
       when: router_cve_2026_98432_file_exists.rc != 0
 
-    - name: Restore the previous owned sysupgrade entry
-      community.openwrt.lineinfile:
-        path: /etc/sysupgrade.conf
-        line: /etc/cve_2026_98432.nft
-        regexp: '^/etc/cve_2026_98432\.nft$'
-        state: >-
-          {{
-            'present'
-            if router_cve_2026_98432_sysupgrade_entry.rc == 0
-            else 'absent'
-          }}
-        create: "{{ router_cve_2026_98432_sysupgrade_entry.rc == 0 }}"
+    - name: Restore the previous sysupgrade entry atomically
+      ansible.builtin.raw: |
+        set -e
+        path=/etc/sysupgrade.conf
+        entry=/etc/cve_2026_98432.nft
+        [ ! -L "$path" ] || exit 1
+        tmp=$(mktemp "${path}.XXXXXX")
+        trap 'rm -f "$tmp"' EXIT
+        if [ -f "$path" ]; then
+          cp -p "$path" "$tmp"
+        else
+          chmod 0644 "$tmp"
+          : > "$tmp"
+        fi
+        if [ "{{ router_cve_2026_98432_sysupgrade_entry.rc }}" -eq 0 ]; then
+          if [ -f "$path" ]; then
+            awk -v entry="$entry" '
+              $0 != entry || !seen++ { print }
+              END { if (!seen) print entry }
+            ' "$path" > "$tmp"
+          else
+            printf '%s\n' "$entry" > "$tmp"
+          fi
+        elif [ -f "$path" ]; then
+          awk -v entry="$entry" '$0 != entry { print }' \
+            "$path" > "$tmp"
+        fi
+        if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+          exit 0
+        fi
+        if [ ! -f "$path" ] && [ ! -s "$tmp" ]; then
+          exit 0
+        fi
+        mv -f "$tmp" "$path"
+        echo CHANGED
       register: router_cve_2026_98432_sysupgrade_restore
+      changed_when: "'CHANGED' in router_cve_2026_98432_sysupgrade_restore.stdout"
       ignore_errors: true
 
     - name: Remove an empty sysupgrade file created by the failed run
