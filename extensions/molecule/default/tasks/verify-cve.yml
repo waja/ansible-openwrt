@@ -86,13 +86,13 @@
     #!/bin/sh
     entry=/etc/molecule-added-during-rollback.conf
     if ! grep -Fxq "$entry" /etc/sysupgrade.conf; then
-      printf '%s\n' "$entry" >> /etc/sysupgrade.conf
-    fi
-    exit 1
-    EOF
-    chmod 0755 /tmp/ansible-cve-2026-98432-failing-fw4-check
-  changed_when: true
-
+      printf '%s\n' \
+        'table ip cve_2026_98432 {' \
+        '	chain pre {' \
+        '		type filter hook prerouting priority raw - 10; policy accept;' \
+        '		ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop' \
+        '	}' \
+        '}'
 - name: Create an inconclusive runtime table probe
   community.openwrt.copy:
     content: |
