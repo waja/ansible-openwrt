@@ -1,5 +1,17 @@
 # extensions/molecule/default/tasks/verify_firewall_forwardings.yml
 ---
+- name: Derive stable test forwarding section IDs
+  ansible.builtin.set_fact:
+    router_firewall_any_forwarding_id: >-
+      router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1')
+      | truncate(12, true, '') }}
+    router_firewall_ipv4_forwarding_id: >-
+      router_fw_fwd_{{ ('guest_test|wan|ipv4') | hash('sha1')
+      | truncate(12, true, '') }}
+    router_firewall_ipv6_forwarding_id: >-
+      router_fw_fwd_{{ ('guest_test|new_guest|ipv6') | hash('sha1')
+      | truncate(12, true, '') }}
+
 - name: Create family-specific inter-zone forwardings
   ansible.builtin.include_role:
     name: router_firewall
@@ -34,7 +46,7 @@
         (('guest_test|wan|ipv4') | hash('sha1') | truncate(12, true, ''))
         ~ '=forwarding') in router_firewall_forwardings_created.result
       - >-
-        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}.name='Molecule guest to WAN'"
+        router_firewall_any_forwarding_id ~ ".name='Molecule guest to WAN'"
         in router_firewall_forwardings_created.result
 
 - name: Update the any-family forwarding and remove nullable options
@@ -60,13 +72,13 @@
   ansible.builtin.assert:
     that:
       - >-
-        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}.enabled='0'"
+        router_firewall_any_forwarding_id ~ ".enabled='0'"
         in router_firewall_forwardings_updated.result
       - >-
-        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}.family="
+        router_firewall_any_forwarding_id ~ '.family='
         not in router_firewall_forwardings_updated.result
       - >-
-        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}.name="
+        router_firewall_any_forwarding_id ~ '.name='
         not in router_firewall_forwardings_updated.result
 
 - name: Create an anonymous forwarding for adoption
@@ -111,10 +123,10 @@
   ansible.builtin.assert:
     that:
       - >-
-        "router_fw_fwd_{{ ('guest_test|new_guest|ipv6') | hash('sha1') | truncate(12, true, '') }}=forwarding"
+        router_firewall_ipv6_forwarding_id ~ '=forwarding'
         in router_firewall_forwarding_adoption.result
       - >-
-        "router_fw_fwd_{{ ('guest_test|new_guest|ipv6') | hash('sha1') | truncate(12, true, '') }}.enabled='0'"
+        router_firewall_ipv6_forwarding_id ~ ".enabled='0'"
         in router_firewall_forwarding_adoption.result
 
 - name: Capture duplicate forwarding identity validation
@@ -241,10 +253,10 @@
   ansible.builtin.assert:
     that:
       - >-
-        "router_fw_fwd_{{ ('guest_test|wan|ipv4') | hash('sha1') | truncate(12, true, '') }}=forwarding"
+        router_firewall_ipv4_forwarding_id ~ '=forwarding'
         not in router_firewall_forwardings_removed.result
       - >-
-        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}=forwarding"
+        router_firewall_any_forwarding_id ~ '=forwarding'
         in router_firewall_forwardings_removed.result
 
 - name: Capture forwarding state for idempotence check
