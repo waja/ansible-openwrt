@@ -2353,7 +2353,7 @@
         name: router_firewall
       vars:
         router_firewall_default_synflood_protect: true
-        router_firewall_default_synflood_rate: 30/s
+        router_firewall_default_synflood_rate: 30/second
         router_firewall_default_synflood_burst: 60
         router_firewall_default_drop_invalid: true
         router_firewall_default_flow_offloading: true
@@ -2370,7 +2370,7 @@
         name: router_firewall
       vars:
         router_firewall_default_synflood_protect: true
-        router_firewall_default_synflood_rate: 30/s
+        router_firewall_default_synflood_rate: 30/second
         router_firewall_default_synflood_burst: 60
         router_firewall_default_drop_invalid: true
         router_firewall_default_flow_offloading: true
