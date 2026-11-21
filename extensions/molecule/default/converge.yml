@@ -110,7 +110,7 @@
         router_firewall_default_forward: ACCEPT
         router_firewall_default_output: ACCEPT
         router_firewall_default_synflood_protect: true
-        router_firewall_default_synflood_rate: 30/s
+        router_firewall_default_synflood_rate: 30/second
         router_firewall_default_synflood_burst: 60
         router_firewall_default_drop_invalid: true
         router_firewall_default_flow_offloading: true
@@ -174,7 +174,7 @@
               "firewall.@defaults[0].synflood_protect='1'"
               in router_firewall_uci.result
           - >-
-              "firewall.@defaults[0].synflood_rate='30/s'"
+              "firewall.@defaults[0].synflood_rate='30/second'"
               in router_firewall_uci.result
           - >-
               "firewall.@defaults[0].synflood_burst='60'"
