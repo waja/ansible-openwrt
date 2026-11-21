@@ -20,14 +20,19 @@
   ansible.builtin.set_fact:
     router_firewall_forwarding_matches: >-
       {{
-        router_firewall_forwarding_matches + [router_firewall_forwarding_candidate]
+        router_firewall_forwarding_matches
+        + [router_firewall_forwarding_candidate]
       }}
   when:
-    - router_firewall_forwarding_candidate_dest.result | default('') == router_firewall_forwarding.dest
+    - >-
+      router_firewall_forwarding_candidate_dest.result | default('')
+      == router_firewall_forwarding.dest
     - >-
       (
-        router_firewall_forwarding_candidate_family.result | default('') | trim
-        if router_firewall_forwarding_candidate_family.result | default('') | trim not in ['', 'null']
+        router_firewall_forwarding_candidate_family.result
+        | default('') | trim
+        if router_firewall_forwarding_candidate_family.result
+           | default('') | trim not in ['', 'null']
         else 'any'
       ) == (router_firewall_forwarding.family | default('any', true))
   changed_when: false
