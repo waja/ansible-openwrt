@@ -82,7 +82,6 @@
       SYN flood rate such as 25/second or 25 (fw4 interprets an omitted unit
       as per second); and a non-negative integer for synflood_burst. Explicit
       null removes an option.
-      an option.
   loop: "{{ router_firewall_supported_default_options }}"
   when: ("router_firewall_default_" ~ item) in vars
 
