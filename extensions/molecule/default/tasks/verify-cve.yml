@@ -284,7 +284,13 @@
   community.openwrt.copy:
     content: |
       #!/bin/sh
-      printf 'table ip cve_2026_98432 {\\n\\tchain pre {\\n\\t\\ttype filter hook prerouting priority raw - 10; policy accept;\\n\\t\\tip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop\\n\\t}\\n}\\n'
+      printf '%s\\n' \\
+        'table ip cve_2026_98432 {' \\
+        '	chain pre {' \\
+        '		type filter hook prerouting priority raw - 10; policy accept;' \\
+        '		ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop' \\
+        '	}' \\
+        '}'
     dest: /tmp/ansible-cve-2026-98432-owned-table-probe
     owner: root
     group: root

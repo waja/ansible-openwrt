@@ -397,7 +397,12 @@
         mv -f "$tmp" "$path"
         echo CHANGED
       register: router_cve_2026_98432_sysupgrade_change
-      changed_when: "'CHANGED' in router_cve_2026_98432_sysupgrade_change.stdout"
+      changed_when: >-
+        'CHANGED' in router_cve_2026_98432_sysupgrade_change.stdout
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'present'
+        - router_cve_2026_98432_runtime_table_probe_conclusive | bool
 
     - name: Count owned sysupgrade entries
       community.openwrt.command:
@@ -517,8 +522,10 @@
         mv -f "$tmp" "$path"
         echo CHANGED
       register: router_cve_2026_98432_sysupgrade_removed
-      changed_when: "'CHANGED' in router_cve_2026_98432_sysupgrade_removed.stdout"
+      changed_when: >-
+        'CHANGED' in router_cve_2026_98432_sysupgrade_removed.stdout
       when:
+        - not ansible_check_mode
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_sysupgrade_entry.rc == 0
 
@@ -677,7 +684,8 @@
         mv -f "$tmp" "$path"
         echo CHANGED
       register: router_cve_2026_98432_sysupgrade_restore
-      changed_when: "'CHANGED' in router_cve_2026_98432_sysupgrade_restore.stdout"
+      changed_when: >-
+        'CHANGED' in router_cve_2026_98432_sysupgrade_restore.stdout
       ignore_errors: true
 
     - name: Remove an empty sysupgrade file created by the failed run
