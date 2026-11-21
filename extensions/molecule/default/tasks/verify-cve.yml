@@ -86,7 +86,7 @@
     #!/bin/sh
     entry=/etc/molecule-added-during-rollback.conf
     if ! grep -Fxq "$entry" /etc/sysupgrade.conf; then
-      printf '%s\\n' "$entry" >> /etc/sysupgrade.conf
+      printf '%s\n' "$entry" >> /etc/sysupgrade.conf
     fi
     exit 1
     EOF
