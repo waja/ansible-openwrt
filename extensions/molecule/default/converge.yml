@@ -281,7 +281,9 @@
       ansible.builtin.assert:
         that:
           - "'invalid : drop' in router_firewall_ruleset.stdout"
-          - "'syn_flood' in router_firewall_ruleset.stdout"
+          - "'jump syn_flood' in router_firewall_ruleset.stdout"
+          - "'limit rate 30/second' in router_firewall_ruleset.stdout"
+          - "'burst 60 packets' in router_firewall_ruleset.stdout"
 
     - name: Apply router packages role
       ansible.builtin.include_role:
