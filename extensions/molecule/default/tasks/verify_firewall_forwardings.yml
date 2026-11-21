@@ -1,0 +1,252 @@
+# extensions/molecule/default/tasks/verify_firewall_forwardings.yml
+---
+- name: Create family-specific inter-zone forwardings
+  ansible.builtin.include_role:
+    name: router_firewall
+  vars:
+    router_firewall_apply_runtime_changes: false
+    router_firewall_forwardings:
+      - src: guest_test
+        dest: wan
+        family: any
+        name: Molecule guest to WAN
+      - src: guest_test
+        dest: wan
+        family: ipv4
+        name: Molecule guest to WAN IPv4
+
+- name: Read created forwarding configuration
+  community.openwrt.uci:
+    command: show
+    config: firewall
+  register: router_firewall_forwardings_created
+  changed_when: false
+
+- name: Verify distinct forwarding identities were created
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('router_fw_fwd_' ~
+        (('guest_test|wan|any') | hash('sha1') | truncate(12, true, ''))
+        ~ '=forwarding') in router_firewall_forwardings_created.result
+      - >-
+        ('router_fw_fwd_' ~
+        (('guest_test|wan|ipv4') | hash('sha1') | truncate(12, true, ''))
+        ~ '=forwarding') in router_firewall_forwardings_created.result
+      - >-
+        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}.name='Molecule guest to WAN'"
+        in router_firewall_forwardings_created.result
+
+- name: Update the any-family forwarding and remove nullable options
+  ansible.builtin.include_role:
+    name: router_firewall
+  vars:
+    router_firewall_apply_runtime_changes: false
+    router_firewall_forwardings:
+      - src: guest_test
+        dest: wan
+        family: null
+        name: null
+        enabled: false
+
+- name: Read forwarding configuration after update
+  community.openwrt.uci:
+    command: show
+    config: firewall
+  register: router_firewall_forwardings_updated
+  changed_when: false
+
+- name: Verify forwarding disable and null semantics
+  ansible.builtin.assert:
+    that:
+      - >-
+        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}.enabled='0'"
+        in router_firewall_forwardings_updated.result
+      - >-
+        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}.family="
+        not in router_firewall_forwardings_updated.result
+      - >-
+        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}.name="
+        not in router_firewall_forwardings_updated.result
+
+- name: Create an anonymous forwarding for adoption
+  community.openwrt.uci:
+    autocommit: true
+    operations:
+      - command: add
+        config: firewall
+        type: forwarding
+      - command: set
+        key: firewall.@forwarding[-1].src
+        value: guest_test
+      - command: set
+        key: firewall.@forwarding[-1].dest
+        value: new_guest
+      - command: set
+        key: firewall.@forwarding[-1].family
+        value: ipv6
+
+- name: Adopt anonymous forwarding by its identity tuple
+  ansible.builtin.include_role:
+    name: router_firewall
+  vars:
+    router_firewall_apply_runtime_changes: false
+    router_firewall_forwardings:
+      - src: guest_test
+        dest: new_guest
+        family: ipv6
+        enabled: false
+
+- name: Read configuration after anonymous forwarding adoption
+  community.openwrt.uci:
+    command: show
+    config: firewall
+  register: router_firewall_forwarding_adoption
+  changed_when: false
+
+- name: Verify anonymous forwarding was adopted
+  ansible.builtin.assert:
+    that:
+      - >-
+        "router_fw_fwd_{{ ('guest_test|new_guest|ipv6') | hash('sha1') | truncate(12, true, '') }}=forwarding"
+        in router_firewall_forwarding_adoption.result
+      - >-
+        "router_fw_fwd_{{ ('guest_test|new_guest|ipv6') | hash('sha1') | truncate(12, true, '') }}.enabled='0'"
+        in router_firewall_forwarding_adoption.result
+
+- name: Capture duplicate forwarding identity validation
+  block:
+    - name: Seed duplicate anonymous forwardings
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: forwarding
+          - command: set
+            key: firewall.@forwarding[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@forwarding[-1].dest
+            value: new_guest
+          - command: set
+            key: firewall.@forwarding[-1].family
+            value: ipv4
+          - command: add
+            config: firewall
+            type: forwarding
+          - command: set
+            key: firewall.@forwarding[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@forwarding[-1].dest
+            value: new_guest
+          - command: set
+            key: firewall.@forwarding[-1].family
+            value: ipv4
+
+    - name: Attempt to manage duplicate forwarding identities
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_forwardings:
+          - src: guest_test
+            dest: new_guest
+            family: ipv4
+  rescue:
+    - name: Record duplicate forwarding validation failure
+      ansible.builtin.set_fact:
+        router_firewall_duplicate_forwarding_failure: >-
+          {{ ansible_failed_task.name }}
+
+- name: Verify duplicate forwarding identities are rejected
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_duplicate_forwarding_failure
+        == 'Reject ambiguous firewall forwarding identities'
+
+- name: Capture invalid forwarding zone validation
+  block:
+    - name: Attempt forwarding to an unknown zone
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_forwardings:
+          - src: molecule_missing_zone
+            dest: wan
+  rescue:
+    - name: Record invalid forwarding zone validation failure
+      ansible.builtin.set_fact:
+        router_firewall_invalid_forwarding_zone_failure: >-
+          {{ ansible_failed_task.name }}
+
+- name: Verify invalid forwarding zones are rejected
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_invalid_forwarding_zone_failure
+        == 'Reject unknown or removed forwarding zone references'
+
+- name: Remove the ipv4 forwarding without touching the any-family entry
+  ansible.builtin.include_role:
+    name: router_firewall
+  vars:
+    router_firewall_apply_runtime_changes: false
+    router_firewall_forwardings:
+      - src: guest_test
+        dest: wan
+        family: ipv4
+        state: absent
+
+- name: Read firewall configuration after forwarding removal
+  community.openwrt.uci:
+    command: show
+    config: firewall
+  register: router_firewall_forwardings_removed
+  changed_when: false
+
+- name: Verify only the selected forwarding identity was removed
+  ansible.builtin.assert:
+    that:
+      - >-
+        "router_fw_fwd_{{ ('guest_test|wan|ipv4') | hash('sha1') | truncate(12, true, '') }}=forwarding"
+        not in router_firewall_forwardings_removed.result
+      - >-
+        "router_fw_fwd_{{ ('guest_test|wan|any') | hash('sha1') | truncate(12, true, '') }}=forwarding"
+        in router_firewall_forwardings_removed.result
+
+- name: Capture forwarding state for idempotence check
+  community.openwrt.uci:
+    command: show
+    config: firewall
+  register: router_firewall_forwarding_before_idempotence
+  changed_when: false
+
+- name: Reapply unchanged forwarding configuration
+  ansible.builtin.include_role:
+    name: router_firewall
+  vars:
+    router_firewall_apply_runtime_changes: false
+    router_firewall_forwardings:
+      - src: guest_test
+        dest: wan
+        family: null
+        name: null
+        enabled: false
+
+- name: Read forwarding state after idempotence check
+  community.openwrt.uci:
+    command: show
+    config: firewall
+  register: router_firewall_forwarding_after_idempotence
+  changed_when: false
+
+- name: Verify forwarding configuration is idempotent
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_forwarding_before_idempotence.result
+        == router_firewall_forwarding_after_idempotence.result

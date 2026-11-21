@@ -1,0 +1,95 @@
+# roles/router_firewall/tasks/manage_one_forwarding.yml
+---
+- name: Find firewall forwardings with the requested source zone
+  community.openwrt.uci:
+    command: find_all
+    config: firewall
+    type: forwarding
+    option: src
+    find: "{{ router_firewall_forwarding.src }}"
+  register: router_firewall_forwarding_candidates
+  changed_when: false
+
+- name: Initialize exact firewall forwarding matches
+  ansible.builtin.set_fact:
+    router_firewall_forwarding_matches: []
+  changed_when: false
+
+- name: Inspect candidate forwarding identity
+  ansible.builtin.include_tasks: inspect_forwarding_candidate.yml
+  loop: "{{ router_firewall_forwarding_candidates.result_list | default([]) }}"
+  loop_control:
+    loop_var: router_firewall_forwarding_candidate
+    label: "{{ router_firewall_forwarding_candidate }}"
+
+- name: Reject ambiguous firewall forwarding identities
+  ansible.builtin.assert:
+    that:
+      - router_firewall_forwarding_matches | length <= 1
+    fail_msg: >-
+      More than one firewall forwarding matches
+      src='{{ router_firewall_forwarding.src }}',
+      dest='{{ router_firewall_forwarding.dest }}',
+      family='{{ router_firewall_forwarding.family | default('any', true) }}'.
+      Resolve the duplicate UCI sections before retrying.
+
+- name: Derive a stable UCI section ID for a new forwarding
+  ansible.builtin.set_fact:
+    router_firewall_forwarding_generated_section_id: >-
+      router_fw_fwd_{{
+        (
+          router_firewall_forwarding.src ~ '|' ~
+          router_firewall_forwarding.dest ~ '|' ~
+          (router_firewall_forwarding.family | default('any', true))
+        ) | hash('sha1') | truncate(12, true, '')
+      }}
+  changed_when: false
+
+- name: Check for a conflicting generated forwarding section ID
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ router_firewall_forwarding_generated_section_id }}"
+  register: router_firewall_forwarding_generated_section
+  changed_when: false
+  failed_when: false
+  when: router_firewall_forwarding_matches | length == 0
+
+- name: Reject a conflicting generated forwarding section ID
+  ansible.builtin.assert:
+    that:
+      - router_firewall_forwarding_generated_section.result | default('') == ''
+    fail_msg: >-
+      Cannot create forwarding src='{{ router_firewall_forwarding.src }}',
+      dest='{{ router_firewall_forwarding.dest }}',
+      family='{{ router_firewall_forwarding.family | default('any', true) }}':
+      generated UCI section '{{ router_firewall_forwarding_generated_section_id }}'
+      already exists with a different identity.
+  when:
+    - router_firewall_forwarding.state | default('present') == 'present'
+    - router_firewall_forwarding_matches | length == 0
+
+- name: Collect the resolved forwarding for the shared UCI transaction
+  ansible.builtin.set_fact:
+    router_firewall_forwarding_managed_items: >-
+      {{
+        router_firewall_forwarding_managed_items + [{
+          'src': router_firewall_forwarding.src,
+          'dest': router_firewall_forwarding.dest,
+          'family': router_firewall_forwarding.family | default('any', true),
+          'family_null': router_firewall_forwarding.family is defined
+                         and router_firewall_forwarding.family is none,
+          'family_supplied': router_firewall_forwarding.family is defined,
+          'name': router_firewall_forwarding.name | default(none),
+          'name_supplied': router_firewall_forwarding.name is defined,
+          'enabled': router_firewall_forwarding.enabled | default(none),
+          'enabled_supplied': router_firewall_forwarding.enabled is defined,
+          'state': router_firewall_forwarding.state | default('present'),
+          'section_id': (
+            router_firewall_forwarding_matches[0]
+            if router_firewall_forwarding_matches | length == 1
+            else router_firewall_forwarding_generated_section_id
+          ),
+          'matched': router_firewall_forwarding_matches | length == 1
+        }]
+      }}
+  changed_when: false

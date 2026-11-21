@@ -1,9 +1,8 @@
 # Firewall role
 
 The `router_firewall` role manages the firewall default policies,
-explicitly declared firewall zones, filter rules, and DNAT/SNAT redirects,
-and an optional WAN rule for additional Dropbear SSH listeners. Inter-zone
-forwardings are not currently managed.
+explicitly declared firewall zones, filter rules, DNAT/SNAT redirects, inter-zone forwardings, and an optional WAN rule for
+additional Dropbear SSH listeners.
 
 ## Requirements and execution
 
@@ -265,6 +264,53 @@ new redirect: when `target` is omitted, it defaults to DNAT and requires
 All redirect operations are staged with zones and rules, then committed
 once and followed by at most one firewall reload. As with other firewall
 changes, applying them over SSH can interrupt the management session.
+
+## Declarative inter-zone forwardings
+
+Manage `config forwarding` entries with a list. A forwarding's stable
+identity is its source zone, destination zone, and effective address family.
+The effective family defaults to `any`; separate `ipv4` and `ipv6`
+forwardings between the same zones are independent entries.
+
+```yaml
+router_firewall_forwardings:
+  - src: lan
+    dest: wan
+    family: any
+    name: LAN to WAN
+
+  - src: guest
+    dest: wan
+    family: ipv4
+    enabled: false
+
+  - src: old_lan
+    dest: wan
+    family: any
+    state: absent
+```
+
+Both `src` and `dest` are required zone names. They must refer to
+existing zones or zones declared `present` in `router_firewall_zones`
+in the same role invocation. A zone declared `absent` cannot be referenced.
+The role never creates a zone implicitly.
+
+The optional `name` is descriptive and is not used for identity. Existing
+named and anonymous UCI forwardings are matched by the identity tuple. More
+than one matching section is rejected with the full tuple in the error
+message. Matched sections are assigned a stable role-owned UCI section ID
+derived from that tuple, so later updates and removals do not depend on
+anonymous section indexes.
+
+Use `enabled: false` to disable a forwarding without removing it;
+`state: absent` removes only the exact identity tuple. Omitted optional
+values remain unchanged. Explicit `null` removes an option; for example,
+`family: null` removes an explicit family option while retaining the
+effective `any` identity. Forwardings not listed remain untouched.
+
+All forwarding operations are validated before writes and are staged with
+the other firewall objects. They share the single UCI commit and conditional
+firewall reload; no forwarding-specific commit or reload is performed.
 
 ## Declarative zones
 
@@ -644,6 +690,43 @@ router_firewall_zones:
     state: absent
 ```
 
+## Declarative inter-zone forwardings
+
+Declare inter-zone forwarding entries as a list. Each entry is identified by
+its source zone, destination zone, and effective address family (`any` when
+`family` is omitted or null):
+
+```yaml
+router_firewall_forwardings:
+  - src: lan
+    dest: wan
+    name: LAN to WAN
+
+  - src: guest
+    dest: wan
+    family: ipv4
+    enabled: false
+
+  - state: absent
+    src: old_lan
+    dest: wan
+    family: any
+```
+
+Existing named and anonymous UCI sections are matched by that identity tuple.
+An existing section keeps its UCI section ID; a deterministic ID is generated
+only when a new forwarding must be created. More than one matching section is
+an error. The optional `name` is descriptive and is not used for identity.
+
+Use `state: absent` to remove the exact identity. Use `enabled: false` to
+retain the section while disabling the forwarding. Omitted options remain
+unchanged; explicit `null` removes `family`, `name`, or `enabled`.
+Forwardings not listed remain untouched.
+
+Both source and destination must refer to an existing zone or a zone declared
+present in the same role invocation. A reference to a zone declared absent is
+rejected. The role does not create zones implicitly or cascade-delete
+forwardings when removing a zone.
 ## Additional Dropbear WAN access
 
 The role can create a dedicated WAN firewall rule for the additional
@@ -680,8 +763,8 @@ when your network design permits.
 | --- | --- | --- |
 | `router_firewall_apply_runtime_changes` | `true` | Reload fw4 after changes |
 
-Default policies, declared zones, rules and redirects, and the optional
-Dropbear WAN rule are staged together and committed once. The firewall is
+Default policies, declared zones, rules, redirects and inter-zone
+forwardings, and the optional Dropbear WAN rule are staged together and committed once. The firewall is
 reloaded once only when the UCI configuration changes. Set
 `router_firewall_apply_runtime_changes: false` for configuration-only
 runs where the runtime reload must be deferred. The UCI configuration is

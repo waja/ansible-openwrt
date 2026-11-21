@@ -1,0 +1,33 @@
+# roles/router_firewall/tasks/inspect_forwarding_candidate.yml
+---
+- name: Read candidate forwarding destination zone
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ router_firewall_forwarding_candidate }}.dest"
+  register: router_firewall_forwarding_candidate_dest
+  changed_when: false
+  failed_when: false
+
+- name: Read candidate forwarding family
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ router_firewall_forwarding_candidate }}.family"
+  register: router_firewall_forwarding_candidate_family
+  changed_when: false
+  failed_when: false
+
+- name: Record candidate when its complete identity matches
+  ansible.builtin.set_fact:
+    router_firewall_forwarding_matches: >-
+      {{
+        router_firewall_forwarding_matches + [router_firewall_forwarding_candidate]
+      }}
+  when:
+    - router_firewall_forwarding_candidate_dest.result | default('') == router_firewall_forwarding.dest
+    - >-
+      (
+        router_firewall_forwarding_candidate_family.result | default('') | trim
+        if router_firewall_forwarding_candidate_family.result | default('') | trim not in ['', 'null']
+        else 'any'
+      ) == (router_firewall_forwarding.family | default('any', true))
+  changed_when: false
