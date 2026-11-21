@@ -141,6 +141,7 @@
 - name: Initialize resolved firewall forwarding operations
   ansible.builtin.set_fact:
     router_firewall_forwarding_managed_items: []
+    router_firewall_forwarding_rename_items: []
   changed_when: false
 
 - name: Resolve each declared firewall forwarding
@@ -151,6 +152,25 @@
     label: >-
       {{ router_firewall_forwarding.src }} ->
       {{ router_firewall_forwarding.dest }}
+
+- name: Stage forwarding renames in descending anonymous section order
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'rename',
+          'key': 'firewall.' ~ item.section_id,
+          'name': item.name
+        }]
+      }}
+  loop: >-
+    {{
+      router_firewall_forwarding_rename_items
+      | sort(attribute='index', reverse=true)
+    }}
+  loop_control:
+    label: "{{ item.section_id }} -> {{ item.name }}"
+  changed_when: false
 
 - name: Apply resolved firewall forwarding operations
   ansible.builtin.include_tasks: apply_one_forwarding.yml
