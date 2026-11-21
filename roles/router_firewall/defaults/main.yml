@@ -6,7 +6,8 @@
 # Declarative firewall zones keyed by their desired UCI section IDs.
 router_firewall_zones: {}
 
-# Declarative inter-zone firewall forwardings identified by src, dest and family.
+# Declarative inter-zone firewall forwardings identified by src, dest,
+# and family.
 router_firewall_forwardings: []
 
 # Declarative firewall rules keyed by their desired UCI section IDs.
