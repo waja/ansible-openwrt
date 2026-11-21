@@ -282,10 +282,10 @@
         that:
           - >-
             router_firewall_ruleset.stdout is
-            regex_search('(?s)chain input \\{.*?jump syn_flood')
+            search('(?s)chain input \\{.*?jump syn_flood')
           - >-
             router_firewall_ruleset.stdout is
-            regex_search('(?s)chain syn_flood \\{\\s*limit rate 30/second
+            search('(?s)chain syn_flood \\{\\s*limit rate 30/second
             \\s+burst 60 packets')
           - "'invalid : drop' in router_firewall_ruleset.stdout"
 
