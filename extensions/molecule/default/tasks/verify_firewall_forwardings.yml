@@ -81,6 +81,59 @@
         router_firewall_any_forwarding_id ~ '.name='
         not in router_firewall_forwardings_updated.result
 
+- name: Derive ID for a named forwarding adoption
+  ansible.builtin.set_fact:
+    router_firewall_named_forwarding_id: >-
+      router_fw_fwd_{{ ('guest_test|named_dest|ipv4') | hash('sha1')
+      | truncate(12, true, '') }}
+
+- name: Create a named forwarding section for adoption
+  community.openwrt.uci:
+    autocommit: true
+    operations:
+      - command: section
+        config: firewall
+        type: forwarding
+        name: molecule_named_forwarding
+        value:
+          src: guest_test
+          dest: named_dest
+          family: ipv4
+
+- name: Adopt a named forwarding by its identity tuple
+  ansible.builtin.include_role:
+    name: router_firewall
+  vars:
+    router_firewall_apply_runtime_changes: false
+    router_firewall_zones:
+      named_dest:
+        input: REJECT
+    router_firewall_forwardings:
+      - src: guest_test
+        dest: named_dest
+        family: ipv4
+        enabled: false
+
+- name: Read configuration after named forwarding adoption
+  community.openwrt.uci:
+    command: show
+    config: firewall
+  register: router_firewall_named_forwarding_adoption
+  changed_when: false
+
+- name: Verify named forwarding was matched and adopted
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_named_forwarding_id ~ '=forwarding'
+        in router_firewall_named_forwarding_adoption.result
+      - >-
+        router_firewall_named_forwarding_id ~ ".enabled='0'"
+        in router_firewall_named_forwarding_adoption.result
+      - >-
+        'firewall.molecule_named_forwarding=forwarding'
+        not in router_firewall_named_forwarding_adoption.result
+
 - name: Create an anonymous forwarding for adoption
   community.openwrt.uci:
     autocommit: true
