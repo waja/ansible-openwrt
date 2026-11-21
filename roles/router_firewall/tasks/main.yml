@@ -554,6 +554,9 @@
 - name: Add declarative firewall redirect operations
   ansible.builtin.include_tasks: manage_redirects.yml
 
+- name: Add declarative inter-zone forwarding operations
+  ansible.builtin.include_tasks: manage_forwardings.yml
+
 - name: Add optional additional Dropbear WAN firewall rule
   ansible.builtin.set_fact:
     router_firewall_operations: >-
