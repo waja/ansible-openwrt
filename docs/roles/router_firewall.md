@@ -714,9 +714,12 @@ router_firewall_forwardings:
 ```
 
 Existing named and anonymous UCI sections are matched by that identity tuple.
-An existing section keeps its UCI section ID; a deterministic ID is generated
-only when a new forwarding must be created. More than one matching section is
-an error. The optional `name` is descriptive and is not used for identity.
+An existing named section keeps its UCI section ID. A uniquely matched
+anonymous section is renamed to a deterministic ID derived from the identity
+tuple, so later updates and removals do not depend on anonymous section
+indexes. A deterministic ID is also used when creating a new forwarding.
+More than one matching section is an error. The optional `name` is
+descriptive and is not used for identity.
 
 Use `state: absent` to remove the exact identity. Use `enabled: false` to
 retain the section while disabling the forwarding. Omitted options remain
