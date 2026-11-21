@@ -2234,20 +2234,20 @@
           - command: set
             key: firewall.@defaults[0].flow_offloading_hw
             value: '1'
-    
+
     - name: Apply firewall role without declaring global default options
       ansible.builtin.include_role:
         name: router_firewall
       vars:
         router_firewall_apply_runtime_changes: false
-    
+
     - name: Verify omitted global defaults remain unchanged
       community.openwrt.uci:
         command: show
         config: firewall
       register: router_firewall_omitted_defaults
       changed_when: false
-    
+
     - name: Assert omission preserves existing firewall defaults
       ansible.builtin.assert:
         that:
@@ -2257,21 +2257,21 @@
           - >-
             "firewall.@defaults[0].flow_offloading_hw='1'"
             in router_firewall_omitted_defaults.result
-    
+
     - name: Seed a global firewall option for null-removal testing
       community.openwrt.uci:
         command: set
         key: firewall.@defaults[0].drop_invalid
         value: '1'
         autocommit: true
-    
+
     - name: Remove a global firewall option with explicit null
       ansible.builtin.include_role:
         name: router_firewall
       vars:
         router_firewall_default_drop_invalid: null
         router_firewall_apply_runtime_changes: false
-    
+
     - name: Read the firewall option removed with null
       community.openwrt.uci:
         command: get
@@ -2279,12 +2279,12 @@
       register: router_firewall_null_default
       changed_when: false
       failed_when: false
-    
+
     - name: Assert explicit null removes a global firewall option
       ansible.builtin.assert:
         that:
           - router_firewall_null_default.result | default('') == ''
-    
+
     - name: Capture invalid SYN flood rate validation
       block:
         - name: Attempt to configure an unsupported SYN flood rate unit
@@ -2298,14 +2298,14 @@
           ansible.builtin.set_fact:
             router_firewall_invalid_default_failure: >-
               {{ ansible_failed_task.name }}
-    
+
     - name: Verify invalid global default values are rejected
       ansible.builtin.assert:
         that:
           - >-
             router_firewall_invalid_default_failure
             == 'Validate explicitly supplied firewall default values'
-    
+
     - name: Capture unsupported parser-only firewall default validation
       block:
         - name: Attempt to set an fw4 parser-only TCP option
@@ -2319,14 +2319,14 @@
           ansible.builtin.set_fact:
             router_firewall_unsupported_default_failure: >-
               {{ ansible_failed_task.name }}
-    
+
     - name: Verify unsupported global default options are rejected
       ansible.builtin.assert:
         that:
           - >-
             router_firewall_unsupported_default_failure
             == 'Reject unsupported firewall default variables'
-    
+
     - name: Capture legacy firewall policy variable rejection
       block:
         - name: Attempt to use a renamed legacy firewall policy variable
@@ -2340,14 +2340,14 @@
           ansible.builtin.set_fact:
             router_firewall_legacy_default_failure: >-
               {{ ansible_failed_task.name }}
-    
+
     - name: Verify legacy firewall policy variables are rejected
       ansible.builtin.assert:
         that:
           - >-
             router_firewall_legacy_default_failure
             == 'Reject legacy firewall policy variables'
-    
+
     - name: Apply a stable global firewall defaults configuration
       ansible.builtin.include_role:
         name: router_firewall
@@ -2359,12 +2359,12 @@
         router_firewall_default_flow_offloading: true
         router_firewall_default_flow_offloading_hw: true
         router_firewall_apply_runtime_changes: false
-    
+
     - name: Record firewall configuration before idempotence check
       ansible.builtin.raw: sha256sum /etc/config/firewall | cut -d ' ' -f 1
       register: router_firewall_defaults_before_idempotence
       changed_when: false
-    
+
     - name: Reapply the same global firewall defaults configuration
       ansible.builtin.include_role:
         name: router_firewall
@@ -2376,12 +2376,12 @@
         router_firewall_default_flow_offloading: true
         router_firewall_default_flow_offloading_hw: true
         router_firewall_apply_runtime_changes: false
-    
+
     - name: Record firewall configuration after idempotence check
       ansible.builtin.raw: sha256sum /etc/config/firewall | cut -d ' ' -f 1
       register: router_firewall_defaults_after_idempotence
       changed_when: false
-    
+
     - name: Assert reapplying global firewall defaults is idempotent
       ansible.builtin.assert:
         that:
@@ -2389,5 +2389,3 @@
             router_firewall_defaults_before_idempotence.stdout
             == router_firewall_defaults_after_idempotence.stdout
 
-    - name: Verify global firewall default semantics
-      ansible.builtin.include_tasks: verify_firewall_defaults.yml
