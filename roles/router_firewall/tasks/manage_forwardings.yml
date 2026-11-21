@@ -6,24 +6,36 @@
       - router_firewall_forwardings is sequence
       - router_firewall_forwardings is not string
       - router_firewall_forwardings is not mapping
-    fail_msg: router_firewall_forwardings must be a list of forwarding definitions.
+    fail_msg: >-
+      router_firewall_forwardings must be a list of forwarding definitions.
 
 - name: Validate firewall forwarding definitions
   ansible.builtin.assert:
     that:
       - item is mapping
-      - item.keys() | difference(['state', 'src', 'dest', 'family', 'name', 'enabled']) | length == 0
+      - >-
+        item.keys()
+        | difference(['state', 'src', 'dest', 'family', 'name', 'enabled'])
+        | length == 0
       - item.state | default('present') in ['present', 'absent']
       - item.src is string
       - item.src | length > 0
       - item.dest is string
       - item.dest | length > 0
-      - item.family is not defined or item.family is none or item.family in ['any', 'ipv4', 'ipv6']
-      - item.name is not defined or item.name is none or (item.name is string and item.name | length > 0)
-      - item.enabled is not defined or item.enabled is none or item.enabled is boolean
+      - >-
+        item.family is not defined or item.family is none or
+        item.family in ['any', 'ipv4', 'ipv6']
+      - >-
+        item.name is not defined or item.name is none or
+        (item.name is string and item.name | length > 0)
+      - >-
+        item.enabled is not defined or item.enabled is none or
+        item.enabled is boolean
       - >-
         item.state | default('present') != 'absent' or
-        item.keys() | difference(['state', 'src', 'dest', 'family', 'name']) | length == 0
+        item.keys()
+        | difference(['state', 'src', 'dest', 'family', 'name'])
+        | length == 0
     fail_msg: >-
       Invalid firewall forwarding. Specify non-empty src and dest zone names,
       optional family any/ipv4/ipv6, optional descriptive name, and optional
@@ -145,4 +157,6 @@
   loop: "{{ router_firewall_forwarding_managed_items }}"
   loop_control:
     loop_var: router_firewall_managed_forwarding
-    label: "{{ router_firewall_managed_forwarding.src }} -> {{ router_firewall_managed_forwarding.dest }}"
+    label: >-
+      {{ router_firewall_managed_forwarding.src }} ->
+      {{ router_firewall_managed_forwarding.dest }}
