@@ -45,32 +45,88 @@
       }}
   changed_when: false
 
-- name: Check for a conflicting generated forwarding section ID
+- name: Check the stable forwarding section ID
   community.openwrt.uci:
     command: get
     key: "firewall.{{ router_firewall_forwarding_generated_section_id }}"
   register: router_firewall_forwarding_generated_section
   changed_when: false
   failed_when: false
-  when: >-
-    router_firewall_forwarding_matches | length == 0 or
-    router_firewall_forwarding_matches[0] is match('^@forwarding\\[')
 
-- name: Reject a conflicting generated forwarding section ID
+- name: Read the stable forwarding source
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ router_firewall_forwarding_generated_section_id }}.src"
+  register: router_firewall_forwarding_stable_src
+  changed_when: false
+  failed_when: false
+  when: router_firewall_forwarding_generated_section.result | default('') == 'forwarding'
+
+- name: Read the stable forwarding destination
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ router_firewall_forwarding_generated_section_id }}.dest"
+  register: router_firewall_forwarding_stable_dest
+  changed_when: false
+  failed_when: false
+  when: router_firewall_forwarding_generated_section.result | default('') == 'forwarding'
+
+- name: Read the stable forwarding family
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ router_firewall_forwarding_generated_section_id }}.family"
+  register: router_firewall_forwarding_stable_family
+  changed_when: false
+  failed_when: false
+  when: router_firewall_forwarding_generated_section.result | default('') == 'forwarding'
+
+- name: Reject a conflicting stable forwarding section ID
   ansible.builtin.assert:
     that:
-      - router_firewall_forwarding_generated_section.result | default('') == ''
+      - >-
+        router_firewall_forwarding_generated_section.result | default('')
+        in ['', 'forwarding']
+      - >-
+        router_firewall_forwarding_generated_section.result | default('')
+        != 'forwarding' or router_firewall_forwarding_matches | length == 1
+      - >-
+        router_firewall_forwarding_generated_section.result | default('')
+        != 'forwarding' or
+        router_firewall_forwarding_stable_src.result | default('')
+        == router_firewall_forwarding.src
+      - >-
+        router_firewall_forwarding_generated_section.result | default('')
+        != 'forwarding' or
+        router_firewall_forwarding_stable_dest.result | default('')
+        == router_firewall_forwarding.dest
+      - >-
+        router_firewall_forwarding_generated_section.result | default('')
+        != 'forwarding' or
+        (
+          router_firewall_forwarding_stable_family.result | default('') | trim
+          if router_firewall_forwarding_stable_family.result | default('') | trim
+             not in ['', 'null']
+          else 'any'
+        ) == (router_firewall_forwarding.family | default('any', true))
     fail_msg: >-
-      Cannot manage forwarding src='{{ router_firewall_forwarding.src }}',
-      dest='{{ router_firewall_forwarding.dest }}',
-      family='{{ router_firewall_forwarding.family | default('any', true) }}':
-      generated UCI section '{{ router_firewall_forwarding_generated_section_id }}'
-      already exists with a different identity.
+      UCI section '{{ router_firewall_forwarding_generated_section_id }}'
+      conflicts with the requested forwarding identity. Resolve the
+      conflicting section first.
+
+- name: Rename a matched forwarding to its stable section ID
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'rename',
+          'key': 'firewall.' ~ router_firewall_forwarding_matches[0],
+          'name': router_firewall_forwarding_generated_section_id
+        }]
+      }}
   when:
-    - router_firewall_forwarding.state | default('present') == 'present'
-    - >-
-      router_firewall_forwarding_matches | length == 0 or
-      router_firewall_forwarding_matches[0] is match('^@forwarding\\[')
+    - router_firewall_forwarding_matches | length == 1
+    - router_firewall_forwarding_generated_section.result | default('') == ''
+  changed_when: false
 
 - name: Collect the resolved forwarding for the shared UCI transaction
   ansible.builtin.set_fact:
@@ -88,22 +144,8 @@
           'enabled': router_firewall_forwarding.enabled | default(none),
           'enabled_supplied': router_firewall_forwarding.enabled is defined,
           'state': router_firewall_forwarding.state | default('present'),
-          'original_section_id': (
-            router_firewall_forwarding_matches[0]
-            if router_firewall_forwarding_matches | length == 1
-            else router_firewall_forwarding_generated_section_id
-          ),
-          'section_id': (
-            router_firewall_forwarding_generated_section_id
-            if router_firewall_forwarding_matches | length == 0 or
-               router_firewall_forwarding_matches[0] is match('^@forwarding\\[')
-            else router_firewall_forwarding_matches[0]
-          ),
-          'matched': router_firewall_forwarding_matches | length == 1,
-          'anonymous': (
-            router_firewall_forwarding_matches | length == 1 and
-            router_firewall_forwarding_matches[0] is match('^@forwarding\\[')
-          )
+          'section_id': router_firewall_forwarding_generated_section_id,
+          'matched': router_firewall_forwarding_matches | length == 1
         }]
       }}
   changed_when: false
