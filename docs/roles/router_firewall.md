@@ -34,7 +34,7 @@ pass-through is not supported.
 | `router_firewall_default_forward` | string | `ACCEPT`, `REJECT`, or `DROP` |
 | `router_firewall_default_output` | string | `ACCEPT`, `REJECT`, or `DROP` |
 | `router_firewall_default_synflood_protect` | boolean | Enable or disable fw4 SYN flood protection |
-| `router_firewall_default_synflood_rate` | string | Positive rate, e.g. `25/s`, `25/second`, `25/m`, or `25/minute` |
+| `router_firewall_default_synflood_rate` | string | Positive rate, e.g. `25/second`, `25/minute`, `25/hour`, or `25/day` |
 | `router_firewall_default_synflood_burst` | integer | Non-negative packet burst |
 | `router_firewall_default_drop_invalid` | boolean | Drop packets with invalid conntrack state in the generated input, forward, and output chains |
 | `router_firewall_default_flow_offloading` | boolean | Enable software flow offloading where fw4 can resolve zone devices |
@@ -60,7 +60,7 @@ router_firewall_default_forward: REJECT
 router_firewall_default_output: ACCEPT
 
 router_firewall_default_synflood_protect: true
-router_firewall_default_synflood_rate: 25/s
+router_firewall_default_synflood_rate: 25/second
 router_firewall_default_synflood_burst: 50
 router_firewall_default_drop_invalid: true
 
