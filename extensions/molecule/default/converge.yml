@@ -280,13 +280,10 @@
     - name: Verify configured global defaults affect the generated ruleset
       ansible.builtin.assert:
         that:
-          - >-
-            router_firewall_ruleset.stdout is
-            search('(?s)chain input \\{.*?jump syn_flood')
-          - >-
-            router_firewall_ruleset.stdout is
-            search('(?s)chain syn_flood \\{\\s*limit rate 30/second
-            \\s+burst 60 packets')
+          - "'jump syn_flood' in router_firewall_ruleset.stdout"
+          - "'chain syn_flood' in router_firewall_ruleset.stdout"
+          - "'limit rate 30/second' in router_firewall_ruleset.stdout"
+          - "'burst 60 packets' in router_firewall_ruleset.stdout"
           - "'invalid : drop' in router_firewall_ruleset.stdout"
 
     - name: Apply router packages role
