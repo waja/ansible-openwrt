@@ -1,8 +1,7 @@
 # roles/router_firewall/defaults/main.yml
 ---
-router_firewall_input: REJECT
-router_firewall_forward: REJECT
-router_firewall_output: ACCEPT
+# Optional router_firewall_default_* variables are intentionally not defaulted.
+# Omission preserves the existing UCI value; explicit null removes the option.
 
 # Declarative firewall zones keyed by their desired UCI section IDs.
 router_firewall_zones: {}

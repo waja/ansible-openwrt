@@ -21,33 +21,124 @@ that you have an independent recovery path before changing zones or
 policies on a remote router. The role does not implement an automatic
 timed rollback.
 
-## Default policies
+## Global firewall defaults
 
-The role manages the input, forward, and output policies in the first
-firewall defaults section. The `router_firewall_zones`,
-`router_firewall_rules`, and `router_firewall_redirects` variables default
-to empty mappings (`{}`), so no additional zones, filter rules, or redirects
-are managed unless declared.
+The role manages only explicitly supplied global options in the first
+`config defaults` section. The public interface is an intentional
+whitelist of options consumed by firewall4 on OpenWrt 25.12. Arbitrary UCI
+pass-through is not supported.
 
-| Variable | Default | Accepted values |
+| Variable | YAML type | Accepted values / behavior |
 | --- | --- | --- |
-| `router_firewall_input` | `REJECT` | `ACCEPT`, `REJECT`, `DROP` |
-| `router_firewall_forward` | `REJECT` | `ACCEPT`, `REJECT`, `DROP` |
-| `router_firewall_output` | `ACCEPT` | `ACCEPT`, `REJECT`, `DROP` |
+| `router_firewall_default_input` | string | `ACCEPT`, `REJECT`, or `DROP` |
+| `router_firewall_default_forward` | string | `ACCEPT`, `REJECT`, or `DROP` |
+| `router_firewall_default_output` | string | `ACCEPT`, `REJECT`, or `DROP` |
+| `router_firewall_default_synflood_protect` | boolean | Enable or disable fw4 SYN flood protection |
+| `router_firewall_default_synflood_rate` | string | Positive rate, e.g. `25/second`, `25/minute`, `25/hour`, or `25/day` |
+| `router_firewall_default_synflood_burst` | integer | Non-negative packet burst |
+| `router_firewall_default_drop_invalid` | boolean | Drop packets with invalid conntrack state in the generated input, forward, and output chains |
+| `router_firewall_default_flow_offloading` | boolean | Enable software flow offloading where fw4 can resolve zone devices |
+| `router_firewall_default_flow_offloading_hw` | boolean | Request hardware flow offloading for a supported device/driver |
 
-For an access point that should pass traffic without filtering at the
-firewall-defaults level, set all three policies in its host variables:
+All variables are optional and deliberately have no role defaults. This is
+important: an omitted variable does not write anything to UCI and preserves
+the router's existing value. An explicitly supplied `null` removes the
+corresponding UCI option. A boolean `false` writes `0`; it is not a removal
+instruction.
+
+The former policy variables `router_firewall_input`,
+`router_firewall_forward`, and `router_firewall_output` are no longer
+accepted. The role fails with a migration hint if one is explicitly set.
+Rename them to `router_firewall_default_input`,
+`router_firewall_default_forward`, and `router_firewall_default_output`.
+
+Example:
 
 ```yaml
----
-router_firewall_input: ACCEPT
-router_firewall_forward: ACCEPT
-router_firewall_output: ACCEPT
+router_firewall_default_input: REJECT
+router_firewall_default_forward: REJECT
+router_firewall_default_output: ACCEPT
+
+router_firewall_default_synflood_protect: true
+router_firewall_default_synflood_rate: 25/second
+router_firewall_default_synflood_burst: 50
+router_firewall_default_drop_invalid: true
+
+router_firewall_default_flow_offloading: true
+router_firewall_default_flow_offloading_hw: false
 ```
 
-Use these settings only where appropriate for the network design.
-`input: ACCEPT` allows traffic to services on the router, while
-`forward: ACCEPT` removes the default forwarding restriction.
+### OpenWrt 25.12 fw4 fallback values
+
+The following are fw4 parser fallbacks when the corresponding option is
+absent from UCI. They are not role defaults: the role still leaves an
+omitted variable untouched. The shipped firewall configuration may contain
+explicit values that take precedence over these parser fallbacks.
+
+| UCI option | fw4 fallback when absent | Actual fw4 behavior |
+| --- | --- | --- |
+| `input`, `forward`, `output` | `DROP` | Used as the policy of the corresponding filter chain |
+| `synflood_protect` | No independent fallback; fw4 falls back to legacy `syn_flood` when unset | Enables the SYN flood chain when a rate is available; the shipped firewall config sets `syn_flood=1` |
+| `synflood_rate` | `25/second` | Rate used by the SYN flood chain |
+| `synflood_burst` | `50` | Optional burst limit in packets; zero omits the burst clause |
+| `drop_invalid` | Unset (treated as false by the ruleset template) | Adds invalid conntrack-state drops when true |
+| `flow_offloading` | `0` | Builds a software flowtable only when eligible zone devices can be resolved |
+| `flow_offloading_hw` | `0` | Adds the nftables `flags offload` request when software flow offloading is enabled |
+
+fw4's 25.12 parser also accepts `tcp_syncookies` (boolean, parser
+fallback `1`), `tcp_ecn` (integer, no explicit fallback), and
+`tcp_window_scaling` (boolean, parser fallback `1`). Those values are
+stored by the parser but are not consumed by the generated firewall
+ruleset. `tcp_westwood` is not present in the parser. The parser marks
+`disable_ipv6` unsupported. This role deliberately exposes none of them.
+
+### Security and performance considerations
+
+SYN flood protection adds a rate-limited SYN chain when
+`router_firewall_default_synflood_protect` is enabled and a rate is
+available. The default fw4 parser rate is `25/second` and its default burst
+is `50` packets when those options are not present in UCI. Set a rate and
+burst deliberately for the router's traffic profile; overly restrictive
+limits can affect legitimate connection bursts.
+
+`drop_invalid` adds explicit drops for packets classified by conntrack as
+invalid in the generated input, forward, and output chains. This is a
+security hardening choice and can affect unusual network setups that
+intentionally pass traffic in an invalid conntrack state.
+
+Software flow offloading can reduce CPU load and improve forwarding
+throughput, but it changes the packet path. fw4 places a flowtable ingress
+hook and adds eligible TCP/UDP forwarding flows to it. Packets using that
+fast path do not traverse every ordinary forward-chain rule on every
+packet, which can affect the visibility and effectiveness of additional
+per-packet filtering, accounting, logging, traffic shaping, or inspection.
+Validate the impact on the router and enabled firewall features before
+turning it on.
+
+Hardware flow offloading is an additional request on top of software flow
+offloading. It requires a compatible kernel, nftables implementation,
+network driver, and hardware datapath. fw4 checks whether the nftables
+hardware-offload flowtable can be installed; on the tested code path it can
+fall back to software offloading when hardware offload is unavailable.
+A UCI value of `1` is therefore not proof that hardware acceleration is
+active. Inspect the generated ruleset and actual platform/datapath state.
+The role does not try to infer hardware capability or enable unsupported
+features automatically.
+
+Issue [#164](https://github.com/waja/ansible-openwrt/issues/164) records
+runtime validation of the CVE-2026-98432 mitigation with active software
+flow offloading on OpenWrt 25.12.5 / kernel 6.12.94 / QEMU x86_64. That
+test exercised an established flow with `[OFFLOAD]` state. Hardware flow
+offloading was not validated: QEMU virtual NICs do not establish hardware
+datapath support, and the productive Turris inspection was read-only.
+Do not generalize those results to other kernels, drivers, or hardware
+offload implementations.
+
+The role intentionally does not expose `tcp_syncookies`, `tcp_ecn`,
+`tcp_window_scaling`, or `tcp_westwood`: the 25.12 fw4 parser contains
+some of these names, but they are not consumed by fw4's generated firewall
+ruleset; `tcp_westwood` is absent from that parser. `disable_ipv6` is marked unsupported by the 25.12 firewall4 parser. These settings are not silently passed through,
+and arbitrary `router_firewall_default_*` names are rejected.
 
 ## Declarative firewall rules
 
