@@ -166,11 +166,16 @@
 
 - name: Define the expected complete nftables table
   ansible.builtin.set_fact:
-    router_cve_2026_98432_table_pattern: >-
-      (?s)\A\s*table ip cve_2026_98432 [{]\s*chain pre [{]\s*
-      type filter hook prerouting priority (?:-310|raw - 10);
-      policy accept;\s*ip protocol tcp ip hdrlength 6-15
-      counter(?: packets [0-9]+ bytes [0-9]+)? drop\s*[}]\s*[}]\s*\Z
+    router_cve_2026_98432_table_pattern: |
+      (?sx)\A\s*
+      table\s+ip\s+cve_2026_98432\s*[{]\s*
+      chain\s+pre\s*[{]\s*
+      type\s+filter\s+hook\s+prerouting\s+priority\s+
+      (?:-310|raw\s+-\s+10);\s*
+      policy\s+accept;\s*
+      ip\s+protocol\s+tcp\s+ip\s+hdrlength\s+6-15
+      \s+counter(?:\s+packets\s+[0-9]+\s+bytes\s+[0-9]+)?
+      \s+drop\s*[}]\s*[}]\s*\Z
 
 - name: Refuse a foreign or modified same-named nftables table
   ansible.builtin.assert:

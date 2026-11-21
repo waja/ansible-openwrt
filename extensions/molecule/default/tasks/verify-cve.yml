@@ -245,11 +245,11 @@
     #!/bin/sh
     cat <<'TABLE'
     table ip cve_2026_98432 {
-      chain pre {
-        type filter hook prerouting priority raw - 10; policy accept;
-        ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
-        counter accept
-      }
+    	chain pre {
+    		type filter hook prerouting priority raw - 10; policy accept;
+    		ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
+    		counter accept
+    	}
     }
     TABLE
     EOF
