@@ -1,12 +1,28 @@
 # roles/router_firewall/tasks/apply_one_forwarding.yml
 ---
+- name: Rename an adopted anonymous forwarding to its stable section ID
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'rename',
+          'key': 'firewall.' ~ router_firewall_managed_forwarding.original_section_id,
+          'name': router_firewall_managed_forwarding.section_id
+        }]
+      }}
+  when:
+    - router_firewall_managed_forwarding.state == 'present'
+    - router_firewall_managed_forwarding.matched
+    - router_firewall_managed_forwarding.anonymous
+  changed_when: false
+
 - name: Remove an existing firewall forwarding
   ansible.builtin.set_fact:
     router_firewall_operations: >-
       {{
         router_firewall_operations + [{
           'command': 'absent',
-          'key': 'firewall.' ~ router_firewall_managed_forwarding.section_id
+          'key': 'firewall.' ~ router_firewall_managed_forwarding.original_section_id
         }]
       }}
   when:
