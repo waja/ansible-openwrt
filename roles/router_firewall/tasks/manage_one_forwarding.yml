@@ -129,9 +129,9 @@
           'name': router_firewall_forwarding_generated_section_id,
           'index': (
             router_firewall_forwarding_matches[0]
-            | regex_findall('\\[([0-9]+)\\]') | first | int
+            | regex_findall('\[([0-9]+)\\]') | first | int
           ) if router_firewall_forwarding_matches[0]
-               is match('^@forwarding\\[') else -1
+               is match('^@forwarding\[') else -1
         }]
       }}
   when:
