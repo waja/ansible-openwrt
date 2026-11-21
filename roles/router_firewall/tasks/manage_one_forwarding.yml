@@ -120,14 +120,18 @@
       conflicts with the requested forwarding identity. Resolve the
       conflicting section first.
 
-- name: Rename a matched forwarding to its stable section ID
+- name: Collect a matched section rename for the shared transaction
   ansible.builtin.set_fact:
-    router_firewall_operations: >-
+    router_firewall_forwarding_rename_items: >-
       {{
-        router_firewall_operations + [{
-          'command': 'rename',
-          'key': 'firewall.' ~ router_firewall_forwarding_matches[0],
-          'name': router_firewall_forwarding_generated_section_id
+        router_firewall_forwarding_rename_items + [{
+          'section_id': router_firewall_forwarding_matches[0],
+          'name': router_firewall_forwarding_generated_section_id,
+          'index': (
+            router_firewall_forwarding_matches[0]
+            | regex_findall('\\[([0-9]+)\\]') | first | int
+          ) if router_firewall_forwarding_matches[0]
+               is match('^@forwarding\\[') else -1
         }]
       }}
   when:
