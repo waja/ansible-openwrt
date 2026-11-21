@@ -71,7 +71,9 @@
   register: router_firewall_forwarding_stable_dest
   changed_when: false
   failed_when: false
-  when: router_firewall_forwarding_generated_section.result | default('') == 'forwarding'
+  when: >-
+    router_firewall_forwarding_generated_section.result | default('')
+    == 'forwarding'
 
 - name: Read the stable forwarding family
   community.openwrt.uci:
@@ -80,7 +82,9 @@
   register: router_firewall_forwarding_stable_family
   changed_when: false
   failed_when: false
-  when: router_firewall_forwarding_generated_section.result | default('') == 'forwarding'
+  when: >-
+    router_firewall_forwarding_generated_section.result | default('')
+    == 'forwarding'
 
 - name: Reject a conflicting stable forwarding section ID
   ansible.builtin.assert:
