@@ -91,6 +91,9 @@
     name: router_firewall
   vars:
     router_firewall_apply_runtime_changes: false
+    router_firewall_zones:
+      new_guest:
+        input: REJECT
     router_firewall_forwardings:
       - src: guest_test
         dest: new_guest
@@ -188,6 +191,32 @@
     that:
       - >-
         router_firewall_invalid_forwarding_zone_failure
+        == 'Reject unknown or removed forwarding zone references'
+
+- name: Capture forwarding reference to a zone declared absent
+  block:
+    - name: Attempt forwarding to a zone declared absent in the same run
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          fwd_gone:
+            state: absent
+        router_firewall_forwardings:
+          - src: fwd_gone
+            dest: wan
+  rescue:
+    - name: Record removed forwarding zone validation failure
+      ansible.builtin.set_fact:
+        router_firewall_removed_zone_failure: >-
+          {{ ansible_failed_task.name }}
+
+- name: Verify forwardings cannot reference zones declared absent
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_removed_zone_failure
         == 'Reject unknown or removed forwarding zone references'
 
 - name: Remove the ipv4 forwarding without touching the any-family entry
