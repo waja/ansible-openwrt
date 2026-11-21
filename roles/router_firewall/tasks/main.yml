@@ -78,7 +78,7 @@
         )
     fail_msg: >-
       Invalid value for router_firewall_default_{{ item }}. Use ACCEPT,
-      REJECT, or DROP for policies; booleans for boolean options; a positive
+      REJECT, or DROP for policies; booleans for boolean options; use
       a rate such as 25/second or 25 (fw4 defaults to per second)
       for synflood_rate; and a non-negative integer for synflood_burst.
       Explicit null removes an option.
