@@ -240,21 +240,22 @@
       - router_cve_2026_98432_implicit_enabled.stdout | trim == '1'
 
 - name: Create a probe that reports a conflicting nftables table
-  ansible.builtin.raw: |
-    cat > /tmp/ansible-cve-2026-98432-foreign-table-probe <<'EOF'
-    #!/bin/sh
-    cat <<'TABLE'
-    table ip cve_2026_98432 {
-    	chain pre {
-    		type filter hook prerouting priority raw - 10; policy accept;
-    		ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
-    		counter accept
-    	}
-    }
-    TABLE
-    EOF
-    chmod 0755 /tmp/ansible-cve-2026-98432-foreign-table-probe
-  changed_when: true
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      cat <<'TABLE'
+      table ip cve_2026_98432 {
+        chain pre {
+          type filter hook prerouting priority raw - 10; policy accept;
+          ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
+          counter accept
+        }
+      }
+      TABLE
+    dest: /tmp/ansible-cve-2026-98432-foreign-table-probe
+    owner: root
+    group: root
+    mode: '0755'
 
 - name: Refuse a same-named table containing foreign rules
   block:
@@ -284,13 +285,14 @@
   community.openwrt.copy:
     content: |
       #!/bin/sh
-      printf '%s\\n' \\
-        'table ip cve_2026_98432 {' \\
-        '	chain pre {' \\
-        '		type filter hook prerouting priority raw - 10; policy accept;' \\
-        '		ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop' \\
-        '	}' \\
-        '}'
+      cat <<'TABLE'
+      table ip cve_2026_98432 {
+        chain pre {
+          type filter hook prerouting priority raw - 10; policy accept;
+          ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
+        }
+      }
+      TABLE
     dest: /tmp/ansible-cve-2026-98432-owned-table-probe
     owner: root
     group: root
