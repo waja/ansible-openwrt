@@ -280,6 +280,63 @@
     that:
       - router_cve_2026_98432_foreign_table_rejected | default(false) | bool
 
+- name: Create a probe that reports the exact active mitigation table
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      cat <<'TABLE'
+      table ip cve_2026_98432 {
+      \tchain pre {
+      \t\ttype filter hook prerouting priority raw - 10; policy accept;
+      \t\tip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
+      \t}
+      }
+      TABLE
+    dest: /tmp/ansible-cve-2026-98432-owned-table-probe
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Disable the include while retaining an active table in the probe
+  community.openwrt.uci:
+    command: set
+    key: firewall.ansible_cve_2026_98432.enabled
+    value: '0'
+    autocommit: true
+
+- name: Refuse removal of a disabled include with an active table
+  block:
+    - name: Attempt removal of the inconsistent disabled mitigation
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: absent
+        router_cve_2026_98432_apply_runtime_changes: true
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-owned-table-probe
+  rescue:
+    - name: Record rejection of the inconsistent disabled mitigation
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_disabled_active_table_rejected: >-
+          {{
+            ansible_failed_task.name
+            == 'Refuse removal of a disabled include with an active table'
+          }}
+
+- name: Assert inconsistent disabled mitigation removal was rejected
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_disabled_active_table_rejected
+        | default(false) | bool
+
+- name: Restore the mitigation include enabled state after the rejection test
+  community.openwrt.uci:
+    command: set
+    key: firewall.ansible_cve_2026_98432.enabled
+    value: '1'
+    autocommit: true
+
 - name: Add an extra owned UCI include option before failed removal
   community.openwrt.uci:
     command: set
@@ -361,4 +418,5 @@
     - /tmp/ansible-cve-2026-98432-failing-fw4-check
     - /tmp/ansible-cve-2026-98432-inconclusive-probe
     - /tmp/ansible-cve-2026-98432-foreign-table-probe
+    - /tmp/ansible-cve-2026-98432-owned-table-probe
     - /tmp/ansible-cve-2026-98432-expected.nft
