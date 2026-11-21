@@ -153,6 +153,11 @@
     router_firewall_default_flow_offloading_hw: true
     router_firewall_apply_runtime_changes: false
 
+- name: Assert repeated firewall apply reports no UCI changes
+  ansible.builtin.assert:
+    that:
+      - not (router_firewall_apply_result.changed | default(false))
+
 - name: Record firewall configuration after idempotence check
   ansible.builtin.raw: sha256sum /etc/config/firewall | cut -d ' ' -f 1
   register: router_firewall_defaults_after_idempotence
