@@ -348,7 +348,11 @@
 - name: Refuse a non-regular sysupgrade configuration path
   ansible.builtin.assert:
     that:
-      - router_cve_2026_98432_sysupgrade_path_exists.rc != 0
+      - >-
+        (
+          router_cve_2026_98432_sysupgrade_path_exists.rc != 0
+          and router_cve_2026_98432_sysupgrade_file_is_symlink.rc != 0
+        )
         or (
           router_cve_2026_98432_sysupgrade_file_exists.rc == 0
           and router_cve_2026_98432_sysupgrade_file_is_symlink.rc != 0
