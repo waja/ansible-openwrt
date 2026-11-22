@@ -69,29 +69,29 @@
         == router_cve_2026_98432_before_rejected_removal.stdout
 
 - name: Create a probe that reports the mitigation table absent
-  ansible.builtin.raw: |
-    set -e
-    cat > /tmp/ansible-cve-2026-98432-no-table <<'EOF'
-    #!/bin/sh
-    echo "No such file or directory" >&2
-    exit 1
-    EOF
-    chmod 0755 /tmp/ansible-cve-2026-98432-no-table
-  changed_when: true
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      echo "No such file or directory" >&2
+      exit 1
+    dest: /tmp/ansible-cve-2026-98432-no-table
+    owner: root
+    group: root
+    mode: '0755'
 
 - name: Create a failing fw4 check that adds an unrelated sysupgrade entry
-  ansible.builtin.raw: |
-    set -e
-    cat > /tmp/ansible-cve-2026-98432-failing-fw4-check <<'EOF'
-    #!/bin/sh
-    entry=/etc/molecule-added-during-rollback.conf
-    if ! grep -Fxq "$entry" /etc/sysupgrade.conf; then
-      printf '%s\n' "$entry" >> /etc/sysupgrade.conf
-    fi
-    exit 1
-    EOF
-    chmod 0755 /tmp/ansible-cve-2026-98432-failing-fw4-check
-  changed_when: true
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      entry=/etc/molecule-added-during-rollback.conf
+      if ! grep -Fxq "$entry" /etc/sysupgrade.conf; then
+        printf '%s\\n' "$entry" >> /etc/sysupgrade.conf
+      fi
+      exit 1
+    dest: /tmp/ansible-cve-2026-98432-failing-fw4-check
+    owner: root
+    group: root
+    mode: '0755'
 
 - name: Create an inconclusive runtime table probe
   community.openwrt.copy:
