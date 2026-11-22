@@ -559,7 +559,8 @@
         - router_cve_2026_98432_sysupgrade_entry.rc == 0
 
     - name: Remove the standalone nftables table
-      ansible.builtin.raw: nft delete table ip cve_2026_98432
+      community.openwrt.command:
+        cmd: nft delete table ip cve_2026_98432
       changed_when: true
       when:
         - not ansible_check_mode
