@@ -239,6 +239,13 @@
     that:
       - router_cve_2026_98432_implicit_enabled.stdout | trim == '1'
 
+- name: Verify the enabled option is persisted without pending UCI changes
+  ansible.builtin.raw: |
+    set -e
+    grep -Eq "^[[:space:]]*option enabled '1'$" /etc/config/firewall
+    test -z "$(uci changes firewall)"
+  changed_when: false
+
 - name: Create a probe that reports a conflicting nftables table
   community.openwrt.copy:
     content: |
