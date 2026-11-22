@@ -242,7 +242,8 @@
 - name: Verify the enabled option is persisted without pending UCI changes
   ansible.builtin.raw: |
     set -e
-    grep -Eq "^[[:space:]]*option enabled '1'$" /etc/config/firewall
+    sed -n "/^config .* 'ansible_cve_2026_98432'$/,/^$/p" \
+      /etc/config/firewall | grep -Eq "^[[:space:]]*option enabled '1'$"
     test -z "$(uci changes firewall)"
   changed_when: false
 
