@@ -558,6 +558,16 @@
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_sysupgrade_entry.rc == 0
 
+    - name: Remove the standalone nftables table
+      ansible.builtin.raw: nft delete table ip cve_2026_98432
+      changed_when: true
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_active_table.rc == 0
+
+
     - name: Remove the owned ruleset file
       community.openwrt.file:
         path: /etc/cve_2026_98432.nft
@@ -568,15 +578,6 @@
         - >-
           router_cve_2026_98432_include.result | default('') == 'include'
           or router_cve_2026_98432_staged_ruleset_matches | bool
-
-    - name: Remove the standalone nftables table
-      ansible.builtin.raw: nft delete table ip cve_2026_98432
-      changed_when: true
-      when:
-        - not ansible_check_mode
-        - router_cve_2026_98432_state == 'absent'
-        - router_cve_2026_98432_apply_runtime_changes | bool
-        - router_cve_2026_98432_active_table.rc == 0
 
     - name: Read the active mitigation table
       community.openwrt.command:
