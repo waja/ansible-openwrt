@@ -236,6 +236,12 @@
               router_cve_2026_98432_file_exists.rc == 0
               and router_cve_2026_98432_staged_ruleset_matches | bool
             )
+            or (
+              router_cve_2026_98432_active_table.rc == 0
+              and router_cve_2026_98432_active_table.stdout is search(
+                router_cve_2026_98432_table_pattern
+              )
+            )
           )
         )
         or (
@@ -243,6 +249,7 @@
           and (
             router_cve_2026_98432_file_exists.rc != 0
             or router_cve_2026_98432_staged_ruleset_matches | bool
+            or router_cve_2026_98432_state == 'absent'
           )
           and (
             router_cve_2026_98432_runtime_table_absent | bool
