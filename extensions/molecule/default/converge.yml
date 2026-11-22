@@ -1447,8 +1447,8 @@
           /tmp/ansible-cve-2026-98432-no-table
 
     - name: Check whether the duplicate-entry fixture has already run
-      ansible.builtin.raw: >-
-        test -f /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
+      community.openwrt.command:
+        cmd: test -f /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
       register: router_cve_2026_98432_fixture_marker
       changed_when: false
       failed_when: false
@@ -1552,10 +1552,10 @@
             autocommit: true
 
     - name: Mark the duplicate-entry fixture as seeded
-      ansible.builtin.raw: >-
-        touch /tmp/ansible-molecule-cve-2026-98432-fixture-seeded &&
-        chmod 0600 /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
-      changed_when: true
+      community.openwrt.file:
+        path: /tmp/ansible-molecule-cve-2026-98432-fixture-seeded
+        state: touch
+        mode: '0600'
       when: router_cve_2026_98432_fixture_marker.rc != 0
 
     - name: Copy the shipped CVE ruleset for exact comparison
@@ -1590,9 +1590,10 @@
       changed_when: false
 
     - name: Verify the installed ruleset matches the shipped asset
-      ansible.builtin.raw: >-
-        cmp -s /etc/cve_2026_98432.nft
-        /tmp/ansible-cve-2026-98432-expected.nft
+      community.openwrt.command:
+        cmd: >-
+          cmp -s /etc/cve_2026_98432.nft
+          /tmp/ansible-cve-2026-98432-expected.nft
       changed_when: false
 
     - name: >-
