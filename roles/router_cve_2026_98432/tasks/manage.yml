@@ -177,6 +177,18 @@
       \s+counter(?:\s+packets\s+[0-9]+\s+bytes\s+[0-9]+)?
       \s+drop\s*[}]\s*[}]\s*\Z
 
+- name: Refuse to replace an active mitigation backed by a modified ruleset
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_staged_ruleset_matches | bool
+    fail_msg: >-
+      The active mitigation is not backed by the shipped ruleset file;
+      reconcile the file and live table manually before updating it.
+  when:
+    - router_cve_2026_98432_state == 'present'
+    - router_cve_2026_98432_apply_runtime_changes | bool
+    - router_cve_2026_98432_active_table.rc == 0
+
 - name: Refuse a foreign or modified same-named nftables table
   ansible.builtin.assert:
     that:
@@ -309,13 +321,41 @@
       Removal requires runtime inspection and cleanup; enable
       router_cve_2026_98432_apply_runtime_changes.
 
-- name: Record whether sysupgrade configuration exists
+- name: Check whether sysupgrade configuration exists
+  community.openwrt.command:
+    cmd: test -e /etc/sysupgrade.conf
+  register: router_cve_2026_98432_sysupgrade_path_exists
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check whether sysupgrade configuration is a regular file
   community.openwrt.command:
     cmd: test -f /etc/sysupgrade.conf
   register: router_cve_2026_98432_sysupgrade_file_exists
   changed_when: false
   failed_when: false
   check_mode: false
+
+- name: Check whether sysupgrade configuration is a symlink
+  community.openwrt.command:
+    cmd: test -L /etc/sysupgrade.conf
+  register: router_cve_2026_98432_sysupgrade_file_is_symlink
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Refuse a non-regular sysupgrade configuration path
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_sysupgrade_path_exists.rc != 0
+        or (
+          router_cve_2026_98432_sysupgrade_file_exists.rc == 0
+          and router_cve_2026_98432_sysupgrade_file_is_symlink.rc != 0
+        )
+    fail_msg: >-
+      /etc/sysupgrade.conf exists but is not a regular file; refusing to
+      modify it.
 
 - name: Refuse an inconclusive sysupgrade entry check
   ansible.builtin.assert:
@@ -414,6 +454,19 @@
         - router_cve_2026_98432_state == 'present'
         - router_cve_2026_98432_runtime_table_probe_conclusive | bool
 
+    - name: Preview sysupgrade preservation in check mode
+      ansible.builtin.debug:
+        msg: >-
+          /etc/cve_2026_98432.nft would be added to /etc/sysupgrade.conf
+          or duplicate entries would be removed.
+      changed_when: >-
+        (router_cve_2026_98432_sysupgrade_entry_count.stdout | default('0') | int)
+        != 1
+      when:
+        - ansible_check_mode
+        - router_cve_2026_98432_state == 'present'
+        - router_cve_2026_98432_runtime_table_probe_conclusive | bool
+
     - name: Collapse duplicate owned sysupgrade entries
       ansible.builtin.raw: |
         tmp=$(mktemp /etc/sysupgrade.conf.XXXXXX) || exit
@@ -473,38 +526,6 @@
             name: firewall
             state: reloaded
 
-    - name: Remove the standalone nftables table
-      ansible.builtin.raw: >-
-        nft delete table ip cve_2026_98432 2>/dev/null || true
-      changed_when: true
-      when:
-        - not ansible_check_mode
-        - router_cve_2026_98432_state == 'absent'
-        - router_cve_2026_98432_apply_runtime_changes | bool
-        - router_cve_2026_98432_active_table.rc == 0
-
-    - name: Verify the mitigation table is absent after removal
-      community.openwrt.command:
-        cmd: nft list tables
-      register: router_cve_2026_98432_tables_after_removal
-      changed_when: false
-      when:
-        - not ansible_check_mode
-        - router_cve_2026_98432_state == 'absent'
-        - router_cve_2026_98432_apply_runtime_changes | bool
-
-    - name: Assert the mitigation table was removed
-      ansible.builtin.assert:
-        that:
-          - router_cve_2026_98432_tables_after_removal.rc == 0
-          - >-
-            router_cve_2026_98432_tables_after_removal.stdout
-            is not search('(?m)^table ip cve_2026_98432$')
-      when:
-        - not ansible_check_mode
-        - router_cve_2026_98432_state == 'absent'
-        - router_cve_2026_98432_apply_runtime_changes | bool
-
     - name: Remove the sysupgrade entry atomically
       ansible.builtin.raw: |
         set -e
@@ -540,6 +561,38 @@
         - >-
           router_cve_2026_98432_include.result | default('') == 'include'
           or router_cve_2026_98432_staged_ruleset_matches | bool
+
+    - name: Remove the standalone nftables table
+      ansible.builtin.raw: >-
+        nft delete table ip cve_2026_98432 2>/dev/null || true
+      changed_when: true
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_active_table.rc == 0
+
+    - name: Verify the mitigation table is absent after removal
+      community.openwrt.command:
+        cmd: nft list tables
+      register: router_cve_2026_98432_tables_after_removal
+      changed_when: false
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
+
+    - name: Assert the mitigation table was removed
+      ansible.builtin.assert:
+        that:
+          - router_cve_2026_98432_tables_after_removal.rc == 0
+          - >-
+            router_cve_2026_98432_tables_after_removal.stdout
+            is not search('(?m)^table ip cve_2026_98432$')
+      when:
+        - not ansible_check_mode
+        - router_cve_2026_98432_state == 'absent'
+        - router_cve_2026_98432_apply_runtime_changes | bool
 
     - name: Read the active mitigation table
       community.openwrt.command:
