@@ -464,8 +464,10 @@
           /etc/cve_2026_98432.nft would be added to /etc/sysupgrade.conf
           or duplicate entries would be removed.
       changed_when: >-
-        (router_cve_2026_98432_sysupgrade_entry_count.stdout | default('0') | int)
-        != 1
+        (
+          router_cve_2026_98432_sysupgrade_entry_count.stdout
+          | default('0') | int
+        ) != 1
       when:
         - ansible_check_mode
         - router_cve_2026_98432_state == 'present'
