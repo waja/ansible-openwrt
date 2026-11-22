@@ -177,18 +177,6 @@
       \s+counter(?:\s+packets\s+[0-9]+\s+bytes\s+[0-9]+)?
       \s+drop\s*[}]\s*[}]\s*\Z
 
-- name: Refuse to replace an active mitigation backed by a modified ruleset
-  ansible.builtin.assert:
-    that:
-      - router_cve_2026_98432_staged_ruleset_matches | bool
-    fail_msg: >-
-      The active mitigation is not backed by the shipped ruleset file;
-      reconcile the file and live table manually before updating it.
-  when:
-    - router_cve_2026_98432_state == 'present'
-    - router_cve_2026_98432_apply_runtime_changes | bool
-    - router_cve_2026_98432_active_table.rc == 0
-
 - name: Refuse a foreign or modified same-named nftables table
   ansible.builtin.assert:
     that:
@@ -200,6 +188,18 @@
       The existing nftables table is not exactly the role-owned mitigation;
       refusing to overwrite or remove it.
   when:
+    - router_cve_2026_98432_apply_runtime_changes | bool
+    - router_cve_2026_98432_active_table.rc == 0
+
+- name: Refuse to replace an active mitigation backed by a modified ruleset
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_staged_ruleset_matches | bool
+    fail_msg: >-
+      The active mitigation is not backed by the shipped ruleset file;
+      reconcile the file and live table manually before updating it.
+  when:
+    - router_cve_2026_98432_state == 'present'
     - router_cve_2026_98432_apply_runtime_changes | bool
     - router_cve_2026_98432_active_table.rc == 0
 
