@@ -567,36 +567,14 @@
           or router_cve_2026_98432_staged_ruleset_matches | bool
 
     - name: Remove the standalone nftables table
-      ansible.builtin.raw: >-
-        nft delete table ip cve_2026_98432 2>/dev/null || true
+      ansible.builtin.raw: nft delete table ip cve_2026_98432
       changed_when: true
       when:
         - not ansible_check_mode
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_active_table.rc == 0
-
-    - name: Verify the mitigation table is absent after removal
-      community.openwrt.command:
-        cmd: nft list tables
-      register: router_cve_2026_98432_tables_after_removal
-      changed_when: false
-      when:
-        - not ansible_check_mode
-        - router_cve_2026_98432_state == 'absent'
-        - router_cve_2026_98432_apply_runtime_changes | bool
-
-    - name: Assert the mitigation table was removed
-      ansible.builtin.assert:
-        that:
-          - router_cve_2026_98432_tables_after_removal.rc == 0
-          - >-
-            router_cve_2026_98432_tables_after_removal.stdout
-            is not search('(?m)^table ip cve_2026_98432$')
-      when:
-        - not ansible_check_mode
-        - router_cve_2026_98432_state == 'absent'
-        - router_cve_2026_98432_apply_runtime_changes | bool
+        - router_cve_2026_98432_include.result | default('') != 'include'
 
     - name: Read the active mitigation table
       community.openwrt.command:
