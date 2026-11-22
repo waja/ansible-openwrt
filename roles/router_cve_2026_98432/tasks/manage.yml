@@ -454,6 +454,7 @@
       register: router_cve_2026_98432_sysupgrade_entry_count
       changed_when: false
       failed_when: false
+      check_mode: false
       when:
         - router_cve_2026_98432_state == 'present'
         - router_cve_2026_98432_runtime_table_probe_conclusive | bool
@@ -576,7 +577,6 @@
         - router_cve_2026_98432_state == 'absent'
         - router_cve_2026_98432_apply_runtime_changes | bool
         - router_cve_2026_98432_active_table.rc == 0
-        - router_cve_2026_98432_include.result | default('') != 'include'
 
     - name: Read the active mitigation table
       community.openwrt.command:
