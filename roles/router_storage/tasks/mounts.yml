@@ -109,8 +109,11 @@
       [ "$section" = "$name" ] && continue
       section_uuid="$(uci -q get "fstab.$section.uuid" 2>/dev/null || true)"
       section_target="$(uci -q get "fstab.$section.target" 2>/dev/null || true)"
+      section_device="$(uci -q get "fstab.$section.device" 2>/dev/null || true)"
       if [ "$section_uuid" = "$uuid" ] || \
-        [ "$section_target" = "$target" ]; then
+        [ "$section_target" = "$target" ] || \
+        [ "$section_device" = "$device" ] || \
+        [ "$section_device" = "UUID=$uuid" ]; then
         echo "External mount conflicts with existing fstab section $section" >&2
         exit 1
       fi
