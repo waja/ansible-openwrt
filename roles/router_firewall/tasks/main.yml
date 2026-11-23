@@ -548,11 +548,50 @@
     index_var: router_firewall_zone_index
     label: "{{ router_firewall_zone.key }}"
 
+- name: Read current names of declared firewall zones
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ item.key }}.name"
+  loop: "{{ router_firewall_zones | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: router_firewall_current_zone_names
+  changed_when: false
+  failed_when: false
+
+- name: Initialize firewall zone names being renamed
+  ansible.builtin.set_fact:
+    router_firewall_zone_names_to_rename: []
+  changed_when: false
+
+- name: Collect old names of renamed firewall zones
+  ansible.builtin.set_fact:
+    router_firewall_zone_names_to_rename: >-
+      {{
+        router_firewall_zone_names_to_rename + [item.1.result]
+      }}
+  loop: >-
+    {{
+      router_firewall_zones | dict2items
+      | zip(router_firewall_current_zone_names.results)
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.key }}"
+  when:
+    - item.0.value.state | default('present') == 'present'
+    - item.1.result | default('') | length > 0
+    - item.1.result != (item.0.value.name | default(item.0.key))
+  changed_when: false
+
 - name: Add declarative firewall rule operations
   ansible.builtin.include_tasks: manage_rules.yml
 
 - name: Add declarative firewall redirect operations
   ansible.builtin.include_tasks: manage_redirects.yml
+
+- name: Add declarative inter-zone forwarding operations
+  ansible.builtin.include_tasks: manage_forwardings.yml
 
 - name: Add optional additional Dropbear WAN firewall rule
   ansible.builtin.set_fact:

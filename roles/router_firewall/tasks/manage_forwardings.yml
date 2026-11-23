@@ -1,0 +1,184 @@
+# roles/router_firewall/tasks/manage_forwardings.yml
+---
+- name: Validate firewall forwarding configuration
+  ansible.builtin.assert:
+    that:
+      - router_firewall_forwardings is sequence
+      - router_firewall_forwardings is not string
+      - router_firewall_forwardings is not mapping
+    fail_msg: >-
+      router_firewall_forwardings must be a list of forwarding definitions.
+
+- name: Validate firewall forwarding definitions
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - >-
+        item.keys()
+        | difference(['state', 'src', 'dest', 'family', 'name', 'enabled'])
+        | length == 0
+      - item.state | default('present') in ['present', 'absent']
+      - item.src is string
+      - item.src | length > 0
+      - item.dest is string
+      - item.dest | length > 0
+      - >-
+        item.family is not defined or item.family is none or
+        item.family in ['any', 'ipv4', 'ipv6']
+      - >-
+        item.name is not defined or item.name is none or
+        (item.name is string and item.name | length > 0)
+      - >-
+        item.enabled is not defined or item.enabled is none or
+        item.enabled is boolean
+      - >-
+        item.state | default('present') != 'absent' or
+        item.keys()
+        | difference(['state', 'src', 'dest', 'family', 'name'])
+        | length == 0
+    fail_msg: >-
+      Invalid firewall forwarding. Specify non-empty src and dest zone names,
+      optional family any/ipv4/ipv6, optional descriptive name, and optional
+      boolean enabled. state: absent accepts only identity fields and name.
+  loop: "{{ router_firewall_forwardings }}"
+  loop_control:
+    label: "{{ item.src | default('?') }} -> {{ item.dest | default('?') }}"
+
+- name: Initialize desired firewall forwarding identities
+  ansible.builtin.set_fact:
+    router_firewall_forwarding_identities: []
+  changed_when: false
+
+- name: Collect desired firewall forwarding identities
+  ansible.builtin.set_fact:
+    router_firewall_forwarding_identities: >-
+      {{
+        router_firewall_forwarding_identities + [
+          item.src ~ '|' ~ item.dest ~ '|' ~
+          (item.family | default('any', true))
+        ]
+      }}
+  loop: "{{ router_firewall_forwardings }}"
+  changed_when: false
+
+- name: Reject duplicate desired forwarding identities
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_firewall_forwarding_identities | unique(case_sensitive=true)
+        | list | length == router_firewall_forwarding_identities | length
+    fail_msg: Duplicate forwarding identity (src, dest, effective family).
+
+- name: Initialize firewall forwarding zone reference queries
+  ansible.builtin.set_fact:
+    router_firewall_forwarding_zone_references: []
+  changed_when: false
+
+- name: Collect forwarding source and destination zone references
+  ansible.builtin.set_fact:
+    router_firewall_forwarding_zone_references: >-
+      {{
+        router_firewall_forwarding_zone_references + [{
+          'src': item.src,
+          'dest': item.dest
+        }]
+      }}
+  loop: "{{ router_firewall_forwardings }}"
+  changed_when: false
+  when: item.state | default('present') == 'present'
+
+- name: Find existing source zones referenced by forwardings
+  community.openwrt.uci:
+    command: find_all
+    config: firewall
+    type: zone
+    option: name
+    find: "{{ item.src }}"
+  loop: "{{ router_firewall_forwarding_zone_references }}"
+  register: router_firewall_forwarding_source_zones
+  changed_when: false
+
+- name: Find existing destination zones referenced by forwardings
+  community.openwrt.uci:
+    command: find_all
+    config: firewall
+    type: zone
+    option: name
+    find: "{{ item.dest }}"
+  loop: "{{ router_firewall_forwarding_zone_references }}"
+  register: router_firewall_forwarding_destination_zones
+  changed_when: false
+
+- name: Reject unknown or removed forwarding zone references
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.0.src in router_firewall_desired_zone_names or
+        (
+          item.1.result_list | default([]) | length > 0 and
+          item.0.src not in router_firewall_zone_names_to_remove and
+          item.0.src not in router_firewall_zone_names_to_rename
+        )
+      - >-
+        item.0.dest in router_firewall_desired_zone_names or
+        (
+          item.2.result_list | default([]) | length > 0 and
+          item.0.dest not in router_firewall_zone_names_to_remove and
+          item.0.dest not in router_firewall_zone_names_to_rename
+        )
+    fail_msg: >-
+      Forwarding {{ item.0.src }} -> {{ item.0.dest }} references an unknown
+      zone or a zone declared absent. Declare the zone present or use an
+      existing zone.
+  loop: >-
+    {{
+      router_firewall_forwarding_zone_references
+      | zip(router_firewall_forwarding_source_zones.results)
+      | zip(router_firewall_forwarding_destination_zones.results)
+      | map('flatten') | list
+    }}
+  loop_control:
+    label: "{{ item.0.src }} -> {{ item.0.dest }}"
+
+- name: Initialize resolved firewall forwarding operations
+  ansible.builtin.set_fact:
+    router_firewall_forwarding_managed_items: []
+    router_firewall_forwarding_rename_items: []
+  changed_when: false
+
+- name: Resolve each declared firewall forwarding
+  ansible.builtin.include_tasks: manage_one_forwarding.yml
+  loop: "{{ router_firewall_forwardings }}"
+  loop_control:
+    loop_var: router_firewall_forwarding
+    label: >-
+      {{ router_firewall_forwarding.src }} ->
+      {{ router_firewall_forwarding.dest }}
+
+- name: Stage forwarding renames in descending anonymous section order
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'rename',
+          'key': 'firewall.' ~ item.section_id,
+          'name': item.name
+        }]
+      }}
+  loop: >-
+    {{
+      router_firewall_forwarding_rename_items
+      | sort(attribute='index', reverse=true)
+    }}
+  loop_control:
+    label: "{{ item.section_id }} -> {{ item.name }}"
+  changed_when: false
+
+- name: Apply resolved firewall forwarding operations
+  ansible.builtin.include_tasks: apply_one_forwarding.yml
+  loop: "{{ router_firewall_forwarding_managed_items }}"
+  loop_control:
+    loop_var: router_firewall_managed_forwarding
+    label: >-
+      {{ router_firewall_managed_forwarding.src }} ->
+      {{ router_firewall_managed_forwarding.dest }}

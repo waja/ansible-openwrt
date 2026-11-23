@@ -2226,3 +2226,6 @@
 
     - name: Verify global firewall default semantics
       ansible.builtin.include_tasks: tasks/verify_firewall_defaults.yml
+
+    - name: Verify declarative inter-zone forwardings
+      ansible.builtin.include_tasks: tasks/verify_firewall_forwardings.yml
