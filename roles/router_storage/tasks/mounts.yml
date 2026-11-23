@@ -181,23 +181,6 @@
     extended: true
     label: "{{ item.name }}"
 
-- name: Configure persistent external storage mounts
-  community.openwrt.uci:
-    command: section
-    config: fstab
-    type: mount
-    name: "router_storage_{{ item.name }}"
-    value:
-      uuid: "{{ item.uuid }}"
-      target: "{{ item.target | default('/opt') }}"
-      fstype: "{{ item.filesystem | default('ext4') }}"
-      options: "{{ item.options | default('defaults') }}"
-      enabled: '1'
-    autocommit: true
-  loop: "{{ router_storage_mounts }}"
-  loop_control:
-    label: "{{ item.name }}"
-
 - name: Mount and verify external storage individually
   ansible.builtin.raw: |
     set -eu
@@ -276,3 +259,20 @@
   register: router_storage_fstab_enable
   changed_when: "'enabled-now' in router_storage_fstab_enable.stdout"
 )
+- name: Configure persistent external storage mounts
+  community.openwrt.uci:
+    command: section
+    config: fstab
+    type: mount
+    name: "router_storage_{{ item.name }}"
+    value:
+      uuid: "{{ item.uuid }}"
+      target: "{{ item.target | default('/opt') }}"
+      fstype: "{{ item.filesystem | default('ext4') }}"
+      options: "{{ item.options | default('defaults') }}"
+      enabled: '1'
+    autocommit: true
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+
