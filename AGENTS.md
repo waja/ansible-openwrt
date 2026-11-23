@@ -597,6 +597,9 @@ with it.
   - Runs `yamllint .`.
   - Installs pinned roles and collections from `requirements.yml` into
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
+    Collection installation bypasses Galaxy's response cache with
+    `--no-cache` and retries up to three times for transient cache or
+    network failures, waiting 10 and then 20 seconds between attempts.
   - Runs `ansible-lint`, excluding the installed `community.openwrt`
     collection.
 - `check-structure`
@@ -649,9 +652,14 @@ with it.
     OpenWrt release and opkg version, network/firewall init links,
     firewall rules, recent system log, filesystem space, and container
     logs. Container names derive from `OPENWRT_VERSION` and scenario.
-  - Destroys only the scenario assigned to that job in an unconditional
-    cleanup step. Each matrix job records its setup, test, and destroy
-    durations and uploads a result artifact even when a step fails.
+  - Runs the scenario-specific destroy step with `always()` only when
+    the setup-duration step succeeded. This means preparation completed
+    and the Molecule test may have created a scenario to clean up. If an
+    earlier preparation step fails, Molecule has not started and no
+    scenario exists, so cleanup is skipped rather than producing a
+    secondary destroy failure.
+  - Each matrix job records its setup, test, and destroy durations and
+    uploads a result artifact even when a step fails.
   - The `17 6 * * 0` schedule tests the regular moving OpenWrt release image;
     the separate `17 7 * * 0` schedule tests the moving snapshot tag.
     Pull requests, pushes, and manual runs use the regular image.
