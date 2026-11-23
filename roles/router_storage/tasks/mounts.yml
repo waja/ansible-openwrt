@@ -81,7 +81,10 @@
         }
       }
     ')"
-    count="$(printf '%s\n' "$probe" | awk 'NF { count++ } END { print count+0 }')"
+    count="$(printf '%s\n' "$probe" | awk '
+      NF { count++ }
+      END { print count+0 }
+    ')"
     [ "$count" -eq 1 ] || {
       echo "Expected exactly one block device with UUID $uuid;" \
         "found $count" >&2
