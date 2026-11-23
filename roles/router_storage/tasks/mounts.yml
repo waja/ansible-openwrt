@@ -82,7 +82,8 @@
     name='router_storage_{{ item.name }}'
     uuid='{{ item.uuid }}'
     target="{{ item.target | default('/opt') }}"
-    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout }}'
+    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0]
+      .stdout }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     if uci -q get "fstab.$name" >/dev/null 2>&1; then
       section_type="$(uci -q get "fstab.$name")"
@@ -126,7 +127,8 @@
   ansible.builtin.raw: |
     set -eu
     target="{{ item.target | default('/opt') }}"
-    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout }}'
+    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0]
+      .stdout }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     expected_fstype="{{ item.filesystem | default('ext4') }}"
     if [ -L "$target" ]; then
@@ -174,7 +176,8 @@
     uuid='{{ item.uuid }}'
     target="{{ item.target | default('/opt') }}"
     expected_fstype="{{ item.filesystem | default('ext4') }}"
-    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout }}'
+    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0]
+      .stdout }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     changed=0
 
