@@ -78,3 +78,51 @@ are documented at
   may need a different wait strategy.
 - Full expansion has been validated on a disposable OpenWrt 25.12.5
   x86/64 VM clone. The original Proxmox template was not modified.
+
+## Optional external storage mounts
+
+The same role can optionally manage external filesystems, independently of
+root expansion. Mounts are disabled by default:
+
+```yaml
+router_storage_mounts: []
+```
+
+Configure each filesystem by its stable UUID. The target defaults to
+`/opt`, the filesystem defaults to `ext4`, and mount options default to
+`defaults`. Hardware-specific kernel modules belong in the per-mount
+`packages` list; they are not installed automatically for every router.
+
+```yaml
+router_storage_mounts:
+  - name: opt
+    uuid: "00000000-0000-0000-0000-000000000000"
+    target: /opt
+    filesystem: ext4
+    options: defaults
+    packages:
+      - kmod-fs-ext4
+      - kmod-mmc
+      - kmod-sdhci-mt7620
+```
+
+The role installs `block-mount` and the explicitly requested packages,
+checks that exactly one block device has the configured UUID and expected
+filesystem, and manages a named mount section in `/etc/config/fstab`.
+It enables the fstab init service for subsequent boots. At runtime it mounts
+only the configured device directly; it does not run the global
+`block mount` or `block umount` commands, which could affect unrelated
+mounts.
+
+Existing fstab sections are preserved. A conflicting UUID or target,
+a non-mount section using the managed name, an already-mounted device at
+another target, a conflicting mount at the target, or non-empty target
+directory causes a clear failure. A target directory is created if absent.
+No partitioning, formatting, filesystem repair, or device auto-selection
+is performed.
+
+For the MikroTik hEX S, the example kernel modules are hardware-specific
+and must be verified against the exact device and OpenWrt image. Filesystem
+creation and partitioning are intentionally manual prerequisites. Validate
+the configuration on the target device before relying on it for services
+that need persistent storage.
