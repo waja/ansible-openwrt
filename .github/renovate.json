@@ -62,10 +62,10 @@
       "versioningTemplate": "pep440"
     }
   ],
+  // CI lockfiles are refreshed by refresh-ci-lockfiles.yml, which runs
+  // the repository's pinned generator and normalizes its interpreter-specific header.
   "pip-compile": {
-    "managerFilePatterns": [
-      "/^requirements\\/ci\\/(lint|ansible-test|molecule)\\.txt$/"
-    ]
+    "enabled": false
   },
   "pip_requirements": {
     "enabled": false

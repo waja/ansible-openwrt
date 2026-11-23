@@ -11,6 +11,7 @@ name: Validate CI dependency locks
       - "requirements/ci/*.txt"
       - ".github/workflows/update-ci-lockfiles.yml"
       - "scripts/update-ci-lockfiles.sh"
+      - "scripts/normalize-ci-lockfile-headers.sh"
       - "scripts/tests/test-ci-lockfile-normalization.sh"
   push:
     paths:
@@ -19,6 +20,7 @@ name: Validate CI dependency locks
       - "requirements/ci/*.txt"
       - ".github/workflows/update-ci-lockfiles.yml"
       - "scripts/update-ci-lockfiles.sh"
+      - "scripts/normalize-ci-lockfile-headers.sh"
       - "scripts/tests/test-ci-lockfile-normalization.sh"
 
 permissions:
