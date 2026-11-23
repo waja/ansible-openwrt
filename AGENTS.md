@@ -597,9 +597,6 @@ with it.
   - Runs `yamllint .`.
   - Installs pinned roles and collections from `requirements.yml` into
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
-    Collection installation bypasses Galaxy's response cache with
-    `--no-cache` and retries up to three times for transient cache or
-    network failures, waiting 10 and then 20 seconds between attempts.
   - Runs `ansible-lint`, excluding the installed `community.openwrt`
     collection.
 - `check-structure`
@@ -618,6 +615,9 @@ with it.
     version and structure checks, lint, and applicable Ansible prechecks pass.
   - Installs pinned roles and collections from `requirements.yml` into
     `~/.ansible/roles` and `~/.ansible/collections`, respectively.
+    Collection installation bypasses Galaxy's response cache with
+    `--no-cache` and retries up to three times for transient cache or
+    network failures, waiting 10 and then 20 seconds between attempts.
   - Runs for scheduled/manual events and whenever any changed path falls
     outside the documented exemptions: Markdown, `docs/**`, and the five
     explicitly listed discovery files covered by `script-tests.yml`. New
