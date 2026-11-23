@@ -20,3 +20,7 @@
   when:
     - router_storage_expand_root | bool
     - router_storage_detection.state in ['required', 'partial']
+
+- name: Configure optional external storage mounts
+  ansible.builtin.include_tasks: mounts.yml
+  when: router_storage_mounts | length > 0
