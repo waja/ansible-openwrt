@@ -40,27 +40,27 @@
             == 'Reject unsupported layouts when root expansion is requested'
 
     - name: Verify invalid external storage configuration is rejected
-  block:
-    - name: Run storage role with an invalid external storage UUID
-      ansible.builtin.include_role:
-        name: router_storage
-      vars:
-        router_storage_mounts:
-          - name: invalid
-            uuid: invalid
+      block:
+        - name: Run storage role with an invalid external storage UUID
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: invalid
+                uuid: invalid
 
-    - name: Fail if invalid external storage configuration was accepted
-      ansible.builtin.fail:
-        msg: Invalid external storage UUID was accepted.
-  rescue:
-    - name: Confirm invalid external storage configuration was rejected
-      ansible.builtin.assert:
-        that:
-          - >-
-            ansible_failed_task.name
-            == 'Validate external storage mount definitions'
+        - name: Fail if invalid external storage configuration was accepted
+          ansible.builtin.fail:
+            msg: Invalid external storage UUID was accepted.
+      rescue:
+        - name: Confirm invalid external storage configuration was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
 
-- name: Apply router system role
+    - name: Apply router system role
       ansible.builtin.include_role:
         name: router_system
       vars:
