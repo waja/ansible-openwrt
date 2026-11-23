@@ -109,6 +109,15 @@ or CI workflows.
 - Keep script-specific smoke tests in their dedicated workflow. Script
   changes also run Molecule; avoid adding exceptions just to save that run.
 - Keep scheduled smoke tests and manual `workflow_dispatch` available.
+- The Molecule workflow runs on pull requests, pushes to `development` and
+  `master`, scheduled runs, and manual `workflow_dispatch`; the traffic test
+  runs on every invocation.
+- The `cve-mitigation-traffic` job installs `iproute2`, `nftables`, and
+  `python3`, then runs
+  `sudo python3 scripts/tests/test_cve_2026_98432_traffic.py` in a network
+  namespace. It checks the production mitigation ruleset's IPv4 INPUT/FORWARD
+  filtering and IPv6 compatibility. The `molecule-status` aggregate depends
+  on this job and fails if it does not succeed.
 - Do not add workflow-level path filters that can leave required checks
   pending.
 
@@ -213,6 +222,21 @@ other contributors or its history is already in use.
   it into a shared collection utility rather than duplicating implementations.
 - Keep shared interfaces narrowly scoped to demonstrated requirements.
   Avoid speculative options and configurability.
+
+### Failure handling and recovery
+
+- Define the guarantees a change must provide before designing recovery or
+  rollback logic.
+- Do not attempt to provide atomic transactions across independent state
+  stores unless the underlying systems explicitly support them.
+- Prefer forward operations with clear ownership and validation over custom
+  snapshot, rollback, and recovery frameworks.
+- On failure, restore only state owned by the operation and only when the
+  previous state can be restored safely.
+- Do not add defensive handling for hypothetical failure combinations
+  without a demonstrated risk or requirement.
+- If complete recovery cannot be guaranteed, fail clearly, preserve
+  diagnostics, and leave the system in a documented, repairable state.
 
 ### Reference project research
 
@@ -320,6 +344,9 @@ for release versions, image tags, container names, paths, and CI matrix values.
 - Keep service reloads/restarts in handlers notified by the successful UCI
   task; do not use a generic commit handler because handler execution order
   does not guarantee a commit before every service handler.
+- Exception: the CVE-2026-98432 mitigation role performs synchronous firewall
+  reloads directly because fw4 validation, runtime verification, and recovery
+  must run in a strict sequence; do not defer these reloads to handlers.
 - If a configuration option is optional and cannot cleanly be included in
   the grouped operations, use a separate conditional UCI task with
   `autocommit: true`.
@@ -634,6 +661,16 @@ with it.
   - The `17 6 * * 0` schedule tests the regular moving OpenWrt release image;
     the separate `17 7 * * 0` schedule tests the moving snapshot tag.
     Pull requests, pushes, and manual runs use the regular image.
+- `cve-mitigation-traffic`
+  - Runs on every workflow invocation, independently of whether the Molecule
+    matrix is skipped for Markdown-only changes.
+  - Installs `iproute2`, `nftables`, and `python3` on the Ubuntu runner.
+  - Runs `sudo python3 scripts/tests/test_cve_2026_98432_traffic.py` because
+    the test creates network namespaces and configures nftables.
+  - Covers IPv4 INPUT/FORWARD filtering and IPv6 compatibility.
+  - `molecule-status` depends on this job and fails if the traffic test does
+    not succeed.
+
 - `molecule-status`
   - Exposes the stable `Molecule` check. Configure branch protection to
     require this aggregate check, not the individual matrix jobs.

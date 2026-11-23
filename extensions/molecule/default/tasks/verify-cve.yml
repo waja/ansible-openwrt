@@ -1,3 +1,4 @@
+# extensions/molecule/default/tasks/verify-cve.yml
 ---
 - name: Reject an omitted CVE mitigation state
   block:
@@ -68,29 +69,29 @@
         == router_cve_2026_98432_before_rejected_removal.stdout
 
 - name: Create a probe that reports the mitigation table absent
-  ansible.builtin.raw: |
-    set -e
-    cat > /tmp/ansible-cve-2026-98432-no-table <<'EOF'
-    #!/bin/sh
-    echo "No such file or directory" >&2
-    exit 1
-    EOF
-    chmod 0755 /tmp/ansible-cve-2026-98432-no-table
-  changed_when: true
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      echo "No such file or directory" >&2
+      exit 1
+    dest: /tmp/ansible-cve-2026-98432-no-table
+    owner: root
+    group: root
+    mode: '0755'
 
 - name: Create a failing fw4 check that adds an unrelated sysupgrade entry
-  ansible.builtin.raw: |
-    set -e
-    cat > /tmp/ansible-cve-2026-98432-failing-fw4-check <<'EOF'
-    #!/bin/sh
-    entry=/etc/molecule-added-during-rollback.conf
-    if ! grep -Fxq "$entry" /etc/sysupgrade.conf; then
-      printf '%s\n' "$entry" >> /etc/sysupgrade.conf
-    fi
-    exit 1
-    EOF
-    chmod 0755 /tmp/ansible-cve-2026-98432-failing-fw4-check
-  changed_when: true
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      entry=/etc/molecule-added-during-rollback.conf
+      if ! grep -Fxq "$entry" /etc/sysupgrade.conf; then
+        printf '%s\n' "$entry" >> /etc/sysupgrade.conf
+      fi
+      exit 1
+    dest: /tmp/ansible-cve-2026-98432-failing-fw4-check
+    owner: root
+    group: root
+    mode: '0755'
 
 - name: Create an inconclusive runtime table probe
   community.openwrt.copy:
@@ -110,7 +111,7 @@
     uci commit firewall
     rm -f /etc/cve_2026_98432.nft
     if test -f /etc/sysupgrade.conf; then
-      sed -i '\|^/etc/cve_2026_98432\.nft$|d' /etc/sysupgrade.conf
+      sed -i '/^\/etc\/cve_2026_98432[.]nft$/d' /etc/sysupgrade.conf
     fi
   changed_when: true
 
@@ -180,10 +181,27 @@
   ansible.builtin.raw: |
     set -e
     test -f /etc/cve_2026_98432.nft
-    ! uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1
-    ! grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf
+    if uci -q get firewall.ansible_cve_2026_98432 >/dev/null 2>&1; then
+      echo "Mitigation UCI include unexpectedly exists"
+      exit 1
+    fi
+    if grep -Fxq /etc/cve_2026_98432.nft /etc/sysupgrade.conf; then
+      echo "Mitigation sysupgrade entry unexpectedly exists"
+      exit 1
+    fi
     test -z "$(uci changes firewall)"
   changed_when: false
+
+- name: Reset the staged-only state before testing failed removal
+  ansible.builtin.raw: |
+    set -e
+    uci -q delete firewall.ansible_cve_2026_98432 || true
+    uci commit firewall
+    if test -f /etc/sysupgrade.conf; then
+      sed -i '/^\/etc\/cve_2026_98432[.]nft$/d' /etc/sysupgrade.conf
+    fi
+    rm -f /etc/cve_2026_98432.nft
+  changed_when: true
 
 - name: Stage mitigation again before testing failed removal
   ansible.builtin.include_role:
@@ -191,6 +209,142 @@
   vars:
     router_cve_2026_98432_state: present
     router_cve_2026_98432_apply_runtime_changes: false
+    router_cve_2026_98432_runtime_table_probe_command: >-
+      /tmp/ansible-cve-2026-98432-no-table
+
+- name: Remove the explicit enabled option to test fw4's default
+  community.openwrt.uci:
+    command: absent
+    key: firewall.ansible_cve_2026_98432.enabled
+    autocommit: true
+
+- name: Preserve an existing include's implicit enabled state
+  ansible.builtin.include_role:
+    name: router_cve_2026_98432
+  vars:
+    router_cve_2026_98432_state: present
+    router_cve_2026_98432_apply_runtime_changes: false
+    router_cve_2026_98432_runtime_table_probe_command: >-
+      /tmp/ansible-cve-2026-98432-no-table
+
+- name: Verify the implicit enabled state was preserved
+  community.openwrt.command:
+    cmd: uci -q get firewall.ansible_cve_2026_98432.enabled
+  register: router_cve_2026_98432_implicit_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Assert an existing include without enabled remains enabled
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_implicit_enabled.stdout | trim == '1'
+
+- name: Verify the enabled option is persisted without pending UCI changes
+  ansible.builtin.raw: |
+    set -e
+    sed -n "/^config .* 'ansible_cve_2026_98432'$/,/^$/p" \
+      /etc/config/firewall | grep -Eq "^[[:space:]]*option enabled '1'$"
+    test -z "$(uci changes firewall)"
+  changed_when: false
+
+- name: Create a probe that reports a conflicting nftables table
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      cat <<'TABLE'
+      table ip cve_2026_98432 {
+        chain pre {
+          type filter hook prerouting priority raw - 10; policy accept;
+          ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
+          counter accept
+        }
+      }
+      TABLE
+    dest: /tmp/ansible-cve-2026-98432-foreign-table-probe
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Refuse a same-named table containing foreign rules
+  block:
+    - name: Attempt to manage a conflicting nftables table
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: present
+        router_cve_2026_98432_apply_runtime_changes: true
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-foreign-table-probe
+  rescue:
+    - name: Record conflicting table rejection
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_foreign_table_rejected: >-
+          {{
+            ansible_failed_task.name
+            == 'Refuse a foreign or modified same-named nftables table'
+          }}
+
+- name: Assert foreign nftables table was rejected
+  ansible.builtin.assert:
+    that:
+      - router_cve_2026_98432_foreign_table_rejected | default(false) | bool
+
+- name: Create a probe that reports the exact active mitigation table
+  community.openwrt.copy:
+    content: |
+      #!/bin/sh
+      cat <<'TABLE'
+      table ip cve_2026_98432 {
+        chain pre {
+          type filter hook prerouting priority raw - 10; policy accept;
+          ip protocol tcp ip hdrlength 6-15 counter packets 0 bytes 0 drop
+        }
+      }
+      TABLE
+    dest: /tmp/ansible-cve-2026-98432-owned-table-probe
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Disable the include while retaining an active table in the probe
+  community.openwrt.uci:
+    command: set
+    key: firewall.ansible_cve_2026_98432.enabled
+    value: 'off'
+    autocommit: true
+
+- name: Refuse removal of a disabled include with an active table
+  block:
+    - name: Attempt removal of the inconsistent disabled mitigation
+      ansible.builtin.include_role:
+        name: router_cve_2026_98432
+      vars:
+        router_cve_2026_98432_state: absent
+        router_cve_2026_98432_apply_runtime_changes: true
+        router_cve_2026_98432_runtime_table_probe_command: >-
+          /tmp/ansible-cve-2026-98432-owned-table-probe
+  rescue:
+    - name: Record rejection of the inconsistent disabled mitigation
+      ansible.builtin.set_fact:
+        router_cve_2026_98432_disabled_active_table_rejected: >-
+          {{
+            ansible_failed_task.name
+            == 'Refuse removal of a disabled include with an active table'
+          }}
+
+- name: Assert inconsistent disabled mitigation removal was rejected
+  ansible.builtin.assert:
+    that:
+      - >-
+        router_cve_2026_98432_disabled_active_table_rejected
+        | default(false) | bool
+
+- name: Restore the mitigation include enabled state after the rejection test
+  community.openwrt.uci:
+    command: set
+    key: firewall.ansible_cve_2026_98432.enabled
+    value: '1'
+    autocommit: true
 
 - name: Add an extra owned UCI include option before failed removal
   community.openwrt.uci:
@@ -272,4 +426,6 @@
     - /tmp/ansible-cve-2026-98432-no-table
     - /tmp/ansible-cve-2026-98432-failing-fw4-check
     - /tmp/ansible-cve-2026-98432-inconclusive-probe
+    - /tmp/ansible-cve-2026-98432-foreign-table-probe
+    - /tmp/ansible-cve-2026-98432-owned-table-probe
     - /tmp/ansible-cve-2026-98432-expected.nft
