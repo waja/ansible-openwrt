@@ -67,7 +67,7 @@ for disposable x86/64 test VMs. The official procedure and its limitations
 are documented at
 [OpenWrt: Expanding root partition and filesystem](https://openwrt.org/docs/guide-user/advanced/expand_root).
 
-## Current limitations
+## Root expansion limitations
 
 - Detection and expansion are limited to x86/64 SquashFS combined images.
 - Supported root disks are currently /dev/sdX and /dev/vdX.
