@@ -1,0 +1,138 @@
+# roles/router_firewall/tasks/apply_one_forwarding.yml
+---
+- name: Remove an existing firewall forwarding
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'absent',
+          'key': (
+            'firewall.' ~ router_firewall_managed_forwarding.section_id
+          )
+        }]
+      }}
+  when:
+    - router_firewall_managed_forwarding.state == 'absent'
+    - router_firewall_managed_forwarding.matched
+  changed_when: false
+
+- name: Create a new firewall forwarding
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'section',
+          'config': 'firewall',
+          'type': 'forwarding',
+          'name': router_firewall_managed_forwarding.section_id,
+          'value': (
+            {
+              'src': router_firewall_managed_forwarding.src,
+              'dest': router_firewall_managed_forwarding.dest
+            }
+            | combine(
+                {'family': router_firewall_managed_forwarding.family}
+                if router_firewall_managed_forwarding.family_supplied
+                   and router_firewall_managed_forwarding.family is not none
+                   and not router_firewall_managed_forwarding.family_null
+                else {}
+              )
+            | combine(
+                {'name': router_firewall_managed_forwarding.name}
+                if router_firewall_managed_forwarding.name_supplied
+                   and router_firewall_managed_forwarding.name is not none
+                else {}
+              )
+            | combine(
+                {
+                  'enabled': (
+                    '0'
+                    if not router_firewall_managed_forwarding.enabled
+                    else '1'
+                  )
+                }
+                if router_firewall_managed_forwarding.enabled_supplied
+                   and router_firewall_managed_forwarding.enabled is not none
+                else {}
+              )
+          )
+        }]
+      }}
+  when:
+    - router_firewall_managed_forwarding.state == 'present'
+    - not router_firewall_managed_forwarding.matched
+  changed_when: false
+
+- name: Update source and destination on an existing forwarding
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'set',
+          'key': (
+            'firewall.' ~ router_firewall_managed_forwarding.section_id
+            ~ '.' ~ item.key
+          ),
+          'value': item.value
+        }]
+      }}
+  loop:
+    - key: src
+      value: "{{ router_firewall_managed_forwarding.src }}"
+    - key: dest
+      value: "{{ router_firewall_managed_forwarding.dest }}"
+  when:
+    - router_firewall_managed_forwarding.state == 'present'
+    - router_firewall_managed_forwarding.matched
+  changed_when: false
+
+- name: Update explicitly supplied existing forwarding options
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'set',
+          'key': (
+            'firewall.' ~ router_firewall_managed_forwarding.section_id
+            ~ '.' ~ item
+          ),
+          'value': (
+            '1' if router_firewall_managed_forwarding[item]
+            else '0'
+          ) if item == 'enabled'
+          else router_firewall_managed_forwarding[item]
+        }]
+      }}
+  loop: "{{ ['family', 'name', 'enabled'] }}"
+  when:
+    - router_firewall_managed_forwarding.state == 'present'
+    - router_firewall_managed_forwarding.matched
+    - router_firewall_managed_forwarding[item ~ '_supplied']
+    - router_firewall_managed_forwarding[item] is not none
+    - item != 'family' or not router_firewall_managed_forwarding.family_null
+  changed_when: false
+
+- name: Remove explicitly null forwarding options
+  ansible.builtin.set_fact:
+    router_firewall_operations: >-
+      {{
+        router_firewall_operations + [{
+          'command': 'absent',
+          'key': (
+            'firewall.' ~ router_firewall_managed_forwarding.section_id
+            ~ '.' ~ item
+          )
+        }]
+      }}
+  loop: "{{ ['family', 'name', 'enabled'] }}"
+  when:
+    - router_firewall_managed_forwarding.state == 'present'
+    - router_firewall_managed_forwarding.matched
+    - router_firewall_managed_forwarding[item ~ '_supplied']
+    - >-
+      router_firewall_managed_forwarding[item] is none or
+      (
+        item == 'family'
+        and router_firewall_managed_forwarding.family_null
+      )
+  changed_when: false
