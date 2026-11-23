@@ -241,7 +241,9 @@ jobs:
 
           scenarios = ("default", "network-static", "network-dhcp")
           rows = []
-          python_versions = json.loads(os.environ["PYTHON_VERSIONS"])
+          python_versions = json.loads(
+              os.environ.get("PYTHON_VERSIONS") or "[]"
+          )
           for python_version in python_versions:
               for openwrt_version in versions:
                   for scenario in scenarios:
