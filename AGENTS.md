@@ -693,7 +693,8 @@ Workflow: `.github/workflows/forward-compatibility.yml`.
   validates the resulting environment. A dependency conflict fails the lane.
 - If a tool has no published pre-release, its test is explicitly skipped;
   a latest-stable installation is never reported as a forward-compatibility
-  test. Each executed lane reports the installed tool versions.
+  test. Each executed lane reports the installed tool versions and labels
+  each reported tool as stable or pre-release.
 - Every Ansible Core matrix job uploads its result, including explicit skips.
   The aggregate summary job publishes the complete Python/OpenWrt/scenario
   matrix and its status to the workflow run summary. Failed, cancelled, or
