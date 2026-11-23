@@ -55,20 +55,44 @@
 - name: Check external storage UUID and filesystem
   ansible.builtin.raw: |
     set -eu
-    uuid={{ item.uuid }}
-    expected_fstype={{ item.filesystem | default('ext4') }}
-    count=$(block info | grep -F $uuid | wc -l)
-    [ $count -eq 1 ] || {
-      echo Expected-one-block-device-with-UUID-$uuid-found-$count >&2
+    uuid='{{ item.uuid }}'
+    expected_fstype='{{ item.filesystem | default("ext4") }}'
+    block_info="$(block info)"
+    probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
+      {
+        device = $1
+        sub(/:$/, "", device)
+        found_uuid = ""
+        found_type = ""
+        for (i = 2; i <= NF; i++) {
+          if ($i ~ /^UUID=/) {
+            found_uuid = $i
+            sub(/^UUID="/, "", found_uuid)
+            sub(/"$/, "", found_uuid)
+          }
+          if ($i ~ /^TYPE=/) {
+            found_type = $i
+            sub(/^TYPE="/, "", found_type)
+            sub(/"$/, "", found_type)
+          }
+        }
+        if (found_uuid == uuid) {
+          print device "|" found_type
+        }
+      }
+    ')"
+    count="$(printf '%s\n' "$probe" | awk 'NF { count++ } END { print count+0 }')"
+    [ "$count" -eq 1 ] || {
+      echo "Expected exactly one block device with UUID $uuid; found $count" >&2
       exit 1
     }
-    device=$(block info | grep -F $uuid | cut -d : -f 1)
-    fstype_match=$(block info | grep -F $uuid | grep -F $expected_fstype)
-    [ -n $device ] && [ -n $fstype_match ] || {
-      echo UUID-$uuid-has-an-unexpected-filesystem >&2
+    device="${probe%%|*}"
+    actual_fstype="${probe#*|}"
+    [ "$actual_fstype" = "$expected_fstype" ] || {
+      echo "UUID $uuid has filesystem $actual_fstype; expected $expected_fstype" >&2
       exit 1
     }
-    printf 'device=%s\n' $device
+    printf 'device=%s\n' "$device"
   register: router_storage_mount_probe
   changed_when: false
   loop: "{{ router_storage_mounts }}"
