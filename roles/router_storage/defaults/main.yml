@@ -1,3 +1,4 @@
 # roles/router_storage/defaults/main.yml
 ---
 router_storage_expand_root: false
+router_storage_mounts: []
