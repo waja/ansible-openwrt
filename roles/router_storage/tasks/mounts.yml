@@ -50,7 +50,7 @@
   ansible.builtin.raw: |
     set -eu
     uuid='{{ item.uuid }}'
-    expected_fstype='{{ item.filesystem | default("ext4") }}'
+    expected_fstype="{{ item.filesystem | default('ext4') }}"
     matches="$(block info | awk -v uuid="$uuid" '
       index($0, "UUID=\"" uuid "\"") {
         device=$1
@@ -84,7 +84,7 @@
     set -eu
     name='router_storage_{{ item.name }}'
     uuid='{{ item.uuid }}'
-    target='{{ item.target | default("/opt") }}'
+    target="{{ item.target | default('/opt') }}"
     device='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout
       | regex_search("(?m)^device=.*$")
       | regex_replace("(?m)^device=", "") }}'
@@ -133,7 +133,7 @@
     device='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout
       | regex_search("(?m)^device=.*$")
       | regex_replace("(?m)^device=", "") }}'
-    expected_fstype='{{ item.filesystem | default("ext4") }}'
+    expected_fstype="{{ item.filesystem | default('ext4') }}"
     if [ -L "$target" ]; then
       echo "Mount target $target is a symbolic link" >&2
       exit 1
@@ -228,7 +228,7 @@
         exit 1
       fi
       mount -t "$expected_fstype" \
-        -o '{{ item.options | default("defaults") }}' "$device" "$target"
+        -o "{{ item.options | default('defaults') }}" "$device" "$target"
       changed=1
     fi
 
