@@ -85,9 +85,8 @@
     name='router_storage_{{ item.name }}'
     uuid='{{ item.uuid }}'
     target="{{ item.target | default('/opt') }}"
-    device='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout
-      | regex_search("(?m)^device=.*$")
-      | regex_replace("(?m)^device=", "") }}'
+    device={{ router_storage_mount_probe.results[ansible_loop.index0].stdout
+      | regex_search('(?m)^device=.*
     if uci -q get "fstab.$name" >/dev/null 2>&1; then
       section_type="$(uci -q get "fstab.$name")"
       [ "$section_type" = mount ] || {
@@ -190,6 +189,427 @@
     device='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout
       | regex_search("(?m)^device=.*$")
       | regex_replace("(?m)^device=", "") }}'
+    changed=0
+
+    case "$target" in
+      *'/../'*|*/..|*'/./'*|*/.)
+        echo "Mount target contains a non-normalized path: $target" >&2
+        exit 1
+        ;;
+    esac
+    if [ -L "$target" ]; then
+      echo "Mount target $target is a symbolic link" >&2
+      exit 1
+    fi
+    mkdir -p "$target"
+
+    existing_target="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    if [ -n "$existing_target" ]; then
+      existing_source="$(printf '%s\n' "$existing_target" | cut -d '|' -f 1)"
+      existing_fstype="$(printf '%s\n' "$existing_target" | cut -d '|' -f 2)"
+      [ "$existing_source" = "$device" ] && \
+        [ "$existing_fstype" = "$expected_fstype" ] || {
+        echo "Mount target $target is already used by" \
+          "$existing_source ($existing_fstype)" >&2
+        exit 1
+      }
+    else
+      existing_device_mount="$(awk -v device="$device" \
+        '$1 == device {print $2}' /proc/mounts)"
+      [ -z "$existing_device_mount" ] || {
+        echo "Device $device is already mounted at $existing_device_mount" >&2
+        exit 1
+      }
+      if [ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "Mount target $target is not empty; refusing to" \
+          "hide existing data" >&2
+        exit 1
+      fi
+      mount -t "$expected_fstype" \
+        -o "{{ item.options | default('defaults') }}" "$device" "$target"
+      changed=1
+    fi
+
+    verified="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    expected="$(printf '%s|%s' "$device" "$expected_fstype")"
+    [ "$verified" = "$expected" ] || {
+      echo "Mount verification failed for $target (UUID $uuid)" >&2
+      exit 1
+    }
+    echo "device=$device"
+    echo "changed=$changed"
+  register: router_storage_mount_apply
+  changed_when: "'changed=1' in router_storage_mount_apply.stdout"
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+- name: Configure persistent external storage mounts
+  community.openwrt.uci:
+    command: section
+    config: fstab
+    type: mount
+    name: "router_storage_{{ item.name }}"
+    value:
+      uuid: "{{ item.uuid }}"
+      target: "{{ item.target | default('/opt') }}"
+      fstype: "{{ item.filesystem | default('ext4') }}"
+      options: "{{ item.options | default('defaults') }}"
+      enabled: '1'
+    autocommit: true
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+
+- name: Enable the OpenWrt fstab service without restarting existing mounts
+  ansible.builtin.raw: |
+    if /etc/init.d/fstab enabled; then
+      echo already-enabled
+    else
+      /etc/init.d/fstab enable
+      echo enabled-now
+    fi
+  register: router_storage_fstab_enable
+  changed_when: "'enabled-now' in router_storage_fstab_enable.stdout"
+)
+      | regex_replace('(?m)^device=', '') }}
+    if uci -q get "fstab.$name" >/dev/null 2>&1; then
+      section_type="$(uci -q get "fstab.$name")"
+      [ "$section_type" = mount ] || {
+        echo "fstab section $name exists but is not a mount section" >&2
+        exit 1
+      }
+      current_uuid="$(uci -q get "fstab.$name.uuid" 2>/dev/null || true)"
+      current_target="$(uci -q get "fstab.$name.target" 2>/dev/null || true)"
+      [ -z "$current_uuid" ] || [ "$current_uuid" = "$uuid" ] || {
+        echo "Managed fstab section $name refers to a different UUID" >&2
+        exit 1
+      }
+      [ -z "$current_target" ] || [ "$current_target" = "$target" ] || {
+        echo "Managed fstab section $name refers to a different target" >&2
+        exit 1
+      }
+    fi
+    sections="$(uci -q show fstab 2>/dev/null | \
+      sed -n 's/^fstab\.\([^.=]*\)\..*=.*/\1/p' | sort -u)"
+    for section in $sections; do
+      [ "$section" = "$name" ] && continue
+      section_uuid="$(uci -q get "fstab.$section.uuid" 2>/dev/null || true)"
+      section_target="$(uci -q get "fstab.$section.target" 2>/dev/null || true)"
+      section_device="$(uci -q get "fstab.$section.device" 2>/dev/null || true)"
+      if [ "$section_uuid" = "$uuid" ] || \
+        [ "$section_target" = "$target" ] || \
+        [ "$section_device" = "$device" ] || \
+        [ "$section_device" = "UUID=$uuid" ]; then
+        echo "External mount conflicts with existing fstab section $section" >&2
+        exit 1
+      fi
+    done
+  changed_when: false
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+- name: Check external storage mount targets before changing fstab
+  ansible.builtin.raw: |
+    set -eu
+    target={{ item.target | default('/opt') }}
+    device={{ router_storage_mount_probe.results[ansible_loop.index0].stdout
+      | regex_search('(?m)^device=.*
+    expected_fstype="{{ item.filesystem | default('ext4') }}"
+    if [ -L "$target" ]; then
+      echo "Mount target $target is a symbolic link" >&2
+      exit 1
+    fi
+    if [ -e "$target" ] && [ ! -d "$target" ]; then
+      echo "Mount target $target exists and is not a directory" >&2
+      exit 1
+    fi
+    existing_target="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    if [ -n "$existing_target" ]; then
+      existing_source="$(printf '%s\n' "$existing_target" | cut -d '|' -f 1)"
+      existing_fstype="$(printf '%s\n' "$existing_target" | cut -d '|' -f 2)"
+      [ "$existing_source" = "$device" ] && \
+        [ "$existing_fstype" = "$expected_fstype" ] || {
+        echo "Mount target $target is already used by" \
+          "$existing_source ($existing_fstype)" >&2
+        exit 1
+      }
+    else
+      existing_device_mount="$(awk -v device="$device" \
+        '$1 == device {print $2}' /proc/mounts)"
+      [ -z "$existing_device_mount" ] || {
+        echo "Device $device is already mounted at $existing_device_mount" >&2
+        exit 1
+      }
+      if [ -L "$target" ]; then
+        echo "Mount target $target is a symbolic link" >&2
+        exit 1
+      fi
+      if [ -e "$target" ] && [ ! -d "$target" ]; then
+        echo "Mount target $target exists and is not a directory" >&2
+        exit 1
+      fi
+      if [ -e "$target" ] && \
+        [ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "Mount target $target is not empty; refusing to" \
+          "hide existing data" >&2
+        exit 1
+      fi
+    fi
+  changed_when: false
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+- name: Mount and verify external storage individually
+  ansible.builtin.raw: |
+    set -eu
+    uuid='{{ item.uuid }}'
+    target={{ item.target | default('/opt') }}
+    expected_fstype={{ item.filesystem | default('ext4') }}
+    device='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout
+      | regex_search("(?m)^device=.*$")
+      | regex_replace("(?m)^device=", "") }}'
+    changed=0
+
+    case "$target" in
+      *'/../'*|*/..|*'/./'*|*/.)
+        echo "Mount target contains a non-normalized path: $target" >&2
+        exit 1
+        ;;
+    esac
+    if [ -L "$target" ]; then
+      echo "Mount target $target is a symbolic link" >&2
+      exit 1
+    fi
+    mkdir -p "$target"
+
+    existing_target="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    if [ -n "$existing_target" ]; then
+      existing_source="$(printf '%s\n' "$existing_target" | cut -d '|' -f 1)"
+      existing_fstype="$(printf '%s\n' "$existing_target" | cut -d '|' -f 2)"
+      [ "$existing_source" = "$device" ] && \
+        [ "$existing_fstype" = "$expected_fstype" ] || {
+        echo "Mount target $target is already used by" \
+          "$existing_source ($existing_fstype)" >&2
+        exit 1
+      }
+    else
+      existing_device_mount="$(awk -v device="$device" \
+        '$1 == device {print $2}' /proc/mounts)"
+      [ -z "$existing_device_mount" ] || {
+        echo "Device $device is already mounted at $existing_device_mount" >&2
+        exit 1
+      }
+      if [ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "Mount target $target is not empty; refusing to" \
+          "hide existing data" >&2
+        exit 1
+      fi
+      mount -t "$expected_fstype" \
+        -o "{{ item.options | default('defaults') }}" "$device" "$target"
+      changed=1
+    fi
+
+    verified="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    expected="$(printf '%s|%s' "$device" "$expected_fstype")"
+    [ "$verified" = "$expected" ] || {
+      echo "Mount verification failed for $target (UUID $uuid)" >&2
+      exit 1
+    }
+    echo "device=$device"
+    echo "changed=$changed"
+  register: router_storage_mount_apply
+  changed_when: "'changed=1' in router_storage_mount_apply.stdout"
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+- name: Configure persistent external storage mounts
+  community.openwrt.uci:
+    command: section
+    config: fstab
+    type: mount
+    name: "router_storage_{{ item.name }}"
+    value:
+      uuid: "{{ item.uuid }}"
+      target: "{{ item.target | default('/opt') }}"
+      fstype: "{{ item.filesystem | default('ext4') }}"
+      options: "{{ item.options | default('defaults') }}"
+      enabled: '1'
+    autocommit: true
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+
+- name: Enable the OpenWrt fstab service without restarting existing mounts
+  ansible.builtin.raw: |
+    if /etc/init.d/fstab enabled; then
+      echo already-enabled
+    else
+      /etc/init.d/fstab enable
+      echo enabled-now
+    fi
+  register: router_storage_fstab_enable
+  changed_when: "'enabled-now' in router_storage_fstab_enable.stdout"
+)
+      | regex_replace('(?m)^device=', '') }}
+    expected_fstype="{{ item.filesystem | default('ext4') }}"
+    if [ -L "$target" ]; then
+      echo "Mount target $target is a symbolic link" >&2
+      exit 1
+    fi
+    if [ -e "$target" ] && [ ! -d "$target" ]; then
+      echo "Mount target $target exists and is not a directory" >&2
+      exit 1
+    fi
+    existing_target="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    if [ -n "$existing_target" ]; then
+      existing_source="$(printf '%s\n' "$existing_target" | cut -d '|' -f 1)"
+      existing_fstype="$(printf '%s\n' "$existing_target" | cut -d '|' -f 2)"
+      [ "$existing_source" = "$device" ] && \
+        [ "$existing_fstype" = "$expected_fstype" ] || {
+        echo "Mount target $target is already used by" \
+          "$existing_source ($existing_fstype)" >&2
+        exit 1
+      }
+    else
+      existing_device_mount="$(awk -v device="$device" \
+        '$1 == device {print $2}' /proc/mounts)"
+      [ -z "$existing_device_mount" ] || {
+        echo "Device $device is already mounted at $existing_device_mount" >&2
+        exit 1
+      }
+      if [ -L "$target" ]; then
+        echo "Mount target $target is a symbolic link" >&2
+        exit 1
+      fi
+      if [ -e "$target" ] && [ ! -d "$target" ]; then
+        echo "Mount target $target exists and is not a directory" >&2
+        exit 1
+      fi
+      if [ -e "$target" ] && \
+        [ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "Mount target $target is not empty; refusing to" \
+          "hide existing data" >&2
+        exit 1
+      fi
+    fi
+  changed_when: false
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+- name: Mount and verify external storage individually
+  ansible.builtin.raw: |
+    set -eu
+    uuid='{{ item.uuid }}'
+    target={{ item.target | default('/opt') }}
+    expected_fstype={{ item.filesystem | default('ext4') }}
+    device={{ router_storage_mount_probe.results[ansible_loop.index0].stdout
+      | regex_search('(?m)^device=.*
+    changed=0
+
+    case "$target" in
+      *'/../'*|*/..|*'/./'*|*/.)
+        echo "Mount target contains a non-normalized path: $target" >&2
+        exit 1
+        ;;
+    esac
+    if [ -L "$target" ]; then
+      echo "Mount target $target is a symbolic link" >&2
+      exit 1
+    fi
+    mkdir -p "$target"
+
+    existing_target="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    if [ -n "$existing_target" ]; then
+      existing_source="$(printf '%s\n' "$existing_target" | cut -d '|' -f 1)"
+      existing_fstype="$(printf '%s\n' "$existing_target" | cut -d '|' -f 2)"
+      [ "$existing_source" = "$device" ] && \
+        [ "$existing_fstype" = "$expected_fstype" ] || {
+        echo "Mount target $target is already used by" \
+          "$existing_source ($existing_fstype)" >&2
+        exit 1
+      }
+    else
+      existing_device_mount="$(awk -v device="$device" \
+        '$1 == device {print $2}' /proc/mounts)"
+      [ -z "$existing_device_mount" ] || {
+        echo "Device $device is already mounted at $existing_device_mount" >&2
+        exit 1
+      }
+      if [ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "Mount target $target is not empty; refusing to" \
+          "hide existing data" >&2
+        exit 1
+      fi
+      mount -t "$expected_fstype" \
+        -o "{{ item.options | default('defaults') }}" "$device" "$target"
+      changed=1
+    fi
+
+    verified="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    expected="$(printf '%s|%s' "$device" "$expected_fstype")"
+    [ "$verified" = "$expected" ] || {
+      echo "Mount verification failed for $target (UUID $uuid)" >&2
+      exit 1
+    }
+    echo "device=$device"
+    echo "changed=$changed"
+  register: router_storage_mount_apply
+  changed_when: "'changed=1' in router_storage_mount_apply.stdout"
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+- name: Configure persistent external storage mounts
+  community.openwrt.uci:
+    command: section
+    config: fstab
+    type: mount
+    name: "router_storage_{{ item.name }}"
+    value:
+      uuid: "{{ item.uuid }}"
+      target: "{{ item.target | default('/opt') }}"
+      fstype: "{{ item.filesystem | default('ext4') }}"
+      options: "{{ item.options | default('defaults') }}"
+      enabled: '1'
+    autocommit: true
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+
+- name: Enable the OpenWrt fstab service without restarting existing mounts
+  ansible.builtin.raw: |
+    if /etc/init.d/fstab enabled; then
+      echo already-enabled
+    else
+      /etc/init.d/fstab enable
+      echo enabled-now
+    fi
+  register: router_storage_fstab_enable
+  changed_when: "'enabled-now' in router_storage_fstab_enable.stdout"
+)
+      | regex_replace('(?m)^device=', '') }}
     changed=0
 
     case "$target" in
