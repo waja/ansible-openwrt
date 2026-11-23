@@ -84,27 +84,23 @@ are documented at
 The same role can optionally manage external filesystems, independently of
 root expansion. Mounts are disabled by default:
 
-```yaml
-router_storage_mounts: []
-```
+    router_storage_mounts: []
 
 Configure each filesystem by its stable UUID. The target defaults to
 `/opt`, the filesystem defaults to `ext4`, and mount options default to
 `defaults`. Hardware-specific kernel modules belong in the per-mount
 `packages` list; they are not installed automatically for every router.
 
-```yaml
-router_storage_mounts:
-  - name: opt
-    uuid: "00000000-0000-0000-0000-000000000000"
-    target: /opt
-    filesystem: ext4
-    options: defaults
-    packages:
-      - kmod-fs-ext4
-      - kmod-mmc
-      - kmod-sdhci-mt7620
-```
+    router_storage_mounts:
+      - name: opt
+        uuid: "00000000-0000-0000-0000-000000000000"
+        target: /opt
+        filesystem: ext4
+        options: defaults
+        packages:
+          - kmod-fs-ext4
+          - kmod-mmc
+          - kmod-sdhci-mt7620
 
 The role installs `block-mount` and the explicitly requested packages,
 checks that exactly one block device has the configured UUID and expected
