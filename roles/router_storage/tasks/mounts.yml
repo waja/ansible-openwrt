@@ -125,6 +125,14 @@
       | regex_search("(?m)^device=.*$")
       | regex_replace("(?m)^device=", "") }}'
     expected_fstype='{{ item.filesystem | default("ext4") }}'
+    if [ -L "$target" ]; then
+      echo "Mount target $target is a symbolic link" >&2
+      exit 1
+    fi
+    if [ -e "$target" ] && [ ! -d "$target" ]; then
+      echo "Mount target $target exists and is not a directory" >&2
+      exit 1
+    fi
     existing_target="$(awk -v target="$target" \
       '$2 == target {print $1 "|" $3}' /proc/mounts)"
     if [ -n "$existing_target" ]; then
