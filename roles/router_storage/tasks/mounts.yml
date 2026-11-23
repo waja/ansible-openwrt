@@ -24,14 +24,23 @@
 - name: Reject duplicate external storage mount identifiers
   ansible.builtin.assert:
     that:
-      - (router_storage_mounts | map(attribute='name') | list | unique | length) == (router_storage_mounts | length)
-      - (router_storage_mounts | map(attribute='uuid') | list | unique | length) == (router_storage_mounts | length)
-      - (router_storage_mounts | map(attribute='target', default='/opt') | list | unique | length) == (router_storage_mounts | length)
+      - >-
+        (router_storage_mounts | map(attribute='name') | list | unique | length)
+        == (router_storage_mounts | length)
+      - >-
+        (router_storage_mounts | map(attribute='uuid') | list | unique | length)
+        == (router_storage_mounts | length)
+      - >-
+        (router_storage_mounts | map(attribute='target', default='/opt')
+        | list | unique | length) == (router_storage_mounts | length)
 
 - name: Install external storage mount prerequisites
   action: "community.openwrt.{{ openwrt_package_manager }}"
   args:
-    name: "{{ (['block-mount'] + (router_storage_mounts | map(attribute='packages', default=[]) | flatten | list)) | unique | join(',') }}"
+    name: >-
+      {{ (['block-mount'] +
+          (router_storage_mounts | map(attribute='packages', default=[])
+           | flatten | list)) | unique | join(',') }}
     state: present
     update_cache: true
 
@@ -91,12 +100,14 @@
         exit 1
       }
     fi
-    sections="$(uci -q show fstab 2>/dev/null | sed -n 's/^fstab\.\([^.=]*\)\..*=.*/\1/p' | sort -u)"
+    sections="$(uci -q show fstab 2>/dev/null | \
+      sed -n 's/^fstab\.\([^.=]*\)\..*=.*/\1/p' | sort -u)"
     for section in $sections; do
       [ "$section" = "$name" ] && continue
       section_uuid="$(uci -q get "fstab.$section.uuid" 2>/dev/null || true)"
       section_target="$(uci -q get "fstab.$section.target" 2>/dev/null || true)"
-      if [ "$section_uuid" = "$uuid" ] || [ "$section_target" = "$target" ]; then
+      if [ "$section_uuid" = "$uuid" ] || \
+        [ "$section_target" = "$target" ]; then
         echo "External mount conflicts with existing fstab section $section" >&2
         exit 1
       fi
@@ -110,24 +121,40 @@
   ansible.builtin.raw: |
     set -eu
     target='{{ item.target | default("/opt") }}'
-    device='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout | regex_search("(?m)^device=.*$") | regex_replace("(?m)^device=", "") }}'
+    device='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout
+      | regex_search("(?m)^device=.*$")
+      | regex_replace("(?m)^device=", "") }}'
     expected_fstype='{{ item.filesystem | default("ext4") }}'
-    existing_target="$(awk -v target="$target" '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    existing_target="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
     if [ -n "$existing_target" ]; then
       existing_source="$(printf '%s\n' "$existing_target" | cut -d '|' -f 1)"
       existing_fstype="$(printf '%s\n' "$existing_target" | cut -d '|' -f 2)"
-      [ "$existing_source" = "$device" ] && [ "$existing_fstype" = "$expected_fstype" ] || {
-        echo "Mount target $target is already used by $existing_source ($existing_fstype)" >&2
+      [ "$existing_source" = "$device" ] && \
+        [ "$existing_fstype" = "$expected_fstype" ] || {
+        echo "Mount target $target is already used by" \
+          "$existing_source ($existing_fstype)" >&2
         exit 1
       }
     else
-      existing_device_mount="$(awk -v device="$device" '$1 == device {print $2}' /proc/mounts)"
+      existing_device_mount="$(awk -v device="$device" \
+        '$1 == device {print $2}' /proc/mounts)"
       [ -z "$existing_device_mount" ] || {
         echo "Device $device is already mounted at $existing_device_mount" >&2
         exit 1
       }
-      if [ -e "$target" ] && [ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-        echo "Mount target $target is not empty; refusing to hide existing data" >&2
+      if [ -L "$target" ]; then
+        echo "Mount target $target is a symbolic link" >&2
+        exit 1
+      fi
+      if [ -e "$target" ] && [ ! -d "$target" ]; then
+        echo "Mount target $target exists and is not a directory" >&2
+        exit 1
+      fi
+      if [ -e "$target" ] && \
+        [ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "Mount target $target is not empty; refusing to" \
+          "hide existing data" >&2
         exit 1
       fi
     fi
@@ -193,11 +220,13 @@
         echo "Mount target $target is not empty; refusing to hide existing data" >&2
         exit 1
       fi
-      mount -t "$expected_fstype" -o '{{ item.options | default("defaults") }}' "$device" "$target"
+      mount -t "$expected_fstype" \
+        -o '{{ item.options | default("defaults") }}' "$device" "$target"
       changed=1
     fi
 
-    verified="$(awk -v target="$target" '$2 == target {print $1 "|" $3}' /proc/mounts)"
+    verified="$(awk -v target="$target" \
+      '$2 == target {print $1 "|" $3}' /proc/mounts)"
     expected="$(printf '%s|%s' "$device" "$expected_fstype")"
     [ "$verified" = "$expected" ] || {
       echo "Mount verification failed for $target (UUID $uuid)" >&2
