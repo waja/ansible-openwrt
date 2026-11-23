@@ -7,7 +7,9 @@
       - item.name is match('^[A-Za-z0-9_]+$')
       - item.uuid is defined
       - item.uuid is match('^[A-Fa-f0-9-]{36}$')
-      - (item.target | default('/opt')) is match('^/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*
+      - >-
+        (item.target | default('/opt')) is
+        match('^/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$')
       - (item.target | default('/opt')) not in ['/', '/overlay', '/rom', '/tmp']
       - "'/../' not in (item.target | default('/opt'))"
       - (item.filesystem | default('ext4')) is match('^[A-Za-z0-9]+$')
