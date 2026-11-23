@@ -60,6 +60,49 @@
                 ansible_failed_task.name
                 == 'Validate external storage mount definitions'
 
+    - name: Verify unsafe external storage targets are rejected
+      block:
+        - name: Run storage role with a root filesystem target
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: unsafe
+                uuid: 00000000-0000-0000-0000-000000000000
+                target: /
+        - name: Fail if unsafe external storage target was accepted
+          ansible.builtin.fail:
+            msg: Unsafe external storage target was accepted.
+      rescue:
+        - name: Confirm unsafe external storage target was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
+
+    - name: Verify duplicate external storage UUIDs are rejected
+      block:
+        - name: Run storage role with duplicate external storage UUIDs
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: first
+                uuid: 00000000-0000-0000-0000-000000000000
+              - name: second
+                uuid: 00000000-0000-0000-0000-000000000000
+        - name: Fail if duplicate external storage UUIDs were accepted
+          ansible.builtin.fail:
+            msg: Duplicate external storage UUIDs were accepted.
+      rescue:
+        - name: Confirm duplicate external storage UUIDs were rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Reject duplicate external storage mount identifiers'
+
     - name: Apply router system role
       ansible.builtin.include_role:
         name: router_system
