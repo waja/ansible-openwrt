@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       versions: ${{ steps.versions.outputs.versions }}
+      python-version: ${{ steps.versions.outputs.python-version }}
+      python-versions: ${{ steps.versions.outputs.python-versions }}
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -32,7 +34,11 @@ jobs:
           versions="$(jq -ce \
             '.versions | select(type == "array" and length > 0)' \
             .github/openwrt-versions.json)"
+          python_version="$(tr -d '[:space:]' < .python-version)"
+          test -n "$python_version"
           echo "versions=$versions" >> "$GITHUB_OUTPUT"
+          echo "python-version=$python_version" >> "$GITHUB_OUTPUT"
+          echo 'python-versions=["3.14","3.15"]' >> "$GITHUB_OUTPUT"
 
   molecule-prerelease:
     needs: openwrt-versions
@@ -44,9 +50,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version:
-          - '3.14'
-          - '3.15'
+        python-version: >-
+          ${{ fromJSON(needs['openwrt-versions'].outputs.python-versions) }}
         openwrt_version: >-
           ${{ fromJSON(needs['openwrt-versions'].outputs.versions) }}
         scenario:
@@ -87,12 +92,27 @@ jobs:
           ansible-galaxy collection install -r requirements.yml \
             --collections-path ~/.ansible/collections
 
-      - name: Report exact tool versions
+      - name: Report exact tool versions and release channels
         if: steps.candidate.outputs.available == 'true'
         run: |
-          ansible --version
-          molecule --version
-          python -m pip list | grep -iE 'molecule|ansible|docker'
+          python - <<'PY'
+          from importlib.metadata import PackageNotFoundError, version
+          from packaging.version import Version
+
+          for package in ("ansible-core", "ansible-lint", "molecule"):
+              try:
+                  installed = version(package)
+              except PackageNotFoundError:
+                  print(f"{package}: not installed")
+                  continue
+              parsed = Version(installed)
+              channel = (
+                  "pre-release"
+                  if parsed.is_prerelease or parsed.is_devrelease
+                  else "stable"
+              )
+              print(f"{package}: {installed} ({channel})")
+          PY
 
       - name: Configure role search path
         if: steps.candidate.outputs.available == 'true'
@@ -204,6 +224,8 @@ jobs:
         env:
           MATRIX_RESULT: ${{ needs.molecule-prerelease.result }}
           OPENWRT_VERSIONS: ${{ needs.openwrt-versions.outputs.versions }}
+          PYTHON_VERSIONS: >-
+            ${{ needs['openwrt-versions'].outputs.python-versions }}
         run: |
           python - <<'PY'
           import json
@@ -219,7 +241,10 @@ jobs:
 
           scenarios = ("default", "network-static", "network-dhcp")
           rows = []
-          for python_version in ("3.14", "3.15"):
+          python_versions = json.loads(
+              os.environ.get("PYTHON_VERSIONS") or "[]"
+          )
+          for python_version in python_versions:
               for openwrt_version in versions:
                   for scenario in scenarios:
                       data = results.get(
@@ -326,12 +351,27 @@ jobs:
           ansible-galaxy collection install -r requirements.yml \
             --collections-path ~/.ansible/collections
 
-      - name: Report exact tool versions
+      - name: Report exact tool versions and release channels
         if: steps.candidate.outputs.available == 'true'
         run: |
-          ansible --version
-          ansible-lint --version
-          python -m pip list | grep -iE 'ansible|yamllint'
+          python - <<'PY'
+          from importlib.metadata import PackageNotFoundError, version
+          from packaging.version import Version
+
+          for package in ("ansible-core", "ansible-lint"):
+              try:
+                  installed = version(package)
+              except PackageNotFoundError:
+                  print(f"{package}: not installed")
+                  continue
+              parsed = Version(installed)
+              channel = (
+                  "pre-release"
+                  if parsed.is_prerelease or parsed.is_devrelease
+                  else "stable"
+              )
+              print(f"{package}: {installed} ({channel})")
+          PY
 
       - name: Lint Ansible
         if: steps.candidate.outputs.available == 'true'

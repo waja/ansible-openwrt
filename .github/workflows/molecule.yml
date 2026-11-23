@@ -300,8 +300,18 @@ jobs:
         run: |
           ansible-galaxy role install -r requirements.yml \
             --roles-path ~/.ansible/roles
-          ansible-galaxy collection install -r requirements.yml \
-            --collections-path ~/.ansible/collections
+
+          # Galaxy can return transient cache or network errors. Retry without
+          # its response cache before failing the Molecule job.
+          attempt=1
+          until ansible-galaxy collection install -r requirements.yml \
+            --collections-path ~/.ansible/collections --no-cache; do
+            if [[ "$attempt" -ge 3 ]]; then
+              exit 1
+            fi
+            sleep "$((attempt * 10))"
+            attempt=$((attempt + 1))
+          done
 
       - name: Versions
         run: |
@@ -400,7 +410,7 @@ jobs:
 
       - name: Destroy ${{ matrix.scenario }} scenario
         id: molecule-destroy
-        if: always()
+        if: always() && steps.setup-duration.outcome == 'success'
         shell: bash
         run: |
           set +e
