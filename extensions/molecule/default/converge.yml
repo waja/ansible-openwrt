@@ -91,8 +91,6 @@
               - name: fat_volume
                 uuid: 1234-ABCD
                 filesystem: vfat
-                packages:
-                  - kmod-fs-vfat
         - name: Fail if FAT volume identifier reached mount processing
           ansible.builtin.fail:
             msg: FAT volume identifier was not rejected by the probe.
