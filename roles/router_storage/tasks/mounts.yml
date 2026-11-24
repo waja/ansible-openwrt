@@ -115,10 +115,10 @@
 - name: Check for conflicting existing fstab entries
   ansible.builtin.raw: |
     set -eu
-    name='router_storage_{{ item.name }}'
-    uuid='{{ item.uuid }}'
-    target={{ item.target | default('/opt') }}
-    probe_output='{{ router_storage_mount_probe.results[i].stdout }}'
+    name='router_storage_{{ storage_mount_name }}'
+    uuid='{{ storage_mount_uuid }}'
+    target='{{ storage_mount_target }}'
+    probe_output='{{ storage_mount_probe_output }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     block_info="$(block info)"
     block_line="$(printf '%s\n' "$block_info" |
@@ -168,6 +168,12 @@
       fi
     done
   changed_when: false
+  vars:
+    storage_mount_name: "{{ item.name }}"
+    storage_mount_uuid: "{{ item.uuid }}"
+    storage_mount_target: "{{ item.target | default('/opt') }}"
+    storage_mount_probe_output: >-
+      {{ router_storage_mount_probe.results[i].stdout }}
   loop: "{{ router_storage_mounts }}"
   loop_control:
     extended: true
@@ -177,10 +183,10 @@
 - name: Check external storage mount targets before changing fstab
   ansible.builtin.raw: |
     set -eu
-    target={{ item.target | default('/opt') }}
-    probe_output='{{ router_storage_mount_probe.results[i].stdout }}'
+    target='{{ storage_mount_target }}'
+    probe_output='{{ storage_mount_probe_output }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
-    expected_fstype="{{ item.filesystem | default('ext4') }}"
+    expected_fstype="{{ storage_mount_fstype }}"
     if [ -L "$target" ]; then
       echo "Mount target $target is a symbolic link" >&2
       exit 1
@@ -215,6 +221,11 @@
       fi
     fi
   changed_when: false
+  vars:
+    storage_mount_target: "{{ item.target | default('/opt') }}"
+    storage_mount_fstype: "{{ item.filesystem | default('ext4') }}"
+    storage_mount_probe_output: >-
+      {{ router_storage_mount_probe.results[i].stdout }}
   loop: "{{ router_storage_mounts }}"
   loop_control:
     extended: true
@@ -224,10 +235,10 @@
 - name: Mount and verify external storage individually
   ansible.builtin.raw: |
     set -eu
-    uuid='{{ item.uuid }}'
-    target={{ item.target | default('/opt') }}
-    expected_fstype="{{ item.filesystem | default('ext4') }}"
-    probe_output='{{ router_storage_mount_probe.results[i].stdout }}'
+    uuid='{{ storage_mount_uuid }}'
+    target='{{ storage_mount_target }}'
+    expected_fstype="{{ storage_mount_fstype }}"
+    probe_output='{{ storage_mount_probe_output }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     block_info="$(block info)"
     resolved="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
@@ -331,6 +342,12 @@
     echo "changed=$changed"
   register: router_storage_mount_apply
   changed_when: "'changed=1' in router_storage_mount_apply.stdout"
+  vars:
+    storage_mount_uuid: "{{ item.uuid }}"
+    storage_mount_target: "{{ item.target | default('/opt') }}"
+    storage_mount_fstype: "{{ item.filesystem | default('ext4') }}"
+    storage_mount_probe_output: >-
+      {{ router_storage_mount_probe.results[i].stdout }}
   loop: "{{ router_storage_mounts }}"
   loop_control:
     extended: true
