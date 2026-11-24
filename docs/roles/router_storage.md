@@ -120,6 +120,22 @@ is performed.
 
 For the MikroTik hEX S, the example kernel modules are hardware-specific
 and must be verified against the exact device and OpenWrt image. Filesystem
-creation and partitioning are intentionally manual prerequisites. Validate
-the configuration on the target device before relying on it for services
-that need persistent storage.
+creation and partitioning are intentionally manual prerequisites.
+
+On the target router, validate the setup before relying on persistent
+services:
+
+1. Confirm that `block info` reports the configured UUID and expected
+   filesystem type for exactly one device.
+2. Apply the role and confirm that the requested target is mounted from
+   that device.
+3. Apply the role a second time and confirm that it makes no mount changes
+   and does not create duplicate fstab sections.
+4. Compare `/etc/config/fstab` before and after to confirm unrelated
+   sections remain unchanged.
+5. Reboot the router and confirm that the filesystem is mounted at the
+   configured target again.
+
+Physical validation on a MikroTik hEX S remains outstanding; these
+checks are the required acceptance procedure, not a claim that the
+hardware test has already passed.
