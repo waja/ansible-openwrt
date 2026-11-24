@@ -87,16 +87,17 @@ root expansion. Mounts are disabled by default:
     router_storage_mounts: []
 
 Configure each filesystem by its stable UUID. The target defaults to
-`/opt`, the filesystem defaults to `ext4`, and mount options default to
-`defaults`. Hardware-specific kernel modules belong in the per-mount
-`packages` list; they are not installed automatically for every router.
+`/opt` and the filesystem to `ext4`. Mount options are optional; when
+omitted, no additional filesystem options are passed. Use a canonical UUID
+for ext4 or the `1234-ABCD` volume identifier for VFAT. Hardware-specific
+kernel modules belong in the per-mount `packages` list; they are not
+installed automatically for every router.
 
     router_storage_mounts:
       - name: opt
         uuid: "00000000-0000-0000-0000-000000000000"
         target: /opt
         filesystem: ext4
-        options: defaults
         packages:
           - kmod-fs-ext4
           - kmod-mmc
