@@ -1,0 +1,53 @@
+set -eu
+name='router_storage_{{ storage_mount_name }}'
+uuid='{{ storage_mount_uuid }}'
+target='{{ storage_mount_target }}'
+probe_output='{{ storage_mount_probe_output }}'
+device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
+block_info="$(block info)"
+block_line="$(printf '%s\n' "$block_info" |
+  grep -F "$uuid" || true)"
+current_label="$(printf '%s\n' "$block_line" |
+  sed -n 's/.*LABEL="\([^"]*\)".*/\1/p')"
+if uci -q get "fstab.$name" >/dev/null 2>&1; then
+  section_type="$(uci -q get "fstab.$name")"
+  if [ "$section_type" != mount ]; then
+    echo "fstab section $name exists but is not a mount section" >&2
+    exit 1
+  fi
+  current_uuid="$(uci -q get "fstab.$name.uuid" 2>/dev/null || true)"
+  current_target="$(uci -q get "fstab.$name.target" 2>/dev/null || true)"
+  if [ -n "$current_uuid" ] && [ "$current_uuid" != "$uuid" ]; then
+    echo "Managed fstab section $name refers to a different UUID" >&2
+    exit 1
+  fi
+  if [ -n "$current_target" ] && [ "$current_target" != "$target" ]; then
+    echo "Managed fstab section $name refers to a different target" >&2
+    exit 1
+  fi
+fi
+sections="$(uci -q show fstab 2>/dev/null | \
+  sed -n 's/^fstab\.\([^.=]*\)\..*=.*/\1/p' | sort -u)"
+for section in $sections; do
+  [ "$section" = "$name" ] && continue
+  section_enabled="$(uci -q get "fstab.$section.enabled" 2>/dev/null ||
+    true)"
+  [ "$section_enabled" = 0 ] && continue
+  section_uuid="$(uci -q get "fstab.$section.uuid" 2>/dev/null || true)"
+  section_label="$(uci -q get "fstab.$section.label" 2>/dev/null || true)"
+  section_target="$(uci -q get "fstab.$section.target" 2>/dev/null || true)"
+  section_device="$(uci -q get "fstab.$section.device" 2>/dev/null || true)"
+  label_conflict=false
+  if [ -n "$current_label" ] &&
+    [ "$section_label" = "$current_label" ]; then
+    label_conflict=true
+  fi
+  if [ "$section_uuid" = "$uuid" ] ||
+    [ "$label_conflict" = true ] ||
+    [ "$section_target" = "$target" ] ||
+    [ "$section_device" = "$device" ] ||
+    [ "$section_device" = "UUID=$uuid" ]; then
+    echo "External mount conflicts with existing fstab section $section" >&2
+    exit 1
+  fi
+done
