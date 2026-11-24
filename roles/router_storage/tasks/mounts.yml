@@ -280,7 +280,7 @@
       echo "Mount verification failed for $target (UUID $uuid)" >&2
       exit 1
     }
-    mounted_uuid="$(printf '%s\n' "$block_info" | awk -v device="$device" '
+    mounted_uuid="$(printf '%s\n' "$(block info)" | awk -v device="$device" '
       $1 == device {
         for (i = 2; i <= NF; i++) {
           if ($i ~ /^UUID=/) {
@@ -303,8 +303,8 @@
       old_ifs="$IFS"
       IFS=,
       for option in $requested_options; do
-        case ",${effective_options}," in
-          *",${option},"*) ;;
+        case ",$effective_options," in
+          *",$option,"*) ;;
           *)
             echo "Mount options for $target differ from requested options;" \
               "remount $target manually before rerunning" >&2
