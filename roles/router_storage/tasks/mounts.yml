@@ -128,20 +128,20 @@
       sed -n 's/.*LABEL="\([^"]*\)".*/\1/p')"
     if uci -q get "fstab.$name" >/dev/null 2>&1; then
       section_type="$(uci -q get "fstab.$name")"
-      [ "$section_type" = mount ] || {
+      if [ "$section_type" != mount ]; then
         echo "fstab section $name exists but is not a mount section" >&2
         exit 1
-      }
+      fi
       current_uuid="$(uci -q get "fstab.$name.uuid" 2>/dev/null || true)"
       current_target="$(uci -q get "fstab.$name.target" 2>/dev/null || true)"
-      [ -z "$current_uuid" ] || [ "$current_uuid" = "$uuid" ] || {
+      if [ -n "$current_uuid" ] && [ "$current_uuid" != "$uuid" ]; then
         echo "Managed fstab section $name refers to a different UUID" >&2
         exit 1
-      }
-      [ -z "$current_target" ] || [ "$current_target" = "$target" ] || {
+      fi
+      if [ -n "$current_target" ] && [ "$current_target" != "$target" ]; then
         echo "Managed fstab section $name refers to a different target" >&2
         exit 1
-      }
+      fi
     fi
     sections="$(uci -q show fstab 2>/dev/null | \
       sed -n 's/^fstab\.\([^.=]*\)\..*=.*/\1/p' | sort -u)"
@@ -154,9 +154,13 @@
       section_label="$(uci -q get "fstab.$section.label" 2>/dev/null || true)"
       section_target="$(uci -q get "fstab.$section.target" 2>/dev/null || true)"
       section_device="$(uci -q get "fstab.$section.device" 2>/dev/null || true)"
+      label_conflict=false
+      if [ -n "$current_label" ] &&
+        [ "$section_label" = "$current_label" ]; then
+        label_conflict=true
+      fi
       if [ "$section_uuid" = "$uuid" ] ||
-        { [ -n "$current_label" ] &&
-          [ "$section_label" = "$current_label" ]; } ||
+        [ "$label_conflict" = true ] ||
         [ "$section_target" = "$target" ] ||
         [ "$section_device" = "$device" ] ||
         [ "$section_device" = "UUID=$uuid" ]; then
