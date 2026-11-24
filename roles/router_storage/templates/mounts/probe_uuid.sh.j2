@@ -1,5 +1,5 @@
 set -eu
-uuid="$(printf '%s' '{{ item.uuid }}' | tr '[:upper:]' '[:lower:]')"
+uuid="$(printf '%s' '{{ item.uuid }}' | tr 'A-Z' 'a-z')"
 expected_fstype='{{ item.filesystem | default("ext4") }}'
 block_info="$(block info)"
 probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
