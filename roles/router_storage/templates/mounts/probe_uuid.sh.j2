@@ -1,0 +1,44 @@
+set -eu
+uuid='{{ item.uuid }}'
+expected_fstype='{{ item.filesystem | default("ext4") }}'
+block_info="$(block info)"
+probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
+  {
+    device = $1
+    sub(/:$/, "", device)
+    found_uuid = ""
+    found_type = ""
+    for (i = 2; i <= NF; i++) {
+      if ($i ~ /^UUID=/) {
+        found_uuid = $i
+        sub(/^UUID="/, "", found_uuid)
+        sub(/"$/, "", found_uuid)
+      }
+      if ($i ~ /^TYPE=/) {
+        found_type = $i
+        sub(/^TYPE="/, "", found_type)
+        sub(/"$/, "", found_type)
+      }
+    }
+    if (found_uuid == uuid) {
+      print device "|" found_type
+    }
+  }
+')"
+count="$(printf '%s\n' "$probe" | awk '
+  NF { count++ }
+  END { print count+0 }
+')"
+[ "$count" -eq 1 ] || {
+  echo "Expected exactly one block device with UUID $uuid;" \
+    "found $count" >&2
+  exit 1
+}
+device="${probe%%|*}"
+actual_fstype="${probe#*|}"
+[ "$actual_fstype" = "$expected_fstype" ] || {
+  echo "UUID $uuid has filesystem $actual_fstype;" \
+    "expected $expected_fstype" >&2
+  exit 1
+}
+printf 'device=%s\n' "$device"
