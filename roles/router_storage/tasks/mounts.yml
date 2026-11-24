@@ -117,9 +117,8 @@
     set -eu
     name='router_storage_{{ item.name }}'
     uuid='{{ item.uuid }}'
-    target="{{ item.target | default('/opt') }}"
-    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0]
-      .stdout }}'
+    target={{ item.target | default('/opt') }}
+    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     block_info="$(block info)"
     block_line="$(printf '%s\n' "$block_info" |
@@ -177,9 +176,8 @@
 - name: Check external storage mount targets before changing fstab
   ansible.builtin.raw: |
     set -eu
-    target="{{ item.target | default('/opt') }}"
-    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0]
-      .stdout }}'
+    target={{ item.target | default('/opt') }}
+    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     expected_fstype="{{ item.filesystem | default('ext4') }}"
     if [ -L "$target" ]; then
@@ -225,10 +223,9 @@
   ansible.builtin.raw: |
     set -eu
     uuid='{{ item.uuid }}'
-    target="{{ item.target | default('/opt') }}"
+    target={{ item.target | default('/opt') }}
     expected_fstype="{{ item.filesystem | default('ext4') }}"
-    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0]
-      .stdout }}'
+    probe_output='{{ router_storage_mount_probe.results[ansible_loop.index0].stdout }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     block_info="$(block info)"
     resolved="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
