@@ -123,7 +123,7 @@
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     block_info="$(block info)"
     block_line="$(printf '%s\n' "$block_info" |
-      grep -F "UUID=\"$uuid\"" || true)"
+      grep -F "$uuid" || true)"
     current_label="$(printf '%s\n' "$block_line" |
       sed -n 's/.*LABEL="\([^"]*\)".*/\1/p')"
     if uci -q get "fstab.$name" >/dev/null 2>&1; then
