@@ -1,5 +1,5 @@
 set -eu
-uuid='{{ item.uuid }}'
+uuid="$(printf '%s' '{{ item.uuid }}' | tr '[:upper:]' '[:lower:]')"
 expected_fstype='{{ item.filesystem | default("ext4") }}'
 block_info="$(block info)"
 probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
@@ -13,6 +13,7 @@ probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
         found_uuid = $i
         sub(/^UUID="/, "", found_uuid)
         sub(/"$/, "", found_uuid)
+        found_uuid = tolower(found_uuid)
       }
       if ($i ~ /^TYPE=/) {
         found_type = $i
