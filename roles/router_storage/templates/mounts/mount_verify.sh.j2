@@ -1,5 +1,5 @@
 set -eu
-uuid='{{ storage_mount_uuid }}'
+uuid="$(printf '%s' '{{ storage_mount_uuid }}' | tr '[:upper:]' '[:lower:]')"
 target='{{ storage_mount_target }}'
 expected_fstype="{{ storage_mount_fstype }}"
 probe_output='{{ storage_mount_probe_output }}'
@@ -22,10 +22,15 @@ resolved="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
 }
 changed=0
 
-if [ -L "$target" ]; then
-  echo "Mount target $target is a symbolic link" >&2
-  exit 1
-fi
+target_parent="$target"
+while [ "$target_parent" != "/" ]; do
+  if [ -L "$target_parent" ]; then
+    echo "Mount target path contains symbolic link $target_parent" >&2
+    exit 1
+  fi
+  target_parent="${target_parent%/*}"
+  [ -n "$target_parent" ] || target_parent="/"
+done
 mkdir -p "$target"
 
 existing_target="$(awk -v target="$target" \
@@ -46,7 +51,11 @@ else
     echo "Device $device is already mounted at $existing_device_mount" >&2
     exit 1
   }
-  if [ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+  target_contents="$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" || {
+    echo "Unable to inspect mount target $target" >&2
+    exit 1
+  }
+  if [ -n "$target_contents" ]; then
     echo "Mount target $target is not empty; refusing to" \
       "hide existing data" >&2
     exit 1
@@ -68,13 +77,16 @@ expected="$(printf '%s|%s' "$device" "$expected_fstype")"
   exit 1
 }
 mounted_uuid="$(printf '%s\n' "$(block info)" | awk -v device="$device" '
-  $1 == device {
+  {
+    found_device = $1
+    sub(/:$/, "", found_device)
+    if (found_device != device) next
     for (i = 2; i <= NF; i++) {
       if ($i ~ /^UUID=/) {
         value = $i
         sub(/^UUID="/, "", value)
         sub(/"$/, "", value)
-        print value
+        print tolower(value)
       }
     }
   }
@@ -87,18 +99,42 @@ requested_options="{{ item.options | default('') }}"
 if [ -n "$existing_target" ] && [ -n "$requested_options" ]; then
   effective_options="$(awk -v target="$target" \
     '$2 == target {print $4}' /proc/mounts)"
+  has_option() {
+    case ",$effective_options," in
+      *",$1,"*) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
   old_ifs="$IFS"
   IFS=,
   for option in $requested_options; do
-    [ "$option" = defaults ] && continue
-    case ",$effective_options," in
-      *",$option,"*) ;;
-      *)
-        echo "Mount options for $target differ from requested options;" \
-          "remount $target manually before rerunning" >&2
-        exit 1
-        ;;
+    case "$option" in
+      defaults|auto|nouser) continue ;;
+      rw) inverse=ro ;;
+      ro) inverse=rw ;;
+      async) inverse=sync ;;
+      sync) inverse=async ;;
+      atime) inverse=noatime ;;
+      noatime) inverse=atime ;;
+      diratime) inverse=nodiratime ;;
+      nodiratime) inverse=diratime ;;
+      dev) inverse=nodev ;;
+      nodev) inverse=dev ;;
+      exec) inverse=noexec ;;
+      noexec) inverse=exec ;;
+      suid) inverse=nosuid ;;
+      nosuid) inverse=suid ;;
+      *) inverse="" ;;
     esac
+    if [ -n "$inverse" ]; then
+      if has_option "$inverse"; then
+        echo "Mount option $option is not active for $target" >&2
+        exit 1
+      fi
+    elif ! has_option "$option"; then
+      echo "Mount option $option is not active for $target" >&2
+      exit 1
+    fi
   done
   IFS="$old_ifs"
 fi
