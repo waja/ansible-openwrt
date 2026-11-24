@@ -69,7 +69,9 @@
     label: "{{ item.name }}"
 
 - name: Check for conflicting existing fstab entries
-  ansible.builtin.raw: "{{ lookup('template', 'mounts/check_conflicts.sh.j2') }}"
+      - >-
+        (router_storage_mounts | map(attribute='target', default='/opt')
+         | list | unique | length) == (router_storage_mounts | length)
   changed_when: false
   vars:
     storage_mount_name: "{{ item.name }}"
