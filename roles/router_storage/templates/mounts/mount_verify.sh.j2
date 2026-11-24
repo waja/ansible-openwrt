@@ -10,7 +10,7 @@ resolved="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
     device = $1
     sub(/:$/, "", device)
     for (i = 2; i <= NF; i++) {
-      if ($i == "UUID=\"" uuid "\"") {
+      if (tolower($i) == "uuid=\"" uuid "\"") {
         print device
       }
     }
@@ -110,28 +110,26 @@ if [ -n "$existing_target" ] && [ -n "$requested_options" ]; then
   for option in $requested_options; do
     case "$option" in
       defaults|auto|nouser) continue ;;
+      ro|sync|noatime|nodiratime|nodev|noexec|nosuid)
+        if ! has_option "$option"; then
+          echo "Mount option $option is not active for $target" >&2
+          exit 1
+        fi
+        continue
+        ;;
       rw) inverse=ro ;;
-      ro) inverse=rw ;;
       async) inverse=sync ;;
-      sync) inverse=async ;;
       atime) inverse=noatime ;;
-      noatime) inverse=atime ;;
       diratime) inverse=nodiratime ;;
-      nodiratime) inverse=diratime ;;
       dev) inverse=nodev ;;
-      nodev) inverse=dev ;;
       exec) inverse=noexec ;;
-      noexec) inverse=exec ;;
       suid) inverse=nosuid ;;
-      nosuid) inverse=suid ;;
       *) inverse="" ;;
     esac
-    if [ -n "$inverse" ]; then
-      if has_option "$inverse"; then
-        echo "Mount option $option is not active for $target" >&2
-        exit 1
-      fi
-    elif ! has_option "$option"; then
+    if [ -n "$inverse" ] && has_option "$inverse"; then
+      echo "Mount option $option is not active for $target" >&2
+      exit 1
+    elif [ -z "$inverse" ] && ! has_option "$option"; then
       echo "Mount option $option is not active for $target" >&2
       exit 1
     fi
