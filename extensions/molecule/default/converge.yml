@@ -92,6 +92,7 @@
                 uuid: 00000000-0000-0000-0000-000000000000
               - name: second
                 uuid: 00000000-0000-0000-0000-000000000000
+                target: /mnt/second
         - name: Fail if duplicate external storage UUIDs were accepted
           ansible.builtin.fail:
             msg: Duplicate external storage UUIDs were accepted.
