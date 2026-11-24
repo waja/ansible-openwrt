@@ -7,7 +7,11 @@
       - item.name is match('^[A-Za-z0-9_]+$')
       - item.uuid is defined
       - >-
-        (item.uuid is match('^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$')) or
+        (item.uuid is match(
+          '^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-'
+          ~ '[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-'
+          ~ '[A-Fa-f0-9]{12}$'
+        )) or
         ((item.filesystem | default('ext4')) == 'vfat' and
         item.uuid is match('^[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}$'))
       - (item.options | default('')) != 'defaults'
