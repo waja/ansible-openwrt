@@ -1,5 +1,5 @@
 set -eu
-lower() { printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]'; }
+lower() { printf '%s\n' "$1" | tr 'A-Z' 'a-z'; }
 name='router_storage_{{ storage_mount_name }}'
 uuid="$(lower '{{ storage_mount_uuid }}')"
 target='{{ storage_mount_target }}'
