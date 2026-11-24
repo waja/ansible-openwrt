@@ -3,10 +3,15 @@ target='{{ storage_mount_target }}'
 probe_output='{{ storage_mount_probe_output }}'
 device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
 expected_fstype="{{ storage_mount_fstype }}"
-if [ -L "$target" ]; then
-  echo "Mount target $target is a symbolic link" >&2
-  exit 1
-fi
+target_parent="$target"
+while [ "$target_parent" != "/" ]; do
+  if [ -L "$target_parent" ]; then
+    echo "Mount target path contains symbolic link $target_parent" >&2
+    exit 1
+  fi
+  target_parent="${target_parent%/*}"
+  [ -n "$target_parent" ] || target_parent="/"
+done
 if [ -e "$target" ] && [ ! -d "$target" ]; then
   echo "Mount target $target exists and is not a directory" >&2
   exit 1
@@ -29,8 +34,15 @@ else
     echo "Device $device is already mounted at $existing_device_mount" >&2
     exit 1
   }
-  if [ -e "$target" ] && \
-    [ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+  if [ -e "$target" ]; then
+    target_contents="$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" || {
+      echo "Unable to inspect mount target $target" >&2
+      exit 1
+    }
+  else
+    target_contents=""
+  fi
+  if [ -n "$target_contents" ]; then
     echo "Mount target $target is not empty; refusing to" \
       "hide existing data" >&2
     exit 1
