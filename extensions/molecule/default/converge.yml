@@ -81,6 +81,29 @@
                 ansible_failed_task.name
                 == 'Validate external storage mount definitions'
 
+    - name: Verify FAT volume identifiers pass validation
+      block:
+        - name: Run storage role with a FAT volume identifier
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: fat_volume
+                uuid: 1234-ABCD
+                filesystem: vfat
+                packages:
+                  - kmod-fs-vfat
+        - name: Fail if FAT volume identifier reached mount processing
+          ansible.builtin.fail:
+            msg: FAT volume identifier was not rejected by the probe.
+      rescue:
+        - name: Confirm FAT volume identifier passed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Check external storage UUID and filesystem'
+
     - name: Verify duplicate external storage UUIDs are rejected
       block:
         - name: Run storage role with duplicate external storage UUIDs
