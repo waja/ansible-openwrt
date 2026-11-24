@@ -1,5 +1,5 @@
 set -eu
-uuid="$(printf '%s' '{{ storage_mount_uuid }}' | tr '[:upper:]' '[:lower:]')"
+uuid="$(printf '%s' '{{ storage_mount_uuid }}' | tr 'A-Z' 'a-z')"
 target='{{ storage_mount_target }}'
 expected_fstype="{{ storage_mount_fstype }}"
 probe_output='{{ storage_mount_probe_output }}'
@@ -51,7 +51,7 @@ else
     echo "Device $device is already mounted at $existing_device_mount" >&2
     exit 1
   }
-  target_contents="$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)" || {
+  target_contents="$(find "$target" -mindepth 1 -maxdepth 1 -print)" || {
     echo "Unable to inspect mount target $target" >&2
     exit 1
   }
