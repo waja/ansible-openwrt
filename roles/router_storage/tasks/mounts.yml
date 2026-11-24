@@ -117,7 +117,8 @@
       .stdout }}'
     device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
     block_info="$(block info)"
-    block_line="$(printf '%s\n' "$block_info" | grep -F "UUID=\"$uuid\"" || true)"
+    block_line="$(printf '%s\n' "$block_info" |
+      grep -F "UUID=\"$uuid\"" || true)"
     current_label="$(printf '%s\n' "$block_line" |
       sed -n 's/.*LABEL="\([^"]*\)".*/\1/p')"
     if uci -q get "fstab.$name" >/dev/null 2>&1; then
@@ -141,7 +142,8 @@
       sed -n 's/^fstab\.\([^.=]*\)\..*=.*/\1/p' | sort -u)"
     for section in $sections; do
       [ "$section" = "$name" ] && continue
-      section_enabled="$(uci -q get "fstab.$section.enabled" 2>/dev/null || true)"
+      section_enabled="$(uci -q get "fstab.$section.enabled" 2>/dev/null ||
+        true)"
       [ "$section_enabled" = 0 ] && continue
       section_uuid="$(uci -q get "fstab.$section.uuid" 2>/dev/null || true)"
       section_label="$(uci -q get "fstab.$section.label" 2>/dev/null || true)"
