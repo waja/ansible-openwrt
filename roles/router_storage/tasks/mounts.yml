@@ -77,7 +77,7 @@
     storage_mount_uuid: "{{ item.uuid }}"
     storage_mount_target: "{{ item.target | default('/opt') }}"
     storage_mount_probe_output: >-
-      {{ router_storage_mount_probe.results[i].stdout }}
+      {{ router_storage_mount_probe.results[i].stdout | replace('\\r', '') }}
   loop: "{{ router_storage_mounts }}"
   loop_control:
     extended: true
@@ -91,7 +91,7 @@
     storage_mount_target: "{{ item.target | default('/opt') }}"
     storage_mount_fstype: "{{ item.filesystem | default('ext4') }}"
     storage_mount_probe_output: >-
-      {{ router_storage_mount_probe.results[i].stdout }}
+      {{ router_storage_mount_probe.results[i].stdout | replace('\\r', '') }}
   loop: "{{ router_storage_mounts }}"
   loop_control:
     extended: true
@@ -107,7 +107,7 @@
     storage_mount_target: "{{ item.target | default('/opt') }}"
     storage_mount_fstype: "{{ item.filesystem | default('ext4') }}"
     storage_mount_probe_output: >-
-      {{ router_storage_mount_probe.results[i].stdout }}
+      {{ router_storage_mount_probe.results[i].stdout | replace('\\r', '') }}
   loop: "{{ router_storage_mounts }}"
   loop_control:
     extended: true
