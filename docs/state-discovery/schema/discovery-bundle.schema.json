@@ -11,7 +11,7 @@
     "format_version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+$",
-      "description": "Major.minor bundle format version. Major changes may be incompatible; minor changes are additive."
+      "description": "Major.minor bundle format version. Version 1.1 defines metadata-only secret observations; format 1.0 retains its original extensible observation fields."
     },
     "created_at": { "type": "string", "format": "date-time" },
     "target": {
@@ -200,6 +200,204 @@
             "items": {
               "if": { "properties": { "sensitivity": { "const": "secret" } }, "required": ["sensitivity"] },
               "then": { "properties": { "sha256": { "type": "null" } } }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "findings": {
+            "contains": {
+              "properties": {
+                "observation": {
+                  "required": ["secret"]
+                }
+              },
+              "required": ["observation"]
+            }
+          }
+        },
+        "required": ["findings"]
+      },
+      "then": {
+        "properties": {
+          "format_version": {
+            "const": "1.1"
+          }
+        },
+        "required": ["format_version"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "format_version": {
+            "const": "1.1"
+          }
+        },
+        "required": [
+          "format_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "sensitivity": {
+                        "enum": [
+                          "sensitive",
+                          "secret",
+                          "unknown"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "sensitivity"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "sha256": {
+                        "type": "null"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "sensitivity": {
+                        "const": "secret"
+                      }
+                    },
+                    "required": [
+                      "sensitivity"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "availability": {
+                        "enum": [
+                          "redacted",
+                          "omitted",
+                          "unavailable"
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "findings": {
+            "items": {
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "observation": {
+                        "required": ["secret"]
+                      }
+                    },
+                    "required": ["observation"]
+                  },
+                  "then": {
+                    "properties": {
+                      "observation": {
+                        "properties": {
+                          "secret": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["kind", "status", "value_handling"],
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "wifi-psk",
+                                  "wireguard-private-key",
+                                  "wireguard-preshared-key",
+                                  "password",
+                                  "token",
+                                  "private-key",
+                                  "certificate-private-key",
+                                  "shared-secret",
+                                  "other"
+                                ]
+                              },
+                              "status": {
+                                "enum": ["present", "absent", "unknown", "not-checked"]
+                              },
+                              "value_handling": {
+                                "const": "excluded-from-bundle",
+                                "description": "The secret value is excluded from the normal bundle and report."
+                              }
+                            },
+                            "description": "Metadata for a secret-bearing setting. Never include the secret value or a value-derived fingerprint."
+                          },
+                          "config": {"type": ["string", "null"]},
+                          "section_type": {"type": ["string", "null"]},
+                          "section_name": {"type": ["string", "null"]},
+                          "option": {"type": ["string", "null"]},
+                          "interface": {"type": ["string", "null"]},
+                          "peer": {"type": ["string", "null"]},
+                          "path": {"type": ["string", "null"]},
+                          "object_type": {"type": ["string", "null"]},
+                          "name": {"type": ["string", "null"]},
+                          "protocol": {"type": ["string", "null"]},
+                          "device": {"type": ["string", "null"]}
+                        },
+                        "additionalProperties": false
+                      },
+                      "comparison": {"type": "null"}
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "category": {
+                        "const": "uci"
+                      },
+                      "subject": {
+                        "properties": {
+                          "kind": {
+                            "const": "uci-option"
+                          },
+                          "identifier": {
+                            "pattern": "(^|[./])(wep_key|psk|password|passwd|pass|pwd|secret|token|private_?key|private-key|privkey|preshared[-_]key|shared_secret|client[-_]secret|client[-_]key|access[-_]token|authorization|credentials?|passphrase|sae[-_]password|encryption[-_]key|signing[-_]key|shared[-_]key|api[-_]key|auth[-_]key)([0-9]+)?$",
+                            "description": "Normalized UCI option identifiers use lowercase option names; the final dot- or slash-separated component is matched, with an optional numeric suffix."
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "identifier"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "category",
+                      "subject"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "observation": {
+                        "required": [
+                          "secret"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "observation"
+                    ]
+                  }
+                }
+              ]
             }
           }
         }
