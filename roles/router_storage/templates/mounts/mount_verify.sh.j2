@@ -99,42 +99,9 @@ requested_options="{{ item.options | default('') }}"
 if [ -n "$existing_target" ] && [ -n "$requested_options" ]; then
   effective_options="$(awk -v target="$target" \
     '$2 == target {print $4}' /proc/mounts)"
-  has_option() {
-    case ",$effective_options," in
-      *",$1,"*) return 0 ;;
-      *) return 1 ;;
-    esac
-  }
-  old_ifs="$IFS"
-  IFS=,
-  for option in $requested_options; do
-    case "$option" in
-      defaults|auto|nouser) continue ;;
-      ro|sync|noatime|nodiratime|nodev|noexec|nosuid)
-        if ! has_option "$option"; then
-          echo "Mount option $option is not active for $target" >&2
-          exit 1
-        fi
-        continue
-        ;;
-      rw) inverse=ro ;;
-      async) inverse=sync ;;
-      atime) inverse=noatime ;;
-      diratime) inverse=nodiratime ;;
-      dev) inverse=nodev ;;
-      exec) inverse=noexec ;;
-      suid) inverse=nosuid ;;
-      *) inverse="" ;;
-    esac
-    if [ -n "$inverse" ] && has_option "$inverse"; then
-      echo "Mount option $option is not active for $target" >&2
-      exit 1
-    elif [ -z "$inverse" ] && ! has_option "$option"; then
-      echo "Mount option $option is not active for $target" >&2
-      exit 1
-    fi
-  done
-  IFS="$old_ifs"
+  {% include 'mounts/verify_options.sh.j2' %}
+  verify_mount_options "$expected_fstype" "$requested_options" \
+    "$effective_options" "$target"
 fi
 echo "device=$device"
 echo "changed=$changed"
