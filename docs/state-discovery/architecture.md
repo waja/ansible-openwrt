@@ -31,7 +31,13 @@ facts collected from the router.
 The machine-readable format is the input contract for future assessment
 tools. Its JSON Schema is
 [`schema/discovery-bundle.schema.json`](schema/discovery-bundle.schema.json).
-The initial format version is `1.0`.
+The initial format version is `1.0`. Version `1.1` adds metadata-only
+secret observations within `finding.observation`. A bundle using the
+metadata-only `observation.secret` contract must declare
+`format_version: "1.1"`; the schema enforces this whenever the `secret`
+property is present. Format `1.0` retains its extensible observation shape,
+but the reserved `secret` property is available only in `1.1`. Existing
+`evidence.sensitivity` and `evidence.availability` semantics are unchanged.
 
 The bundle layout is:
 
@@ -56,10 +62,15 @@ discovery/
   If information is needed by a consumer, it must be represented in the
   manifest or referenced evidence.
 
-Consumers must validate the manifest against the schema before use.
-The schema validates structure and types; the bundle writer and
-consumer must additionally verify that evidence paths exist, referenced
-IDs resolve, and declared hashes match the actual evidence bytes.
+Consumers must validate the manifest against the schema before use and
+reject a bundle whose declared format version they do not support.
+The schema validates structure and types; it cannot detect secrets
+embedded in arbitrary strings or inspect evidence bytes. Before sharing,
+the bundle writer and consumer must additionally run content-level
+secret detection/redaction and review, verify that included evidence
+artifacts are available at their declared locations, referenced IDs
+resolve, and declared hashes match the actual included evidence bytes.
+A successful schema validation alone is not a safety approval.
 
 ### Versioning
 
@@ -74,9 +85,10 @@ The `format` field identifies the format and `format_version` uses
 
 The schema is strict about the outer structure and defined records.
 Category-specific observed values live in `finding.observation`, whose
-properties are intentionally extensible. This flexibility must not become
-an excuse for ad-hoc, inconsistent keys. Producers must follow the
-category conventions below and document any additional fields they emit:
+properties are intentionally extensible for ordinary findings. Secret
+findings use a restricted metadata-only observation shape. Producers must
+follow the category conventions below and document any additional fields
+they emit:
 
 | Category | Expected observation fields (where applicable) |
 | --- | --- |
@@ -90,6 +102,64 @@ category conventions below and document any additional fields they emit:
 | `network` | `interface`, `device`, `protocol`, `addresses` |
 | `firewall` | `config`, `section_type`, `section_name`, `options` |
 | `runtime` | `object_type`, `name`, `state` |
+| Secret-bearing setting | `secret` metadata object |
+
+For a secret-bearing setting, `observation.secret` is a structured
+metadata object. `kind` identifies the credential class, `status`
+records whether the setting is known to be present or absent, and
+`value_handling` is always `excluded-from-bundle` for normal bundle output.
+The setting identity remains in the finding's `subject` and its
+provenance in `evidence_ids`; do not copy the secret value into
+`observation`, `comparison`, identifiers, descriptions or evidence
+metadata. The finding itself is the bundle-local reference to the
+secret-bearing setting. It is not a reference to a stored secret payload.
+
+`secret.kind` uses these values: `wifi-psk`, `wireguard-private-key`,
+`wireguard-preshared-key`, `password`, `token`, `private-key`,
+`certificate-private-key`, `shared-secret`, or `other`. `secret.status`
+uses `present`, `absent`, `unknown`, or `not-checked`. Use `present`
+only when existing discovery evidence establishes that a value is
+configured; do not read a secret solely to establish presence. Use
+`unknown` when evidence exists but does not establish whether the
+credential value is present or absent, and `not-checked` when no
+relevant check was performed. `absent` means evidence establishes that
+the credential value itself is absent; it does not mean that the UCI
+option or setting is missing. It must not be inferred from missing or
+inaccessible evidence. `value_handling`
+uses the constant `excluded-from-bundle`: the secret value is excluded
+from the normal bundle and report. This does not claim that existing raw
+source evidence never contains the value; such evidence remains sensitive
+and must be handled separately.
+
+For format version `1.1`, the schema requires `observation.secret` when
+a `uci`/`uci-option` finding has a recognized credential-bearing option
+name as the final component of `subject.identifier`. Format `1.0` keeps
+its original extensible observation fields and validation behavior.
+Producers normalize option names to lowercase before validation. The
+pattern accepts the documented underscore/hyphen variants (including
+`sae_password`) and optional numeric suffixes.
+
+The rule is scoped to UCI option subjects. A generic option named `key`
+is deliberately not matched because it may contain a public key; names
+such as `wep_key` remain recognized. Producers must add
+`observation.secret` whenever other evidence establishes that a setting
+contains secret material, including private-key findings.
+
+For secret findings, the schema permits only the documented non-secret
+identity metadata and the `secret` object in `observation`;
+`comparison` must be omitted or null. This is structural validation
+only: JSON Schema cannot determine whether arbitrary free-form strings
+actually contain credentials, password hashes or secret-derived
+fingerprints. A `subject.kind: key` alone does
+not imply secret material: the same subject kind can represent public
+keys and certificates. Producers must therefore add `observation.secret`
+for private-key or other secret-bearing key findings based on the
+observed material; the schema does not classify every generic key subject
+as secret. Before a bundle is treated as
+safe to share, a separate content-level secret scan/redaction and review
+of identifiers, descriptions, evidence metadata and included evidence
+bytes is mandatory. A schema-valid bundle is not, by itself, proof that
+it contains no secret material.
 
 These are conventions, not a claim that every field is always available.
 Use explicit null/unknown values or record a limitation rather than
@@ -142,8 +212,18 @@ policy is data-minimizing:
   credentials in a normal bundle. Existing opt-in host-key export remains
   a separate high-risk path and must not be silently included.
 - Classify evidence as `public`, `internal`, `sensitive`, `secret`
-  or `unknown`. Use `redacted` or `omitted` availability with an
-  explanation when content is not included.
+  or `unknown`. Evidence containing raw credentials or other secret
+  material is `secret`, not merely `sensitive`. Secret evidence must
+  never have `availability: included`; use `redacted`, `omitted` or
+  `unavailable` for the raw source.
+- For format version `1.1`, the schema forbids SHA-256 digests for evidence
+  classified `sensitive`, `secret` or `unknown`, and forbids included
+  evidence classified `secret`. These additional constraints apply only
+  to `1.1`; existing `1.0` evidence semantics remain unchanged. A
+  separately generated, content-scanned redacted derivative is a new
+  evidence artifact: classify it `internal`, set
+  `availability: included`, describe the redaction, and hash only the
+  exact redacted bytes. Never reuse the source evidence ID or digest.
 - Treat raw command output and diffs as sensitive until inspected.
   Redaction must happen before a bundle is shared or committed.
 - A digest or fingerprint derived from secret material is itself
@@ -155,8 +235,148 @@ policy is data-minimizing:
   appropriate to router configuration backups.
 
 A SHA-256 digest identifies exact evidence bytes; it does not make
-sensitive content safe to publish. A redacted artifact needs a digest
-for the redacted bytes, not for the original secret.
+sensitive content safe to publish. JSON Schema cannot inspect evidence
+bytes or prove that a redacted derivative is actually clean. The separate
+content-level scan and review must run before sharing; only after that
+check may the derivative be classified as `internal` and receive a
+digest of its redacted bytes. Never hash the original credential-bearing
+source for a normal bundle.
+
+## Secret-bearing settings: metadata-only discovery
+
+A secret is part of the observed configuration even when its value is
+excluded from the normal bundle. Discovery must therefore retain a finding
+for the setting and record its identity, credential kind, presence
+status, source evidence and sensitivity classification. The schema
+requires `observation.secret` for recognized credential-bearing UCI
+option names. Producers must also supply it for secret-bearing findings
+that cannot be identified from the UCI option name alone, including
+private-key findings. A generic `key` subject is not sufficient evidence
+of a secret because public keys and certificates use that subject kind
+too. Whenever metadata-form `observation.secret` is present, the schema
+restricts the finding to metadata-only observation fields and disallows
+non-null comparison data. This prevents a Wi-Fi network or WireGuard interface
+from appearing fully described while silently omitting a required
+credential.
+
+This issue defines a metadata-only discovery contract. It does not define
+or implement secret-value collection, a protected payload, a sidecar,
+transport to the control host, encryption, a Vault/secret-manager import,
+or generated Ansible secret variables. The focused follow-up work is
+tracked in [#205](https://github.com/waja/ansible-openwrt/issues/205)
+(secure export and transfer),
+[#206](https://github.com/waja/ansible-openwrt/issues/206) (secret-backend
+import), [#207](https://github.com/waja/ansible-openwrt/issues/207)
+(secret-aware assessment), and
+[#208](https://github.com/waja/ansible-openwrt/issues/208) (Ansible
+generation using secret references).
+
+The normal manifest and report must never contain plaintext secret
+values, password hashes, tokens, private-key material, or fingerprints
+or digests derived from those values. A report may say that a secret is
+present and protected, but must not display it. Do not use a secret hash
+as a substitute for the value: it can reveal equality across bundles or
+support guessing attacks.
+
+Raw source evidence must not be rewritten to achieve redaction. Treat
+raw UCI snapshots, diffs, command output and files that may contain
+credentials as sensitive; protect them with restrictive permissions and
+keep them out of ordinary shareable bundle content unless they have been
+safely redacted. If a raw evidence file is retained separately for
+forensic traceability, it remains sensitive and is not a secret handoff
+artifact. A redacted derivative is a separate presentation artifact and
+must not be mistaken for the original evidence. The existing optional
+`owrt-extra.sh -H` host-key export remains a separate high-risk recovery
+path; it is not part of this metadata-only contract and must not be
+silently folded into a normal discovery bundle.
+
+The status distinctions are important:
+
+- `present`: existing evidence establishes that the setting has a secret
+  value, but the value itself is excluded from the normal bundle.
+- `absent`: evidence establishes that the credential value itself is
+  absent; the UCI option or setting may still exist, for example with an
+  empty value.
+- `unknown`: the available evidence cannot establish whether a value is
+  present.
+- `not-checked`: no relevant check was performed.
+
+The finding `action` describes the setting's lifecycle relative to the
+reference; `observation.secret.status` describes whether the credential
+value is known to be present. These are independent: an existing option
+may have an empty value (`action: present`, `status: absent`), or the
+value may be unknown/not checked. The schema therefore does not tie these
+fields together; producers must report each from its own evidence.
+
+An inaccessible or failed read is not evidence that a secret is absent.
+Record the relevant limitation and use `unknown` or `not-checked` as
+appropriate. Never invent, replace, normalize or regenerate a value.
+
+### Examples
+
+A Wi-Fi PSK finding can document the UCI setting without including its
+value in the normal bundle:
+
+```json
+{
+  "id": "uci.wireless.default_radio0.key",
+  "category": "uci",
+  "subject": {
+    "kind": "uci-option",
+    "identifier": "wireless.default_radio0.key",
+    "identity_stability": "stable"
+  },
+  "action": "present",
+  "observation": {
+    "config": "wireless",
+    "section_name": "default_radio0",
+    "option": "key",
+    "secret": {
+      "kind": "wifi-psk",
+      "status": "present",
+      "value_handling": "excluded-from-bundle"
+    }
+  },
+  "evidence_ids": ["evidence-wireless-current"],
+  "limitations": []
+}
+```
+
+The example is a finding record; its evidence ID resolves to the
+corresponding evidence record in the containing bundle.
+
+A WireGuard peer uses the same structure. For a private key, use
+`kind: wireguard-private-key`; for a peer preshared key, use
+`kind: wireguard-preshared-key`. For example:
+
+```json
+{
+  "id": "uci.network.wg0_peer1.preshared_key",
+  "category": "uci",
+  "subject": {
+    "kind": "uci-option",
+    "identifier": "network.wg0_peer1.preshared_key",
+    "identity_stability": "stable"
+  },
+  "action": "present",
+  "observation": {
+    "config": "network",
+    "section_name": "wg0_peer1",
+    "option": "preshared_key",
+    "secret": {
+      "kind": "wireguard-preshared-key",
+      "status": "present",
+      "value_handling": "excluded-from-bundle"
+    }
+  },
+  "evidence_ids": ["evidence-network-current"],
+  "limitations": []
+}
+```
+
+The finding subject identifies the interface/peer and option, while
+the evidence records identify the source. No secret value or
+value-derived digest appears in the manifest.
 
 ## Human-readable report
 
