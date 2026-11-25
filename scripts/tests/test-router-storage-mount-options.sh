@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 HELPER=${1:?usage: test-router-storage-mount-options.sh HELPER}
+# shellcheck disable=SC1090
 . "$HELPER"
 
 fail() {
