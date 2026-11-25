@@ -50,6 +50,14 @@ for section in $sections; do
   section_uuid="$(lower "$section_uuid")"
   section_label="$(uci -q get "fstab.$section.label" 2>/dev/null || true)"
   section_target="$(uci -q get "fstab.$section.target" 2>/dev/null || true)"
+  section_target_normalized="$(printf '%s\\n' "$section_target" |
+    sed 's#//*#/#g')"
+  case "$section_target_normalized" in
+    */)
+      [ "$section_target_normalized" = "/" ] ||
+        section_target_normalized="${section_target_normalized%/}"
+      ;;
+  esac
   section_device="$(uci -q get "fstab.$section.device" 2>/dev/null || true)"
   label_conflict=false
   if [ -n "$current_label" ] &&
@@ -60,7 +68,7 @@ for section in $sections; do
   device_name="${device##*/}"
   if [ "$section_uuid" = "$uuid" ] ||
     [ "$label_conflict" = true ] ||
-    [ "$section_target" = "$target" ] ||
+    [ "$section_target_normalized" = "$target" ] ||
     [ "$section_device" = "$device" ] ||
     [ "$section_device_name" = "$device_name" ] ||
     [ "$(lower "$section_device")" = "uuid=$uuid" ]; then
