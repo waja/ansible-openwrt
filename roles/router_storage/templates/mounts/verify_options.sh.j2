@@ -21,8 +21,15 @@ verify_mount_options() {
       # ext4's default commit interval is five seconds. The kernel omits
       # this default from /proc/mounts when it is not explicitly set.
       commit=5)
-        [ "$filesystem" = ext4 ] && ! has_mount_option "$option" &&
+        if [ "$filesystem" = ext4 ] && ! has_mount_option "$option"; then
           continue
+        fi
+        if ! has_mount_option "$option"; then
+          IFS="$old_ifs"
+          echo "Mount option $option is not active for $target" >&2
+          return 1
+        fi
+        continue
         ;;
       ro|sync|noatime|nodiratime|nodev|noexec|nosuid)
         if ! has_mount_option "$option"; then
