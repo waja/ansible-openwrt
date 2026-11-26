@@ -95,7 +95,7 @@ mounted_uuid="$(printf '%s\n' "$(block info)" | awk -v device="$device" '
   exit 1
 }
 requested_options="{{ item.options | default('') }}"
-if [ -n "$existing_target" ] && [ -n "$requested_options" ]; then
+if [ -n "$requested_options" ]; then
   effective_options="$(awk -v target="$target" \
     '$2 == target {print $4}' /proc/mounts)"
   {% include 'mounts/verify_options.sh.j2' %}
