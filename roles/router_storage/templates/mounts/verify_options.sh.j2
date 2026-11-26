@@ -6,6 +6,13 @@ verify_mount_options() {
   local target="$4"
   local option inverse old_ifs
 
+  has_mount_option_key() {
+    case ",$effective_options," in
+      *",$1="*) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+
   has_mount_option() {
     case ",$effective_options," in
       *",$1,"*) return 0 ;;
@@ -17,11 +24,21 @@ verify_mount_options() {
   IFS=,
   for option in $requested_options; do
     case "$option" in
-      defaults|auto|nouser) continue ;;
+      auto|nouser)
+        IFS="$old_ifs"
+        echo "Mount option $option is not supported by OpenWrt fstab" >&2
+        return 1
+        ;;
+      defaults)
+        IFS="$old_ifs"
+        echo "Mount option defaults must not be specified explicitly" >&2
+        return 1
+        ;;
       # ext4's default commit interval is five seconds. The kernel omits
       # this default from /proc/mounts when it is not explicitly set.
       commit=5)
-        if [ "$filesystem" = ext4 ] && ! has_mount_option "$option"; then
+        if [ "$filesystem" = ext4 ] &&
+          ! has_mount_option_key commit; then
           continue
         fi
         if ! has_mount_option "$option"; then
