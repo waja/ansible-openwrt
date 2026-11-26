@@ -15,6 +15,18 @@ verify_mount_options ext4 commit=5,rw rw,relatime /opt ||
   fail "ext4 default commit=5 in an option list should be accepted"
 verify_mount_options ext4 commit=5 rw,commit=5,relatime /opt ||
   fail "explicit commit=5 should be accepted"
+if verify_mount_options ext4 commit=5 rw,commit=600,relatime /opt 2>/dev/null; then
+  fail "default commit=5 was accepted despite explicit commit=600"
+fi
+if verify_mount_options ext4 auto rw,relatime /opt 2>/dev/null; then
+  fail "unsupported auto option was accepted"
+fi
+if verify_mount_options ext4 nouser rw,relatime /opt 2>/dev/null; then
+  fail "unsupported nouser option was accepted"
+fi
+if verify_mount_options ext4 defaults rw,relatime /opt 2>/dev/null; then
+  fail "explicit defaults option was accepted"
+fi
 if verify_mount_options ext4 commit=10 rw,relatime /opt 2>/dev/null; then
   fail "non-default commit=10 was accepted without an effective value"
 fi
