@@ -13,11 +13,13 @@ probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
       sub(/^.*UUID="/, "", uuid_field)
       sub(/"$/, "", uuid_field)
     }
-    # OpenWrt emits TYPE as the final block-info field. Anchor the
-    # match so TYPE-like text inside an unescaped LABEL cannot win.
-    if (match($0, /TYPE="[^"]+"$/)) {
-      type_field = substr($0, RSTART, RLENGTH)
-      sub(/^TYPE="/, "", type_field)
+    # LABEL is free-form and may itself contain TYPE-like text.
+    # Exclude it before looking for the actual filesystem metadata field.
+    metadata = $0
+    sub(/[[:space:]]LABEL=.*/, "", metadata)
+    if (match(metadata, /(^|[[:space:]])TYPE="[^"]+"/)) {
+      type_field = substr(metadata, RSTART, RLENGTH)
+      sub(/^.*TYPE="/, "", type_field)
       sub(/"$/, "", type_field)
     }
     if (tolower(uuid_field) == uuid) {
