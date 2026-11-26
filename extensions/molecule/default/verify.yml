@@ -982,6 +982,53 @@
               src: lan
               target: ACCEPT
               test_sentinel: keep-rule-value
+          - command: section
+            config: firewall
+            type: rule
+            name: molecule_snapshot_quote_test
+            value:
+              name: molecule_snapshot_quote_test
+              src: lan
+              target: ACCEPT
+              test_sentinel: "prefix\nfirewall.molecule_snapshot_decoy=zone\nsuffix\\"
+          - command: section
+            config: firewall
+            type: zone
+            name: molecule_snapshot_after_backslash
+            value:
+              name: molecule_snapshot_after_backslash
+              network:
+                - lan
+              input: ACCEPT
+
+    - name: Remove an option after multiline and trailing-backslash UCI values
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          molecule_snapshot_after_backslash:
+            network: null
+
+    - name: Read firewall configuration after snapshot parsing test
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_snapshot_parsing_show
+      changed_when: false
+
+    - name: Verify snapshot parsing preserves the real section after quoted values
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_snapshot_after_backslash=zone'
+            in router_firewall_snapshot_parsing_show.result
+          - >-
+            'firewall.molecule_snapshot_after_backslash.network='
+            not in router_firewall_snapshot_parsing_show.result
+          - >-
+            'firewall.molecule_snapshot_decoy=zone'
+            not in router_firewall_snapshot_parsing_show.result
 
     - name: Update a managed firewall zone while unrelated sections exist
       ansible.builtin.include_role:
@@ -1199,6 +1246,66 @@
       ansible.builtin.assert:
         that:
           - router_firewall_rule_removed.result | default('') == ''
+
+    - name: Create an anonymous firewall rule with a removable option
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_generated_null_rule
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].dest_port
+            value: "8443"
+          - command: set
+            key: firewall.@rule[-1].target
+            value: ACCEPT
+
+    - name: Find the generated section ID of the anonymous rule
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_generated_null_rule
+      register: router_firewall_generated_null_rule
+      changed_when: false
+
+    - name: Remove an explicitly null option from an anonymous rule by generated ID
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules: >-
+          {{
+            {
+              router_firewall_generated_null_rule.result_list[0]: {
+                'dest_port': none
+              }
+            }
+          }}
+
+    - name: Read the anonymous rule option after null removal
+      community.openwrt.uci:
+        command: get
+        key: >-
+          firewall.{{ router_firewall_generated_null_rule.result_list[0] }}.dest_port
+      register: router_firewall_generated_null_rule_dest_port
+      changed_when: false
+      failed_when: false
+
+    - name: Verify null option removal works for generated anonymous rule IDs
+      ansible.builtin.assert:
+        that:
+          - router_firewall_generated_null_rule.result_list | length == 1
+          - router_firewall_generated_null_rule_dest_port.result | default('') == ''
+
     - name: Create an anonymous firewall rule for adoption
       community.openwrt.uci:
         autocommit: true

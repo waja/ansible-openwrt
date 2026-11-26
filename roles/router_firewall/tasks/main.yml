@@ -281,7 +281,7 @@
     router_firewall_uci_sections: >-
       {{
         router_firewall_uci_show.result
-        | regex_replace("(?s)'(?:\\\\.|[^'\\\\])*'", "''")
+        | regex_replace("(?s)'(?:[^']|'\\\\'')*'", "''")
       }}
   changed_when: false
 

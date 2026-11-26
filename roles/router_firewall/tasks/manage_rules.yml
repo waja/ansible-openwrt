@@ -245,33 +245,32 @@
         {{ ns.results }}
   changed_when: false
 
-- name: Check anonymous firewall rules marked absent by section ID
+- name: Check generated firewall rule sections missing from the snapshot
   community.openwrt.uci:
     command: get
     key: "firewall.{{ item.key }}"
   loop: >-
     {{
-      router_firewall_rules
-      | dict2items
-      | selectattr('value.state', 'defined')
-      | selectattr('value.state', 'equalto', 'absent')
+      router_firewall_named_rules.results
+      | selectattr('result', 'equalto', '')
+      | map(attribute='item')
       | rejectattr('value.name', 'defined')
       | list
     }}
   loop_control:
     label: "{{ item.key }}"
-  register: router_firewall_anonymous_absent_rules
+  register: router_firewall_generated_rule_lookups
   changed_when: false
   failed_when: false
 
-- name: Restore anonymous firewall rule section types for removals
+- name: Restore generated firewall rule section types from targeted lookups
   ansible.builtin.set_fact:
     router_firewall_named_rules:
       results: >-
         {%- set ns = namespace(results=[]) -%}
         {%- for result in router_firewall_named_rules.results -%}
         {%- set fallback = (
-          router_firewall_anonymous_absent_rules.results
+          router_firewall_generated_rule_lookups.results
           | selectattr('item.key', 'equalto', result.item.key)
           | map(attribute='result')
           | first
