@@ -8,16 +8,13 @@ device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
 block_info="$(block info)"
 block_line="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
   {
-    found = ""
-    for (i = 2; i <= NF; i++) {
-      if ($i ~ /^UUID=/) {
-        found = $i
-        sub(/^UUID="/, "", found)
-        sub(/"$/, "", found)
-        found = tolower(found)
-      }
+    uuid_field = ""
+    if (match($0, /(^|[[:space:]])UUID="[^"]+"/)) {
+      uuid_field = substr($0, RSTART, RLENGTH)
+      sub(/^.*UUID="/, "", uuid_field)
+      sub(/"$/, "", uuid_field)
     }
-    if (found == uuid) print $0
+    if (tolower(uuid_field) == uuid) print $0
   }
 ')"
 current_label="$(printf '%s\n' "$block_line" |
