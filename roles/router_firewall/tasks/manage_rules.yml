@@ -254,7 +254,9 @@
       router_firewall_named_rules.results
       | selectattr('result', 'equalto', '')
       | map(attribute='item')
-      | selectattr('key', 'match', '^cfg[0-9a-f]+    }}
+      | selectattr('key', 'match', '^cfg[0-9a-f]+')
+      | list
+    }}
   loop_control:
     label: "{{ item.key }}"
   register: router_firewall_generated_rule_lookups
