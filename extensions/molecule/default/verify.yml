@@ -990,7 +990,10 @@
               name: molecule_snapshot_quote_test
               src: lan
               target: ACCEPT
-              test_sentinel: "prefix\nfirewall.molecule_snapshot_decoy=zone\nsuffix\\"
+              test_sentinel: |-
+                prefix
+                firewall.molecule_snapshot_decoy=zone
+                suffix\\
           - command: section
             config: firewall
             type: redirect
@@ -1023,7 +1026,8 @@
       rescue:
         - name: Record rejection of the header-like section
           ansible.builtin.set_fact:
-            router_firewall_snapshot_decoy_failure: "{{ ansible_failed_task.name }}"
+            router_firewall_snapshot_decoy_failure: >-
+              {{ ansible_failed_task.name }}
 
     - name: Verify a multiline option cannot disguise a redirect as a zone
       ansible.builtin.assert:
@@ -1060,7 +1064,8 @@
       register: router_firewall_snapshot_parsing_show
       changed_when: false
 
-    - name: Verify snapshot parsing preserves the real section after quoted values
+    - name: >-
+        Verify snapshot parsing preserves the real section after quoted values
       ansible.builtin.assert:
         that:
           - >-
@@ -1317,7 +1322,8 @@
       register: router_firewall_generated_null_rule
       changed_when: false
 
-    - name: Remove an explicitly null option from an anonymous rule by generated ID
+    - name: >-
+        Remove an explicitly null option from an anonymous rule by generated ID
       ansible.builtin.include_role:
         name: router_firewall
       vars:
@@ -1335,7 +1341,8 @@
       community.openwrt.uci:
         command: get
         key: >-
-          firewall.{{ router_firewall_generated_null_rule.result_list[0] }}.dest_port
+          firewall.{{ router_firewall_generated_null_rule.result_list[0] }}
+          .dest_port
       register: router_firewall_generated_null_rule_dest_port
       changed_when: false
       failed_when: false
@@ -1344,7 +1351,8 @@
       ansible.builtin.assert:
         that:
           - router_firewall_generated_null_rule.result_list | length == 1
-          - router_firewall_generated_null_rule_dest_port.result | default('') == ''
+          - >-
+            router_firewall_generated_null_rule_dest_port.result | default('') == ''
 
     - name: Create an anonymous firewall rule for adoption
       community.openwrt.uci:
