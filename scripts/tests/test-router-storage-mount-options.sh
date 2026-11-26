@@ -38,5 +38,7 @@ if verify_mount_options ext4 rw ro,relatime /opt 2>/dev/null; then
 fi
 verify_mount_options ext4 rw rw,relatime /opt ||
   fail "effective rw should be accepted"
+verify_mount_options ext4 async rw,relatime /opt ||
+  fail "the implicit async default should be accepted"
 
 echo "All router storage mount option tests passed."
