@@ -142,7 +142,7 @@
           ansible.builtin.fail:
             msg: Nested external storage targets were accepted.
       rescue:
-        - name: Confirm nested external storage targets were rejected in preflight
+        - name: Confirm nested targets were rejected
           ansible.builtin.assert:
             that:
               - >-
@@ -168,7 +168,13 @@
     - name: Probe a UUID without matching UUID text embedded in a label
       ansible.builtin.raw: |
         export PATH=/tmp/router-storage-molecule-bin:$PATH
-        {{ lookup('template', playbook_dir ~ '/../../../roles/router_storage/templates/mounts/probe_uuid.sh.j2') }}
+        {{
+          lookup(
+            'template',
+            playbook_dir ~
+            '/../../../roles/router_storage/templates/mounts/probe_uuid.sh.j2'
+          )
+        }}
       register: router_storage_uuid_parser_probe
       changed_when: false
       vars:
