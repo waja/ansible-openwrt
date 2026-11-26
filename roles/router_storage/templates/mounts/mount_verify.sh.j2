@@ -9,7 +9,7 @@ resolved="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
   {
     device = $1
     sub(/:$/, "", device)
-    if (match($0, /(^|[[:space:]])UUID="[^"]+"/)) {
+    if (match($0, /^[^[:space:]]+[[:space:]]+UUID="[^"]+"/)) {
       uuid_field = substr($0, RSTART, RLENGTH)
       sub(/^.*UUID="/, "", uuid_field)
       sub(/"$/, "", uuid_field)
@@ -82,7 +82,7 @@ mounted_uuid="$(printf '%s\n' "$(block info)" | awk -v device="$device" '
     found_device = $1
     sub(/:$/, "", found_device)
     if (found_device != device) next
-    if (match($0, /(^|[[:space:]])UUID="[^"]+"/)) {
+    if (match($0, /^[^[:space:]]+[[:space:]]+UUID="[^"]+"/)) {
       value = substr($0, RSTART, RLENGTH)
       sub(/^.*UUID="/, "", value)
       sub(/"$/, "", value)
