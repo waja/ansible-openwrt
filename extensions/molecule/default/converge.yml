@@ -125,6 +125,12 @@
                 ansible_failed_task.name
                 == 'Reject duplicate external storage mount identifiers'
 
+    - name: Create the fake block command directory
+      ansible.builtin.file:
+        path: /tmp/router-storage-molecule-bin
+        state: directory
+        mode: '0755'
+
     - name: Create a fake block info command for UUID parser coverage
       ansible.builtin.copy:
         dest: /tmp/router-storage-molecule-bin/block
@@ -136,8 +142,8 @@
           EOF
 
     - name: Probe a UUID without matching UUID text embedded in a label
-      ansible.builtin.raw: >-
-        PATH=/tmp/router-storage-molecule-bin:$PATH
+      ansible.builtin.raw: |
+        export PATH=/tmp/router-storage-molecule-bin:$PATH
         {{ lookup('template', 'mounts/probe_uuid.sh.j2') }}
       register: router_storage_uuid_parser_probe
       changed_when: false
