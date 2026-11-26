@@ -183,7 +183,8 @@
             "fstab.router_storage_molecule=mount"
             in router_storage_molecule_fstab_first.result
           - >-
-            "fstab.router_storage_molecule.uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'"
+            "fstab.router_storage_molecule.uuid='"
+            ~ "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'"
             in router_storage_molecule_fstab_first.result
           - >-
             "fstab.router_storage_molecule.target='/mnt/molecule'"
