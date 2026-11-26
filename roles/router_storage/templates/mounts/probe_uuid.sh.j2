@@ -6,23 +6,20 @@ probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
   {
     device = $1
     sub(/:$/, "", device)
-    found_uuid = ""
-    found_type = ""
-    for (i = 2; i <= NF; i++) {
-      if ($i ~ /^UUID=/) {
-        found_uuid = $i
-        sub(/^UUID="/, "", found_uuid)
-        sub(/"$/, "", found_uuid)
-        found_uuid = tolower(found_uuid)
-      }
-      if ($i ~ /^TYPE=/) {
-        found_type = $i
-        sub(/^TYPE="/, "", found_type)
-        sub(/"$/, "", found_type)
-      }
+    uuid_field = ""
+    type_field = ""
+    if (match($0, /(^|[[:space:]])UUID="[^"]+"/)) {
+      uuid_field = substr($0, RSTART, RLENGTH)
+      sub(/^.*UUID="/, "", uuid_field)
+      sub(/"$/, "", uuid_field)
     }
-    if (found_uuid == uuid) {
-      print device "|" found_type
+    if (match($0, /(^|[[:space:]])TYPE="[^"]+"/)) {
+      type_field = substr($0, RSTART, RLENGTH)
+      sub(/^.*TYPE="/, "", type_field)
+      sub(/"$/, "", type_field)
+    }
+    if (tolower(uuid_field) == uuid) {
+      print device "|" type_field
     }
   }
 ')"
