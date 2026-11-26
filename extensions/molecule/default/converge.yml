@@ -125,6 +125,30 @@
                 ansible_failed_task.name
                 == 'Reject duplicate external storage mount identifiers'
 
+    - name: Verify nested external storage targets are rejected
+      block:
+        - name: Run storage role with nested external storage targets
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: parent
+                uuid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+                target: /mnt/data
+              - name: child
+                uuid: bbbbbbbb-cccc-dddd-eeee-ffffffffffff
+                target: /mnt/data/cache
+        - name: Fail if nested external storage targets were accepted
+          ansible.builtin.fail:
+            msg: Nested external storage targets were accepted.
+      rescue:
+        - name: Confirm nested external storage targets were rejected in preflight
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Reject nested external storage mount targets'
+
     - name: Create the fake block command directory
       community.openwrt.file:
         path: /tmp/router-storage-molecule-bin
@@ -139,12 +163,12 @@
           #!/bin/sh
           printf '%s: UUID="%s" TYPE="%s" LABEL="%s"\n' \
             /dev/sda1 aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee \
-            ext4 'backup UUID=bad'
+            ext4 'backup UUID=bad TYPE="vfat"'
 
     - name: Probe a UUID without matching UUID text embedded in a label
       ansible.builtin.raw: |
         export PATH=/tmp/router-storage-molecule-bin:$PATH
-        {{ lookup('template', 'mounts/probe_uuid.sh.j2') }}
+        {{ lookup('template', playbook_dir ~ '/../../../roles/router_storage/templates/mounts/probe_uuid.sh.j2') }}
       register: router_storage_uuid_parser_probe
       changed_when: false
       vars:
