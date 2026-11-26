@@ -43,7 +43,8 @@ verify_mount_options() {
         fi
         if ! has_mount_option "$option"; then
           IFS="$old_ifs"
-          echo "Mount option $option is not active for $target" >&2
+          echo "Mount option $option is not active for $target;" \
+            "remount the filesystem manually to apply changed options" >&2
           return 1
         fi
         continue
@@ -51,7 +52,8 @@ verify_mount_options() {
       ro|sync|noatime|nodiratime|nodev|noexec|nosuid)
         if ! has_mount_option "$option"; then
           IFS="$old_ifs"
-          echo "Mount option $option is not active for $target" >&2
+          echo "Mount option $option is not active for $target;" \
+            "remount the filesystem manually to apply changed options" >&2
           return 1
         fi
         continue
@@ -67,11 +69,13 @@ verify_mount_options() {
     esac
     if [ -n "$inverse" ] && has_mount_option "$inverse"; then
       IFS="$old_ifs"
-      echo "Mount option $option is not active for $target" >&2
+      echo "Mount option $option is not active for $target;" \
+            "remount the filesystem manually to apply changed options" >&2
       return 1
     elif [ -z "$inverse" ] && ! has_mount_option "$option"; then
       IFS="$old_ifs"
-      echo "Mount option $option is not active for $target" >&2
+      echo "Mount option $option is not active for $target;" \
+            "remount the filesystem manually to apply changed options" >&2
       return 1
     fi
   done
