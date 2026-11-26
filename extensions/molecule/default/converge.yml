@@ -126,13 +126,13 @@
                 == 'Reject duplicate external storage mount identifiers'
 
     - name: Create the fake block command directory
-      ansible.builtin.file:
+      community.openwrt.file:
         path: /tmp/router-storage-molecule-bin
         state: directory
         mode: '0755'
 
     - name: Create a fake block info command for UUID parser coverage
-      ansible.builtin.copy:
+      community.openwrt.copy:
         dest: /tmp/router-storage-molecule-bin/block
         mode: '0755'
         content: |
