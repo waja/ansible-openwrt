@@ -14,7 +14,16 @@ configuration.
 
 Run the dedicated playbook without enabling expansion:
 
-    ansible-playbook -i inventory.ini playbooks/storage.yml --limit router1
+    ansible-playbook -i inventory.ini playbooks/storage.yml --limit router1 \
+      -e '{"router_storage_expand_root": false, "router_storage_mounts": []}'
+
+The command explicitly disables both root expansion and external mounts,
+so it remains an inspection-only operation even when the inventory defines
+mounts. To apply configured external mounts, run a separate, explicit
+invocation:
+
+    ansible-playbook -i inventory.ini playbooks/storage.yml --limit router1 \
+      -e '{"router_storage_expand_root": false}'
 
 Detection is read-only. The role reports one of these states:
 
