@@ -1323,19 +1323,15 @@
       changed_when: false
 
     - name: >-
-        Remove an explicitly null option from an anonymous rule by generated ID
+        Remove an explicitly null option from an anonymous rule by matching name
       ansible.builtin.include_role:
         name: router_firewall
       vars:
         router_firewall_apply_runtime_changes: false
-        router_firewall_rules: >-
-          {{
-            {
-              router_firewall_generated_null_rule.result_list[0]: {
-                'dest_port': none
-              }
-            }
-          }}
+        router_firewall_rules:
+          molecule_generated_null_rule:
+            name: molecule_generated_null_rule
+            dest_port: null
 
     - name: Read the anonymous rule option after null removal
       community.openwrt.uci:
@@ -1347,7 +1343,7 @@
       changed_when: false
       failed_when: false
 
-    - name: Verify null option removal works for generated anonymous rule IDs
+    - name: Verify null option removal works for an adopted anonymous rule
       ansible.builtin.assert:
         that:
           - router_firewall_generated_null_rule.result_list | length == 1
