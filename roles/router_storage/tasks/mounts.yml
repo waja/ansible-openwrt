@@ -49,6 +49,21 @@
     fail_msg: >-
       External storage mount names, UUIDs, and targets must each be unique.
 
+- name: Reject nested external storage mount targets
+  ansible.builtin.assert:
+    that:
+      - >-
+        (router_storage_mounts
+         | map(attribute='target', default='/opt')
+         | select('match', '^' ~ (item.target | default('/opt')) ~ '/')
+         | list | length) == 0
+    fail_msg: >-
+      External storage mount targets must not contain one another.
+      Choose disjoint target directories.
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    label: "{{ item.target | default('/opt') }}"
+
 - name: Install external storage mount prerequisites
   action: "community.openwrt.{{ openwrt_package_manager }}"
   args:
