@@ -36,8 +36,12 @@ if uci -q get "fstab.$name" >/dev/null 2>&1; then
     exit 1
   fi
 fi
-sections="$(uci -q show fstab 2>/dev/null | \
-  sed -n 's/^fstab\.\([^.=]*\)\..*=.*/\1/p' | sort -u)"
+if ! fstab_config="$(uci -q show fstab 2>/dev/null)"; then
+  echo "Unable to read existing fstab configuration" >&2
+  exit 1
+fi
+sections="$(printf '%s\\n' "$fstab_config" | \\
+  sed -n 's/^fstab\\.\\([^.=]*\\)\\..*=.*/\\1/p' | sort -u)"
 for section in $sections; do
   [ "$section" = "$name" ] && continue
   section_enabled="$(uci -q get "fstab.$section.enabled" 2>/dev/null ||
