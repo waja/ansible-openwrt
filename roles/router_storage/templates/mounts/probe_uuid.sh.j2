@@ -8,7 +8,7 @@ probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
     sub(/:$/, "", device)
     uuid_field = ""
     type_field = ""
-    if (match($0, /(^|[[:space:]])UUID="[^"]+"/)) {
+    if (match($0, /^[^[:space:]]+[[:space:]]+UUID="[^"]+"/)) {
       uuid_field = substr($0, RSTART, RLENGTH)
       sub(/^.*UUID="/, "", uuid_field)
       sub(/"$/, "", uuid_field)
