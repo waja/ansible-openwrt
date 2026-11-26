@@ -158,6 +158,1522 @@
         that:
           - "'device=/dev/sda1' in router_storage_uuid_parser_probe.stdout"
 
+    - name: Persist a mocked external filesystem mount
+      ansible.builtin.include_role:
+        name: router_storage
+        tasks_from: persist_mounts.yml
+      vars:
+        router_storage_mounts:
+          - name: molecule
+            uuid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+            target: /mnt/molecule
+            filesystem: ext4
+
+    - name: Read the mocked external mount fstab section
+      community.openwrt.uci:
+        command: show
+        config: fstab
+      register: router_storage_molecule_fstab_first
+      changed_when: false
+
+    - name: Verify the persistent mount section matches the probed device
+      ansible.builtin.assert:
+        that:
+          - "'fstab.router_storage_molecule=mount' in router_storage_molecule_fstab_first.result"
+          - "'fstab.router_storage_molecule.uuid=' ~ "'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'" in router_storage_molecule_fstab_first.result"
+          - "'fstab.router_storage_molecule.target=' ~ "'/mnt/molecule'" in router_storage_molecule_fstab_first.result"
+          - "'fstab.router_storage_molecule.fstype=' ~ "'ext4'" in router_storage_molecule_fstab_first.result"
+          - "'fstab.router_storage_molecule.enabled=' ~ "'1'" in router_storage_molecule_fstab_first.result"
+
+    - name: Reapply the mocked external mount persistence
+      ansible.builtin.include_role:
+        name: router_storage
+        tasks_from: persist_mounts.yml
+      vars:
+        router_storage_mounts:
+          - name: molecule
+            uuid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+            target: /mnt/molecule
+            filesystem: ext4
+
+    - name: Read the external mount fstab section after reapplication
+      community.openwrt.uci:
+        command: show
+        config: fstab
+      register: router_storage_molecule_fstab_second
+      changed_when: false
+
+    - name: Verify reapplication keeps one unchanged persistent mount section
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_storage_molecule_fstab_second.result
+            | regex_findall('(?m)^fstab\\.router_storage_molecule=mount      block:
+        - name: Attempt to configure an unsupported automatic mount option
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: unsupported_auto
+                uuid: 00000000-0000-0000-0000-000000000000
+                options: rw,auto
+        - name: Fail if unsupported automatic mount option was accepted
+          ansible.builtin.fail:
+            msg: Unsupported auto mount option was accepted.
+      rescue:
+        - name: Confirm unsupported mount option was rejected in preflight
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
+
+    - name: Verify defaults cannot be mixed with explicit mount options
+      block:
+        - name: Attempt to configure defaults with rw
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: defaults_option
+                uuid: 00000000-0000-0000-0000-000000000000
+                options: defaults,rw
+        - name: Fail if mixed defaults option was accepted
+          ansible.builtin.fail:
+            msg: Mixed defaults mount option was accepted.
+      rescue:
+        - name: Confirm mixed defaults option was rejected in preflight
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
+
+    - name: Apply router system role
+      ansible.builtin.include_role:
+        name: router_system
+      vars:
+        router_system_hostname: molecule-test-router
+        router_system_timezone: CET-1CEST,M3.5.0,M10.5.0/3
+        router_system_timezone_name: Europe/Berlin
+        router_system_ntp_enabled: false
+        router_system_ntp_servers:
+          - 0.example.invalid
+          - 1.example.invalid
+        router_system_log_proto: tcp
+        router_system_conloglevel: 4
+        router_system_dropbear_extra_ports:
+          - 2222
+          - 2223
+        router_system_cronloglevel: 7
+        router_system_asu_auto_search: 0
+        router_system_asu_login_check_for_upgrades: 1
+        router_system_asu_upgrade_packages: 1
+        router_system_log_ip: 192.0.2.234
+
+    - name: Seed an additional Dropbear WAN firewall rule
+      community.openwrt.uci:
+        command: section
+        config: firewall
+        type: rule
+        name: ansible_router_firewall_dropbear_extra_wan
+        value:
+          name: Ansible managed Dropbear extra ports WAN
+          src: wan
+          proto: tcp
+          dest_port: '2222 2223'
+          target: ACCEPT
+        autocommit: true
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Apply router firewall role with defaults
+      ansible.builtin.include_role:
+        name: router_firewall
+        apply:
+          tags:
+            - molecule-idempotence-notest
+      vars:
+        router_firewall_default_input: ACCEPT
+        router_firewall_default_forward: ACCEPT
+        router_firewall_default_output: ACCEPT
+        router_firewall_apply_runtime_changes: false
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Verify additional Dropbear ports are closed by default
+      ansible.builtin.raw: |
+        if uci -q get \
+          firewall.ansible_router_firewall_dropbear_extra_wan >/dev/null; then
+          echo "Unexpected additional Dropbear WAN firewall rule"
+          exit 1
+        fi
+        echo "Verified: no extra Dropbear WAN firewall rule by default"
+      changed_when: false
+      when: "'molecule-idempotence-notest' not in ansible_skip_tags"
+
+    - name: Apply router firewall role with WAN access enabled
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_default_input: ACCEPT
+        router_firewall_default_forward: ACCEPT
+        router_firewall_default_output: ACCEPT
+        router_firewall_default_synflood_protect: true
+        router_firewall_default_synflood_rate: 30/second
+        router_firewall_default_synflood_burst: 60
+        router_firewall_default_drop_invalid: true
+        router_firewall_default_flow_offloading: true
+        router_firewall_default_flow_offloading_hw: false
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          guest_test:
+            network:
+              - lan
+            input: REJECT
+            output: ACCEPT
+            forward: REJECT
+            enabled: true
+            device:
+              - tun+
+            subnet:
+              - 192.0.2.0/24
+            masq: true
+            masq6: true
+            masq_src:
+              - 192.0.2.0/24
+            masq_dest:
+              - 198.51.100.0/24
+            masq_allow_invalid: true
+            mtu_fix: true
+            family: any
+            log: 3
+            log_limit: 10/minute
+            auto_helper: false
+            helper:
+              - ftp
+            counter: true
+          new_guest:
+            network:
+              - lan
+        router_firewall_dropbear_extra_ports:
+          - 2222
+          - 2223
+        router_firewall_dropbear_wan_zone: wan
+
+    - name: Read committed firewall configuration through UCI
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_uci
+      changed_when: false
+
+    - name: Assert firewall defaults
+      ansible.builtin.assert:
+        that:
+          - >-
+              "firewall.@defaults[0].input='ACCEPT'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].forward='ACCEPT'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].output='ACCEPT'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].synflood_protect='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].synflood_rate='30/second'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].synflood_burst='60'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].drop_invalid='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].flow_offloading='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.@defaults[0].flow_offloading_hw='0'"
+              in router_firewall_uci.result
+          - >-
+              ("firewall.ansible_router_firewall_dropbear_extra_wan."
+              ~ "dest_port='2222 2223'")
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.name='guest_test'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.network='lan'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.enabled='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.device='tun+'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.subnet='192.0.2.0/24'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq6='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq_src='192.0.2.0/24'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq_dest='198.51.100.0/24'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.masq_allow_invalid='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.mtu_fix='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.family='any'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.log='3'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.log_limit='10/minute'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.auto_helper='0'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.helper='ftp'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.guest_test.counter='1'"
+              in router_firewall_uci.result
+          - >-
+              "firewall.new_guest.name='new_guest'"
+              in router_firewall_uci.result
+
+    - name: Verify firewall zone options are persisted
+      ansible.builtin.raw: |
+        zone_config="$(sed -n \
+          "/^config zone 'guest_test'$/,/^config /p" /etc/config/firewall)"
+        for option in enabled masq masq6 masq_allow_invalid mtu_fix \
+          auto_helper family log log_limit counter; do
+          printf '%s\n' "$zone_config" | \
+            grep -F "option $option " >/dev/null || {
+              echo "Missing persisted firewall zone option: $option"
+              exit 1
+            }
+        done
+        for option in network device subnet masq_src masq_dest helper; do
+          printf '%s\n' "$zone_config" | \
+            grep -F "list $option " >/dev/null || {
+              echo "Missing persisted firewall zone list: $option"
+              exit 1
+            }
+        done
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
+      changed_when: false
+
+    - name: Validate generated firewall rules with fw4
+      ansible.builtin.raw: fw4 print
+      register: router_firewall_ruleset
+      changed_when: false
+
+    - name: Verify configured global defaults affect the generated ruleset
+      ansible.builtin.assert:
+        that:
+          - "'jump syn_flood' in router_firewall_ruleset.stdout"
+          - "'chain syn_flood' in router_firewall_ruleset.stdout"
+          - "'limit rate 30/second' in router_firewall_ruleset.stdout"
+          - "'burst 60 packets' in router_firewall_ruleset.stdout"
+          - "'invalid : drop' in router_firewall_ruleset.stdout"
+
+    - name: Apply router packages role
+      ansible.builtin.include_role:
+        name: router_packages
+        public: true
+      vars:
+        router_packages_managed_services:
+          - snmpd
+          - xinetd
+          - tailscale
+        router_packages_list:
+          - busybox
+          - openwrt-keyring
+
+    - name: Verify package list used by the package installation role
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_packages_install_list ==
+            ['busybox', 'openwrt-keyring', 'snmpd', 'xinetd', 'tailscale']
+
+    - name: Create obsolete SNMP configuration for the cleanup test
+      community.openwrt.file:
+        path: /etc/config/snmpd-opkg
+        state: touch
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Seed an unrelated SNMP setting
+      community.openwrt.uci:
+        command: set
+        key: snmpd.@system[0].sysName
+        value: molecule-lab-preserved
+        autocommit: true
+
+    - name: Apply the SNMP daemon role
+      ansible.builtin.include_role:
+        name: router_snmpd
+      vars:
+        router_snmpd_enabled: true
+        router_snmpd_community: molecule-monitoring-secret
+
+    - name: Read effective SNMP settings
+      ansible.builtin.raw: |
+        printf 'ipv4='; uci -q get snmpd.public.community || exit 1
+        printf 'ipv6='; uci -q get snmpd.public6.community || exit 1
+        printf 'secname='; uci -q get snmpd.public.secname || exit 1
+        printf 'sysname='; uci -q get 'snmpd.@system[0].sysName' || exit 1
+        printf 'group='; uci -q get snmpd.public_v2c.group || exit 1
+        printf 'access_read='; uci -q get snmpd.public_access.read || exit 1
+        printf 'access_write='; uci -q get snmpd.public_access.write || exit 1
+      register: router_snmpd_settings
+      changed_when: false
+
+    - name: Assert effective SNMP settings
+      ansible.builtin.assert:
+        that:
+          - "'ipv4=molecule-monitoring-secret' in router_snmpd_settings.stdout"
+          - "'ipv6=molecule-monitoring-secret' in router_snmpd_settings.stdout"
+          - "'secname=ro' in router_snmpd_settings.stdout"
+          - "'sysname=molecule-lab-preserved' in router_snmpd_settings.stdout"
+          - "'group=public' in router_snmpd_settings.stdout"
+          - "'access_read=all' in router_snmpd_settings.stdout"
+          - "'access_write=none' in router_snmpd_settings.stdout"
+
+    - name: Verify SNMP community is persisted without public fallback
+      ansible.builtin.raw: |
+        test -z "$(uci changes snmpd)" || {
+          echo "Uncommitted changes remain in SNMP UCI configuration"
+          exit 1
+        }
+        grep -F "option community 'molecule-monitoring-secret'" \
+          /etc/config/snmpd || exit 1
+        if grep -F "option community 'public'" /etc/config/snmpd; then
+          echo "Default public community remains configured"
+          exit 1
+        fi
+        grep -F "option sysName 'molecule-lab-preserved'" \
+          /etc/config/snmpd || exit 1
+      changed_when: false
+
+    - name: Seed an unrelated SNMP extend section
+      community.openwrt.uci:
+        command: section
+        config: snmpd
+        type: extend
+        name: molecule_unrelated_extend
+        value:
+          name: molecule-unrelated
+          prog: /bin/echo
+          args: preserved
+        autocommit: true
+      tags:
+        - molecule-idempotence-notest
+
+    - name: Apply LibreNMS integration role with the default source ref
+      ansible.builtin.include_role:
+        name: router_librenms
+      vars:
+        router_librenms_enabled: true
+        router_librenms_wireless_interfaces:
+          - interface: radio0-ap0
+            name: wl-test
+
+    - name: >-
+        Build a source URL for a slash-containing branch ref and custom mirror
+      ansible.builtin.include_role:
+        name: router_librenms
+        tasks_from: build_source_url.yml
+      vars:
+        router_librenms_source_ref: refs/heads/feature/my-branch
+        router_librenms_source_archive_base_url: >-
+          https://mirror.example/librenms-agent/archive/
+
+    - name: >-
+        Verify the role preserves slash refs and the configured archive endpoint
+      ansible.builtin.assert:
+        that:
+          - >-
+              __router_librenms_source_archive_url
+              == (
+                'https://mirror.example/librenms-agent/archive/'
+                ~ 'refs/heads/feature/my-branch'
+              )
+
+    - name: Verify the role rejects non-HTTPS archive endpoints
+      block:
+        - name: Build a source URL using an insecure endpoint
+          ansible.builtin.include_role:
+            name: router_librenms
+            tasks_from: build_source_url.yml
+          vars:
+            router_librenms_source_ref: master
+            router_librenms_source_archive_base_url: >-
+              http://mirror.example/librenms-agent/archive
+
+        - name: Fail when an insecure archive endpoint was accepted
+          ansible.builtin.fail:
+            msg: The role accepted a non-HTTPS archive endpoint.
+      rescue:
+        - name: Confirm the insecure endpoint was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_result.msg
+                is search('must be an HTTPS archive endpoint')
+
+    - name: Verify the role rejects archive endpoints with query strings
+      block:
+        - name: Build a source URL with a query string
+          ansible.builtin.include_role:
+            name: router_librenms
+            tasks_from: build_source_url.yml
+          vars:
+            router_librenms_source_ref: master
+            router_librenms_source_archive_base_url: >-
+              https://mirror.example/librenms-agent/archive?download=1
+
+        - name: Fail when a query string was accepted
+          ansible.builtin.fail:
+            msg: The role accepted an archive endpoint with a query string.
+      rescue:
+        - name: Confirm the query string was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_result.msg
+                is search('without query parameters or fragments')
+
+    - name: Verify the role rejects archive endpoints with fragments
+      block:
+        - name: Build a source URL with a fragment
+          ansible.builtin.include_role:
+            name: router_librenms
+            tasks_from: build_source_url.yml
+          vars:
+            router_librenms_source_ref: master
+            router_librenms_source_archive_base_url: >-
+              https://mirror.example/librenms-agent/archive#snapshot
+
+        - name: Fail when a fragment was accepted
+          ansible.builtin.fail:
+            msg: The role accepted an archive endpoint with a fragment.
+      rescue:
+        - name: Confirm the fragment was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_result.msg
+                is search('without query parameters or fragments')
+
+    - name: Apply LibreNMS integration role with a fully qualified source ref
+      tags:
+        - molecule-idempotence-notest
+      ansible.builtin.include_role:
+        name: router_librenms
+      vars:
+        router_librenms_enabled: true
+        router_librenms_source_ref: refs/heads/master
+        router_librenms_wireless_interfaces:
+          - interface: radio0-ap0
+            name: wl-test
+
+    - name: Verify LibreNMS files, SNMP extend entries, and persistence
+      ansible.builtin.raw: |
+        test -x /etc/librenms/distro || exit 1
+        test -x /etc/librenms/hardware || exit 1
+        test -x /etc/librenms/wlClients.sh || exit 1
+        test -x /etc/librenms/wlFrequency.sh || exit 1
+        test -x /etc/librenms/wlNoiseFloor.sh || exit 1
+        test -x /etc/librenms/wlRate.sh || exit 1
+        test -x /etc/librenms/wlSNR.sh || exit 1
+        grep -Fx 'radio0-ap0,wl-test' /etc/librenms/wlInterfaces.txt \
+          || exit 1
+        printf 'community='
+        uci -q get snmpd.public.community || exit 1
+        printf 'sysname='
+        uci -q get 'snmpd.@system[0].sysName' || exit 1
+        printf 'distro_prog='
+        uci -q get snmpd.ansible_router_librenms_distro.prog || exit 1
+        printf 'hardware_prog='
+        uci -q get snmpd.ansible_router_librenms_hardware.prog || exit 1
+        printf 'hardware_output='
+        /etc/librenms/hardware || exit 1
+        printf 'rate_prog='
+        uci -q get \
+          snmpd.ansible_router_librenms_radio0_ap0_rate_tx_min.prog \
+          || exit 1
+        printf 'rate_args='
+        uci -q get \
+          snmpd.ansible_router_librenms_radio0_ap0_rate_tx_min.args \
+          || exit 1
+        printf 'snr_args='
+        uci -q get \
+          snmpd.ansible_router_librenms_radio0_ap0_snr_avg.args \
+          || exit 1
+        printf 'unrelated='
+        uci -q get snmpd.molecule_unrelated_extend.args || exit 1
+        grep -Fx '/etc/librenms' /etc/sysupgrade.conf || exit 1
+        test -z "$(uci changes snmpd)" || {
+          echo "Uncommitted changes remain in SNMP UCI configuration"
+          exit 1
+        }
+      register: router_librenms_verification
+      changed_when: false
+
+    - name: Assert LibreNMS integration configuration
+      ansible.builtin.assert:
+        that:
+          - >-
+            'community=molecule-monitoring-secret'
+            in router_librenms_verification.stdout
+          - >-
+            'sysname=molecule-lab-preserved'
+            in router_librenms_verification.stdout
+          - >-
+            'distro_prog=/etc/librenms/distro'
+            in router_librenms_verification.stdout
+          - >-
+            'hardware_prog=/etc/librenms/hardware'
+            in router_librenms_verification.stdout
+          - >-
+            router_librenms_verification.stdout
+            is search('hardware_output=.+')
+          - >-
+            'rate_prog=/etc/librenms/wlRate.sh'
+            in router_librenms_verification.stdout
+          - >-
+            'rate_args=radio0-ap0 tx min'
+            in router_librenms_verification.stdout
+          - >-
+            'snr_args=radio0-ap0 avg'
+            in router_librenms_verification.stdout
+          - >-
+            'unrelated=preserved'
+            in router_librenms_verification.stdout
+
+    - name: Test Tailscale service integration without starting daemon
+      tags:
+        - molecule-idempotence-notest
+      block:
+        - name: Back up the Tailscale init script
+          ansible.builtin.raw: |
+            cp -p /etc/init.d/tailscale /tmp/ansible-molecule-tailscale-init
+          changed_when: false
+
+        - name: Clear previous Tailscale restart test results
+          ansible.builtin.raw: |
+            rm -f /tmp/ansible-molecule-tailscale-restarts
+          changed_when: false
+
+        - name: Prevent the Tailscale daemon from starting in Molecule
+          ansible.builtin.raw: |
+            cat > /etc/init.d/tailscale <<'EOF'
+            #!/bin/sh
+            case "$1" in
+              start)
+                exit 0
+                ;;
+              restart)
+                echo restart >> /tmp/ansible-molecule-tailscale-restarts
+                exit 0
+                ;;
+              *)
+                exec /tmp/ansible-molecule-tailscale-init "$@"
+                ;;
+            esac
+            EOF
+            chmod 0755 /etc/init.d/tailscale
+          changed_when: true
+
+        - name: Apply router base role including Tailscale service
+          ansible.builtin.include_role:
+            name: router_base
+          vars:
+            router_base_services:
+              - snmpd
+              - xinetd
+            router_base_additional_services:
+              - tailscale
+
+        - name: Verify Tailscale service is enabled without a running daemon
+          ansible.builtin.raw: |
+            /etc/init.d/tailscale enabled || exit 1
+            if pidof tailscaled >/dev/null; then
+              echo "Tailscale daemon unexpectedly runs in Molecule"
+              exit 1
+            fi
+          changed_when: false
+
+        - name: Apply Tailscale role without authentication
+          ansible.builtin.include_role:
+            name: router_tailscale
+
+        - name: Verify the Tailscale restart handler ran
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-restarts)" = restart
+          changed_when: false
+
+        - name: Verify Tailscale UCI configuration is effective and persistent
+          ansible.builtin.raw: |
+            test "$(uci -q get tailscale.settings.port)" = 41641 || exit 1
+            test "$(uci -q get tailscale.settings.state_file)" = \
+              /etc/tailscale/tailscaled.state || exit 1
+            test "$(uci -q get tailscale.settings.fw_mode)" = nftables || exit 1
+            test -z "$(uci changes tailscale)" || {
+              echo "Uncommitted changes remain in Tailscale UCI configuration"
+              exit 1
+            }
+            grep -F "option port '41641'" /etc/config/tailscale || exit 1
+            grep -F "option state_file '/etc/tailscale/tailscaled.state'" \
+              /etc/config/tailscale || exit 1
+            grep -F "option fw_mode 'nftables'" /etc/config/tailscale || exit 1
+          changed_when: false
+      always:
+        - name: Restore the original Tailscale init script
+          ansible.builtin.raw: |
+            if [ -f /tmp/ansible-molecule-tailscale-init ]; then
+              cp -p /tmp/ansible-molecule-tailscale-init /etc/init.d/tailscale
+            fi
+          changed_when: false
+
+        - name: Remove the Tailscale init script backup
+          community.openwrt.file:
+            path: /tmp/ansible-molecule-tailscale-init
+            state: absent
+
+        - name: Remove Tailscale restart test results
+          community.openwrt.file:
+            path: /tmp/ansible-molecule-tailscale-restarts
+            state: absent
+    # The unprivileged Docker image has no /dev/net/tun, so it cannot
+    # run tailscaled. Verify the installed package files instead.
+    - name: Verify Tailscale package files are installed
+      ansible.builtin.raw: |
+        test -x /etc/init.d/tailscale || exit 1
+        command -v tailscaled >/dev/null || exit 1
+        command -v tailscale >/dev/null || exit 1
+      changed_when: false
+
+    - name: Verify required base services are enabled and running
+      ansible.builtin.raw: |
+        for service in snmpd xinetd; do
+          /etc/init.d/"$service" enabled || exit 1
+          pidof "$service" >/dev/null || exit 1
+        done
+      changed_when: false
+
+    - name: Test Tailscale enrollment with a mocked CLI
+      vars:
+        router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+      tags:
+        - molecule-idempotence-notest
+      block:
+        - name: Create a directory for the mocked Tailscale CLI
+          community.openwrt.file:
+            path: /tmp/ansible-molecule-bin
+            state: directory
+            owner: root
+            group: root
+            mode: '0700'
+
+        - name: Install the mocked Tailscale CLI
+          community.openwrt.copy:
+            content: |
+              #!/bin/sh
+              state=/tmp/ansible-molecule-tailscale-state.json
+              mode=/tmp/ansible-molecule-tailscale-mode
+              count=/tmp/ansible-molecule-tailscale-up-count
+              validation=/tmp/ansible-molecule-tailscale-validation
+              case "$1" in
+                status)
+                  case "$(cat "$mode")" in
+                    invalid-json)
+                      echo 'not-json'
+                      ;;
+                    missing-state)
+                      echo '{}'
+                      ;;
+                    unknown-state)
+                      echo '{"BackendState":"UnexpectedState"}'
+                      ;;
+                    unavailable)
+                      exit 1
+                      ;;
+                    *)
+                      cat "$state"
+                      ;;
+                  esac
+                  ;;
+                set)
+                  printf '%s\n' "$@" > \
+                    /tmp/ansible-molecule-tailscale-preferences
+                  ;;
+                up)
+                  if [ "$#" -eq 1 ]; then
+                    echo up >> /tmp/ansible-molecule-tailscale-up-refresh
+                    exit 0
+                  fi
+                  current=0
+                  if [ -f "$count" ]; then
+                    current="$(cat "$count")"
+                  fi
+                  echo "$((current + 1))" > "$count"
+                  : > "$validation"
+                  if [ "$2" = \
+                    "--auth-key=file:/tmp/ansible-tailscale-auth-key" ]; then
+                    echo args-ok >> "$validation"
+                  else
+                    echo args-failed >> "$validation"
+                  fi
+                  if [ -f /tmp/ansible-tailscale-auth-key ]; then
+                    echo key-present >> "$validation"
+                  else
+                    echo key-missing >> "$validation"
+                  fi
+                  if [ "$(ls -ld /tmp/ansible-tailscale-auth-key \
+                    2>/dev/null | cut -c1-10)" = "-rw-------" ]; then
+                    echo permissions-ok >> "$validation"
+                  else
+                    echo permissions-failed >> "$validation"
+                  fi
+                  if [ "$(cat /tmp/ansible-tailscale-auth-key \
+                    2>/dev/null)" = molecule-test-auth-key ]; then
+                    echo content-ok >> "$validation"
+                  else
+                    echo content-failed >> "$validation"
+                  fi
+                  case "$(cat "$mode")" in
+                    success)
+                      echo '{"BackendState":"Running"}' > "$state"
+                      exit 0
+                      ;;
+                    pending)
+                      echo '{"BackendState":"NeedsMachineAuth"}' > "$state"
+                      exit 0
+                      ;;
+                    fail)
+                      exit 1
+                      ;;
+                  esac
+                  exit 94
+                  ;;
+                *)
+                  exit 0
+                  ;;
+              esac
+            dest: /tmp/ansible-molecule-bin/tailscale
+            owner: root
+            group: root
+            mode: '0755'
+
+        - name: Initialize mocked Tailscale backend state
+          community.openwrt.copy:
+            content: '{"BackendState":"NeedsLogin"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Select successful mocked enrollment
+          community.openwrt.copy:
+            content: success
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Enroll a Tailscale node non-interactively
+          ansible.builtin.include_role:
+            name: router_tailscale
+          vars:
+            router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+            router_tailscale_auth_key: molecule-test-auth-key
+            router_tailscale_accept_dns: false
+            router_tailscale_accept_routes: true
+            router_tailscale_advertise_routes: []
+            router_tailscale_advertise_exit_node: false
+            router_tailscale_hostname: molecule-test-node
+            router_tailscale_ssh: false
+
+        - name: Verify Tailscale preference arguments
+          ansible.builtin.raw: |
+            p=/tmp/ansible-molecule-tailscale-preferences
+            grep -Fqx 'set' "$p" || exit 1
+            grep -Fqx -- '--accept-dns=false' "$p" || exit 1
+            grep -Fqx -- '--accept-routes=true' "$p" || exit 1
+            grep -Fqx -- '--advertise-routes=' "$p" || exit 1
+            grep -Fqx -- '--advertise-exit-node=false' "$p" || exit 1
+            grep -Fqx -- '--hostname=molecule-test-node' "$p" || exit 1
+            grep -Fqx -- '--ssh=false' "$p" || exit 1
+          changed_when: false
+
+        - name: Verify successful enrollment and auth-key cleanup
+          ansible.builtin.raw: |
+            v=/tmp/ansible-molecule-tailscale-validation
+            grep -qx args-ok "$v" || exit 11
+            grep -qx key-present "$v" || exit 12
+            grep -qx permissions-ok "$v" || exit 13
+            grep -qx content-ok "$v" || exit 14
+            test "$(cat /tmp/ansible-molecule-tailscale-state.json)" = \
+              '{"BackendState":"Running"}' || exit 1
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 1 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+
+        - name: Set backend state to already authenticated
+          community.openwrt.copy:
+            content: '{"BackendState":"Running"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Skip enrollment when the node is already authenticated
+          ansible.builtin.include_role:
+            name: router_tailscale
+          vars:
+            router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+            router_tailscale_auth_key: molecule-test-auth-key
+
+        - name: Verify authenticated nodes do not submit the key again
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 1 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+
+        - name: Apply only explicitly configured Tailscale preferences
+          ansible.builtin.include_role:
+            name: router_tailscale
+          vars:
+            router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+            router_tailscale_accept_dns: true
+            router_tailscale_advertise_exit_node: true
+
+        - name: Verify unset preferences are omitted
+          ansible.builtin.raw: |
+            p=/tmp/ansible-molecule-tailscale-preferences
+            test "$(wc -l < "$p")" -eq 3 || exit 1
+            grep -Fqx 'set' "$p" || exit 1
+            grep -Fqx -- '--accept-dns=true' "$p" || exit 1
+            grep -Fqx -- '--advertise-exit-node=true' "$p" || exit 1
+            test ! -e /tmp/ansible-molecule-tailscale-up-refresh || exit 1
+          changed_when: false
+
+        - name: Reset backend state before testing enrollment failure
+          community.openwrt.copy:
+            content: '{"BackendState":"NeedsLogin"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Select a failing mocked enrollment
+          community.openwrt.copy:
+            content: fail
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Verify failed enrollment still removes the auth key
+          block:
+            - name: Run enrollment that is expected to fail
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+          rescue:
+            - name: Record the expected enrollment failure
+              ansible.builtin.set_fact:
+                router_tailscale_mock_failure_seen: true
+
+        - name: Assert failed enrollment was handled
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_mock_failure_seen | default(false) | bool
+
+        - name: Assert failed enrollment increments the mock and removes the key
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 2 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+
+        - name: Reset backend state before testing pending approval
+          community.openwrt.copy:
+            content: '{"BackendState":"NeedsLogin"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Select mocked enrollment awaiting device approval
+          community.openwrt.copy:
+            content: pending
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Verify enrollment reports pending device approval
+          block:
+            - name: Run enrollment that requires administrator approval
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+          rescue:
+            - name: Record the expected pending-approval failure
+              ansible.builtin.set_fact:
+                router_tailscale_mock_pending_seen: >-
+                  {{ 'waiting for tailnet administrator approval'
+                     in ansible_failed_result.msg }}
+
+        - name: Assert pending approval is reported
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_mock_pending_seen | default(false) | bool
+
+        - name: Verify pending enrollment count and key cleanup
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 3 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+
+        - name: Set backend state to pending approval before enrollment
+          community.openwrt.copy:
+            content: '{"BackendState":"NeedsMachineAuth"}'
+            dest: /tmp/ansible-molecule-tailscale-state.json
+            mode: '0600'
+
+        - name: Verify an already-pending device is not enrolled again
+          block:
+            - name: Run role for a device awaiting administrator approval
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+          rescue:
+            - name: Record the existing pending-approval state
+              ansible.builtin.set_fact:
+                router_tailscale_existing_pending_seen: >-
+                  {{ 'waiting for tailnet administrator approval'
+                     in ansible_failed_result.msg }}
+
+        - name: Verify existing pending approval was reported
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_existing_pending_seen | default(false)
+
+        - name: Verify pending approval did not submit a key
+          ansible.builtin.raw: |
+            test "$(cat /tmp/ansible-molecule-tailscale-up-count)" = 3 || exit 1
+            test ! -e /tmp/ansible-tailscale-auth-key || exit 1
+          changed_when: false
+        - name: Select invalid JSON status output
+          community.openwrt.copy:
+            content: invalid-json
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Reject invalid Tailscale status JSON
+          block:
+            - name: Run role with invalid status JSON
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+                router_tailscale_status_retries: 1
+                router_tailscale_status_delay: 0
+          rescue:
+            - name: Record invalid JSON rejection
+              ansible.builtin.set_fact:
+                router_tailscale_invalid_json_seen: >-
+                  {{ 'returned invalid JSON' in ansible_failed_result.msg }}
+        - name: Assert invalid status JSON was rejected
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_invalid_json_seen | default(false) | bool
+
+        - name: Select status output without BackendState
+          community.openwrt.copy:
+            content: missing-state
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Reject a status response without BackendState
+          block:
+            - name: Run role with a missing BackendState field
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+                router_tailscale_status_retries: 1
+                router_tailscale_status_delay: 0
+          rescue:
+            - name: Record missing BackendState rejection
+              ansible.builtin.set_fact:
+                router_tailscale_missing_state_seen: >-
+                  {{
+                    'did not contain a string BackendState'
+                    in ansible_failed_result.msg
+                  }}
+        - name: Assert missing BackendState was rejected
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_missing_state_seen | default(false) | bool
+
+        - name: Select an unknown backend state
+          community.openwrt.copy:
+            content: unknown-state
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Reject an unknown Tailscale backend state
+          block:
+            - name: Run role with an unknown BackendState
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+                router_tailscale_status_retries: 1
+                router_tailscale_status_delay: 0
+          rescue:
+            - name: Record unknown backend state rejection
+              ansible.builtin.set_fact:
+                router_tailscale_unknown_state_seen: >-
+                  {{ 'unsupported backend state' in ansible_failed_result.msg }}
+        - name: Assert unknown backend state was rejected
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_unknown_state_seen | default(false) | bool
+
+        - name: Select an unavailable daemon status response
+          community.openwrt.copy:
+            content: unavailable
+            dest: /tmp/ansible-molecule-tailscale-mode
+            mode: '0600'
+
+        - name: Reject an unavailable Tailscale daemon
+          block:
+            - name: Run role while the mocked daemon is unavailable
+              ansible.builtin.include_role:
+                name: router_tailscale
+              vars:
+                router_tailscale_cli: /tmp/ansible-molecule-bin/tailscale
+                router_tailscale_auth_key: molecule-test-auth-key
+                router_tailscale_status_retries: 1
+                router_tailscale_status_delay: 0
+          rescue:
+            - name: Record unavailable daemon rejection
+              ansible.builtin.set_fact:
+                router_tailscale_unavailable_seen: >-
+                  {{
+                    'Tailscale status is unavailable'
+                    in ansible_failed_result.msg
+                  }}
+        - name: Assert unavailable daemon was rejected
+          ansible.builtin.assert:
+            that:
+              - router_tailscale_unavailable_seen | default(false) | bool
+
+      always:
+        - name: Remove mocked Tailscale test files
+          community.openwrt.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /tmp/ansible-molecule-bin
+            - /tmp/ansible-molecule-tailscale-state.json
+            - /tmp/ansible-molecule-tailscale-mode
+            - /tmp/ansible-molecule-tailscale-up-count
+            - /tmp/ansible-molecule-tailscale-validation
+            - /tmp/ansible-molecule-tailscale-preferences
+            - /tmp/ansible-molecule-tailscale-up-refresh
+            - /tmp/ansible-tailscale-auth-key
+    - name: Check for obsolete SNMP configuration
+      community.openwrt.stat:
+        path: /etc/config/snmpd-opkg
+      register: router_obsolete_snmp_config
+
+    - name: Assert obsolete SNMP configuration is absent
+      ansible.builtin.assert:
+        that:
+          - not router_obsolete_snmp_config.stat.exists
+        fail_msg: The obsolete snmpd-opkg configuration still exists.
+
+    - name: Read configured system values
+      ansible.builtin.raw: |
+        printf 'hostname='; uci -q get system.@system[0].hostname || exit 1
+        printf 'timezone='; uci -q get system.@system[0].timezone || exit 1
+        printf 'zonename='; uci -q get system.@system[0].zonename || exit 1
+        printf 'ntp_enabled='; uci -q get system.ntp.enabled || exit 1
+        printf 'ntp_servers='; uci -q show system.ntp
+        printf 'log_proto='; uci -q get system.@system[0].log_proto || exit 1
+        printf 'conloglevel='
+        uci -q get system.@system[0].conloglevel || exit 1
+        printf 'cronloglevel='
+        uci -q get system.@system[0].cronloglevel || exit 1
+        printf 'asu_auto_search='
+        uci -q get attendedsysupgrade.client.auto_search || exit 1
+        printf 'asu_login_check_for_upgrades='
+        uci -q get attendedsysupgrade.client.login_check_for_upgrades || exit 1
+        printf 'asu_upgrade_packages='
+        uci -q get attendedsysupgrade.client.upgrade_packages || exit 1
+        printf 'log_ip='; uci -q get system.@system[0].log_ip || exit 1
+        section=ansible_router_system_extra_2222
+        printf 'dropbear_2222='; uci -q get dropbear.$section.Port || exit 1
+        section=ansible_router_system_extra_2223
+        printf 'dropbear_2223='; uci -q get dropbear.$section.Port || exit 1
+      register: router_system_uci
+      changed_when: false
+
+    - name: Assert configured system values
+      ansible.builtin.assert:
+        that:
+          - "'hostname=molecule-test-router' in router_system_uci.stdout"
+          - "'timezone=CET-1CEST,M3.5.0,M10.5.0/3' in router_system_uci.stdout"
+          - "'zonename=Europe/Berlin' in router_system_uci.stdout"
+          - "'ntp_enabled=0' in router_system_uci.stdout"
+          - "'0.example.invalid' in router_system_uci.stdout"
+          - "'1.example.invalid' in router_system_uci.stdout"
+          - "'log_proto=tcp' in router_system_uci.stdout"
+          - "'conloglevel=4' in router_system_uci.stdout"
+          - "'cronloglevel=7' in router_system_uci.stdout"
+          - "'asu_auto_search=0' in router_system_uci.stdout"
+          - "'asu_login_check_for_upgrades=1' in router_system_uci.stdout"
+          - "'asu_upgrade_packages=1' in router_system_uci.stdout"
+          - "'log_ip=192.0.2.234' in router_system_uci.stdout"
+          - "'dropbear_2222=2222' in router_system_uci.stdout"
+          - "'dropbear_2223=2223' in router_system_uci.stdout"
+
+    - name: Verify system timezone is applied at runtime
+      ansible.builtin.raw: |
+        if [ -L /tmp/localtime ]; then
+          actual_timezone="$(readlink /tmp/localtime)"
+          if [ "$actual_timezone" != \
+            /usr/share/zoneinfo/Europe/Berlin ]; then
+            echo "Unexpected runtime timezone link: $actual_timezone"
+            exit 1
+          fi
+        else
+          actual_timezone="$(cat /tmp/TZ)"
+          if [ "$actual_timezone" != \
+            'CET-1CEST,M3.5.0,M10.5.0/3' ]; then
+            echo "Unexpected runtime TZ value: $actual_timezone"
+            exit 1
+          fi
+        fi
+      changed_when: false
+
+    - name: Verify system settings are persisted
+      ansible.builtin.raw: |
+        test -z "$(uci changes system)" || {
+          echo "Uncommitted changes remain in system UCI configuration"
+          exit 1
+        }
+        test -z "$(uci changes attendedsysupgrade)" || {
+          echo "Uncommitted changes remain in attendedsysupgrade"
+          exit 1
+        }
+        grep -F "option hostname 'molecule-test-router'" \
+          /etc/config/system || exit 1
+        grep -F "option timezone 'CET-1CEST,M3.5.0,M10.5.0/3'" \
+          /etc/config/system || exit 1
+        grep -F "option zonename 'Europe/Berlin'" \
+          /etc/config/system || exit 1
+        grep -F "option enabled '0'" /etc/config/system || exit 1
+        grep -F "list server '0.example.invalid'" /etc/config/system || exit 1
+        grep -F "list server '1.example.invalid'" /etc/config/system || exit 1
+        grep -F "option log_proto 'tcp'" /etc/config/system || exit 1
+        grep -F "option conloglevel '4'" /etc/config/system || exit 1
+        grep -F "option cronloglevel '7'" /etc/config/system || exit 1
+        grep -F "option auto_search '0'" \
+          /etc/config/attendedsysupgrade || exit 1
+        grep -F "option login_check_for_upgrades '1'" \
+          /etc/config/attendedsysupgrade || exit 1
+        grep -F "option upgrade_packages '1'" \
+          /etc/config/attendedsysupgrade || exit 1
+        grep -F "option log_ip '192.0.2.234'" /etc/config/system || exit 1
+      changed_when: false
+
+    - name: Verify Dropbear listeners are persisted
+      ansible.builtin.raw: |
+        test -z "$(uci changes dropbear)" || {
+          echo "Uncommitted changes remain in Dropbear UCI configuration"
+          exit 1
+        }
+        grep -F "config dropbear 'ansible_router_system_extra_2222'" \
+          /etc/config/dropbear || exit 1
+        grep -F "option Port '2222'" /etc/config/dropbear || exit 1
+        grep -F "config dropbear 'ansible_router_system_extra_2223'" \
+          /etc/config/dropbear || exit 1
+        grep -F "option Port '2223'" /etc/config/dropbear || exit 1
+      changed_when: false
+
+    - name: Calculate package list for a changed managed service list
+      ansible.builtin.include_role:
+        name: router_packages
+        tasks_from: calculate_package_list.yml
+      vars:
+        router_packages_managed_services:
+          - snmpd
+        router_packages_list:
+          - busybox
+          - snmpd
+
+    - name: Verify changed service list and package deduplication
+      ansible.builtin.assert:
+        that:
+          - router_packages_install_list == ['busybox', 'snmpd']
+
+    - name: Test OWUT update-check behavior
+      tags:
+        - molecule-idempotence-notest
+      block:
+        - name: Create a mock OWUT executable for update-check tests
+          community.openwrt.copy:
+            content: |
+              #!/bin/sh
+              mode="$(cat /tmp/ansible-molecule-owut-mode)" || exit 2
+              case "$mode" in
+                update)
+                  echo "It is safe to proceed with an upgrade"
+                  ;;
+                current)
+                  echo "There are no changes, upgrade not necessary"
+                  ;;
+                downgrade)
+                  echo "Checks reveal package downgrades," \
+                    "upgrade still possible with '--force'" >&2
+                  ;;
+                error)
+                  echo "Checks reveal errors, do not upgrade" >&2
+                  exit 1
+                  ;;
+                unknown)
+                  echo "OWUT returned an unexpected result"
+                  ;;
+                *)
+                  echo "Unknown test mode" >&2
+                  exit 2
+                  ;;
+              esac
+            dest: /tmp/ansible-molecule-owut
+            mode: '0755'
+
+        - name: Select a mock OWUT result
+          community.openwrt.copy:
+            content: current
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Verify the OWUT role is disabled by default
+          ansible.builtin.include_role:
+            name: router_owut
+
+        - name: Assert the disabled OWUT role performs no check
+          ansible.builtin.assert:
+            that:
+              - router_owut_status is not defined
+
+        - name: Select an update-available OWUT result
+          community.openwrt.copy:
+            content: update
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Detect an available firmware update
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert OWUT reports an available firmware update
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'update_available'
+
+        - name: Select an up-to-date OWUT result
+          community.openwrt.copy:
+            content: current
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Detect an up-to-date firmware image
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert OWUT reports that no update is needed
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'up_to_date'
+
+        - name: Select a downgrade OWUT result
+          community.openwrt.copy:
+            content: downgrade
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Detect package downgrades without forcing an upgrade
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert OWUT classifies downgrades separately
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'downgrade'
+              - router_owut_check.rc == 0
+            fail_msg: >-
+              Expected a successful OWUT downgrade warning, got status
+              {{ router_owut_status }} (rc={{ router_owut_check.rc }}).
+              stdout={{ router_owut_check.stdout | to_json }},
+              stderr={{ router_owut_check.stderr | to_json }}
+
+        - name: Select a failing OWUT result
+          community.openwrt.copy:
+            content: error
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Capture an OWUT command failure without aborting configuration
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert OWUT command failures are reported
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'error'
+
+        - name: Select an unknown OWUT result
+          community.openwrt.copy:
+            content: unknown
+            dest: /tmp/ansible-molecule-owut-mode
+            mode: '0600'
+
+        - name: Capture an unrecognized OWUT result
+          ansible.builtin.include_role:
+            name: router_owut
+          vars:
+            router_owut_enabled: true
+            router_owut_binary: /tmp/ansible-molecule-owut
+
+        - name: Assert unknown OWUT output is not treated as success
+          ansible.builtin.assert:
+            that:
+              - router_owut_status == 'unknown'
+
+
+        - name: Capture a missing OWUT executable prerequisite
+          block:
+            - name: Run OWUT with a missing executable
+              ansible.builtin.include_role:
+                name: router_owut
+              vars:
+                router_owut_enabled: true
+                router_owut_binary: /tmp/owut-does-not-exist
+          rescue:
+            - name: Record the missing OWUT executable rejection
+              ansible.builtin.set_fact:
+                router_owut_missing_binary_seen: >-
+                  {{
+                    'Install the OpenWrt owut package separately'
+                    in ansible_failed_result.msg
+                  }}
+
+        - name: Assert missing OWUT is reported as a prerequisite error
+          ansible.builtin.assert:
+            that:
+              - router_owut_missing_binary_seen | default(false) | bool
+
+        - name: Reject an unsupported OpenWrt release in the OWUT role
+          block:
+            - name: Save the original OpenWrt release file
+              community.openwrt.slurp:
+                src: /etc/openwrt_release
+              register: router_owut_release_backup
+              changed_when: false
+
+            - name: Provide an older OpenWrt release fixture
+              community.openwrt.copy:
+                content: |
+                  DISTRIB_RELEASE='24.10.5'
+                  DISTRIB_REVISION='r0'
+                dest: /etc/openwrt_release
+                mode: '0644'
+
+            - name: Run OWUT against the unsupported release fixture
+              ansible.builtin.include_role:
+                name: router_owut
+              vars:
+                router_owut_enabled: true
+                router_owut_binary: /tmp/ansible-molecule-owut
+          rescue:
+            - name: Record unsupported release rejection
+              ansible.builtin.set_fact:
+                router_owut_unsupported_seen: >-
+                  {{
+                    'requires OpenWrt 25.12 or newer'
+                    in ansible_failed_result.msg
+                  }}
+          always:
+            - name: Restore the original OpenWrt release file
+              community.openwrt.copy:
+                content: "{{ router_owut_release_backup.content | b64decode }}"
+                dest: /etc/openwrt_release
+                mode: '0644'
+
+        - name: Assert unsupported OpenWrt releases are rejected clearly
+          ansible.builtin.assert:
+            that:
+              - router_owut_unsupported_seen | default(false) | bool
+
+        - name: Verify OWUT checks never stage UCI changes
+          community.openwrt.command:
+            cmd: uci changes
+          register: router_owut_uci_changes
+          changed_when: false
+
+        - name: Assert the OWUT role did not change UCI configuration
+          ansible.builtin.assert:
+            that:
+              - router_owut_uci_changes.stdout | trim == ''
+
+        - name: Remove mocked OWUT test files
+          community.openwrt.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /tmp/ansible-molecule-owut
+            - /tmp/ansible-molecule-owut-mode
+)
+            | length == 1
+          - >-
+            router_storage_molecule_fstab_second.result
+            == router_storage_molecule_fstab_first.result
+
     - name: Verify unsupported mount options are rejected before package changes
       block:
         - name: Attempt to configure an unsupported automatic mount option
