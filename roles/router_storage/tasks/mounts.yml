@@ -15,6 +15,8 @@
         ((item.filesystem | default('ext4')) == 'vfat' and
         item.uuid is match('^[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}$'))
       - "'defaults' not in ((item.options | default('')).split(','))"
+      - "'auto' not in ((item.options | default('')).split(','))"
+      - "'nouser' not in ((item.options | default('')).split(','))"
       - >-
         (item.target | default('/opt'))
         is match('^/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$')
@@ -38,7 +40,8 @@
         (router_storage_mounts | map(attribute='name') | list | unique | length)
         == (router_storage_mounts | length)
       - >-
-        (router_storage_mounts | map(attribute='uuid') | list | unique | length)
+        (router_storage_mounts | map(attribute='uuid') | map('lower')
+        | list | unique | length)
         == (router_storage_mounts | length)
       - >-
         (router_storage_mounts | map(attribute='target', default='/opt')
@@ -77,7 +80,7 @@
     storage_mount_uuid: "{{ item.uuid }}"
     storage_mount_target: "{{ item.target | default('/opt') }}"
     storage_mount_probe_output: >-
-      {{ router_storage_mount_probe.results[i].stdout | replace('\\r', '') }}
+      {{ router_storage_mount_probe.results[i].stdout | replace('\r', '') }}
   loop: "{{ router_storage_mounts }}"
   loop_control:
     extended: true
@@ -91,7 +94,7 @@
     storage_mount_target: "{{ item.target | default('/opt') }}"
     storage_mount_fstype: "{{ item.filesystem | default('ext4') }}"
     storage_mount_probe_output: >-
-      {{ router_storage_mount_probe.results[i].stdout | replace('\\r', '') }}
+      {{ router_storage_mount_probe.results[i].stdout | replace('\r', '') }}
   loop: "{{ router_storage_mounts }}"
   loop_control:
     extended: true
@@ -107,7 +110,7 @@
     storage_mount_target: "{{ item.target | default('/opt') }}"
     storage_mount_fstype: "{{ item.filesystem | default('ext4') }}"
     storage_mount_probe_output: >-
-      {{ router_storage_mount_probe.results[i].stdout | replace('\\r', '') }}
+      {{ router_storage_mount_probe.results[i].stdout | replace('\r', '') }}
   loop: "{{ router_storage_mounts }}"
   loop_control:
     extended: true
