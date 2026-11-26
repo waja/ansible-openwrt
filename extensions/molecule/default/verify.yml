@@ -993,6 +993,15 @@
               test_sentinel: "prefix\nfirewall.molecule_snapshot_decoy=zone\nsuffix\\"
           - command: section
             config: firewall
+            type: redirect
+            name: molecule_snapshot_decoy
+            value:
+              name: molecule_snapshot_decoy
+              src: wan
+              dest: lan
+              target: DNAT
+          - command: section
+            config: firewall
             type: zone
             name: molecule_snapshot_after_backslash
             value:
@@ -1000,6 +1009,40 @@
               network:
                 - lan
               input: ACCEPT
+
+    - name: Reject a header-like line inside a multiline option value
+      block:
+        - name: Attempt to remove the redirect as a firewall zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              molecule_snapshot_decoy:
+                state: absent
+      rescue:
+        - name: Record rejection of the header-like section
+          ansible.builtin.set_fact:
+            router_firewall_snapshot_decoy_failure: "{{ ansible_failed_task.name }}"
+
+    - name: Verify a multiline option cannot disguise a redirect as a zone
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_snapshot_decoy_failure
+            == 'Validate existing named firewall sections'
+
+    - name: Read the redirect after header-like value validation
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_snapshot_decoy
+      register: router_firewall_snapshot_decoy
+      changed_when: false
+
+    - name: Assert the redirect was not removed
+      ansible.builtin.assert:
+        that:
+          - router_firewall_snapshot_decoy.result == 'redirect'
 
     - name: Remove an option after multiline and trailing-backslash UCI values
       ansible.builtin.include_role:
@@ -1025,9 +1068,6 @@
             in router_firewall_snapshot_parsing_show.result
           - >-
             'firewall.molecule_snapshot_after_backslash.network='
-            not in router_firewall_snapshot_parsing_show.result
-          - >-
-            'firewall.molecule_snapshot_decoy=zone'
             not in router_firewall_snapshot_parsing_show.result
 
     - name: Update a managed firewall zone while unrelated sections exist
