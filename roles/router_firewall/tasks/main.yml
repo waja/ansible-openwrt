@@ -276,13 +276,22 @@
   register: router_firewall_uci_show
   changed_when: false
 
+- name: Remove quoted option values from the firewall configuration snapshot
+  ansible.builtin.set_fact:
+    router_firewall_uci_sections: >-
+      {{
+        router_firewall_uci_show.result
+        | regex_replace("(?s)'(?:\\\\.|[^'\\\\])*'", "''")
+      }}
+  changed_when: false
+
 - name: Resolve named firewall zones from the configuration snapshot
   ansible.builtin.set_fact:
     router_firewall_named_zones:
       results: >-
         {%- set ns = namespace(results=[]) -%}
         {%- for item in router_firewall_zones | dict2items -%}
-        {%- set matches = router_firewall_uci_show.result
+        {%- set matches = router_firewall_uci_sections
           | regex_findall('(?m)^firewall\\.' ~ item.key ~ '=(\\S+)$') -%}
         {%- set ns.results = ns.results + [{
           'item': item,
