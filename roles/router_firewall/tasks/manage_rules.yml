@@ -442,15 +442,6 @@
     loop_var: router_firewall_rule
     index_var: router_firewall_rule_index
     label: "{{ router_firewall_rule.key }}"
-)
-      | list
-    }}
-  loop_control:
-    label: "{{ item.key }}"
-  register: router_firewall_generated_rule_lookups
-  changed_when: false
-  failed_when: false
-
 - name: Restore generated firewall rule section types from targeted lookups
   ansible.builtin.set_fact:
     router_firewall_named_rules:
