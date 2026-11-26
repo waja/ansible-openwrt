@@ -137,8 +137,8 @@
         mode: '0755'
         content: |
           #!/bin/sh
-          printf '%s: UUID="%s" TYPE="%s" LABEL="%s"\\n' \\
-            /dev/sda1 aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee \\
+          printf '%s: UUID="%s" TYPE="%s" LABEL="%s"\n' \
+            /dev/sda1 aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee \
             ext4 'backup UUID=bad'
 
     - name: Probe a UUID without matching UUID text embedded in a label
@@ -196,7 +196,9 @@
         - name: Confirm mixed defaults option was rejected in preflight
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name == 'Validate external storage mount definitions'
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
 
     - name: Apply router system role
       ansible.builtin.include_role:
