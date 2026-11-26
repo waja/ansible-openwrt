@@ -591,6 +591,9 @@ with it.
 ### Jobs
 
 - `lint`
+  - Runs the LibreNMS archive extraction regression tests with
+    `python -m unittest discover -s roles/router_librenms/tests -p
+    'test_extract_tar_archive.py' -v`.
   - Installs the hash-locked lint toolchain from
     `requirements/ci/lint.txt` with `--require-hashes` and checks it
     with `python -m pip check`.
