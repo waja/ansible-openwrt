@@ -137,9 +137,9 @@
         mode: '0755'
         content: |
           #!/bin/sh
-          cat <<'EOF'
-          /dev/sda1: UUID="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" TYPE="ext4" LABEL="backup UUID=bad"
-          EOF
+          printf '%s: UUID="%s" TYPE="%s" LABEL="%s"\\n' \\
+            /dev/sda1 aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee \\
+            ext4 'backup UUID=bad'
 
     - name: Probe a UUID without matching UUID text embedded in a label
       ansible.builtin.raw: |
@@ -175,7 +175,9 @@
         - name: Confirm unsupported mount option was rejected in preflight
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name == 'Validate external storage mount definitions'
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
 
     - name: Verify defaults cannot be mixed with explicit mount options
       block:
