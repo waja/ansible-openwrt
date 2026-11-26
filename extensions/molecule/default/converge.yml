@@ -161,9 +161,9 @@
         mode: '0755'
         content: |
           #!/bin/sh
-          printf '%s: UUID="%s" TYPE="%s" LABEL="%s"\n' \
+          printf '%s: UUID="%s" LABEL="%s" TYPE="%s"\n' \
             /dev/sda1 aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee \
-            ext4 'backup UUID=bad TYPE="vfat"'
+            'backup UUID=bad TYPE="vfat"' ext4
 
     - name: Probe a UUID without matching UUID text embedded in a label
       ansible.builtin.raw: |
