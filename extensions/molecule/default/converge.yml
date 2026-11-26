@@ -110,9 +110,9 @@
           vars:
             router_storage_mounts:
               - name: first
-                uuid: 00000000-0000-0000-0000-000000000000
+                uuid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
               - name: second
-                uuid: 00000000-0000-0000-0000-000000000000
+                uuid: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE
                 target: /mnt/second
         - name: Fail if duplicate external storage UUIDs were accepted
           ansible.builtin.fail:
@@ -151,6 +151,44 @@
       ansible.builtin.assert:
         that:
           - "'device=/dev/sda1' in router_storage_uuid_parser_probe.stdout"
+
+    - name: Verify unsupported mount options are rejected before package changes
+      block:
+        - name: Attempt to configure an unsupported automatic mount option
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: unsupported_auto
+                uuid: 00000000-0000-0000-0000-000000000000
+                options: rw,auto
+        - name: Fail if unsupported automatic mount option was accepted
+          ansible.builtin.fail:
+            msg: Unsupported auto mount option was accepted.
+      rescue:
+        - name: Confirm unsupported mount option was rejected in preflight
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Validate external storage mount definitions'
+
+    - name: Verify defaults cannot be mixed with explicit mount options
+      block:
+        - name: Attempt to configure defaults with rw
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: defaults_option
+                uuid: 00000000-0000-0000-0000-000000000000
+                options: defaults,rw
+        - name: Fail if mixed defaults option was accepted
+          ansible.builtin.fail:
+            msg: Mixed defaults mount option was accepted.
+      rescue:
+        - name: Confirm mixed defaults option was rejected in preflight
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Validate external storage mount definitions'
 
     - name: Apply router system role
       ansible.builtin.include_role:
