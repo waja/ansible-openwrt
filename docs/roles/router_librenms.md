@@ -45,6 +45,10 @@ per-interface wireless sensors.
 
 ## Prerequisites
 
+The Ansible controller must use Python 3.10.12+, Python 3.11.4+, or
+Python 3.12 or newer. Python 3.11.0–3.11.3 do not provide the `tarfile` extraction
+filter used by the archive extractor.
+
 The role expects the SNMP daemon to be installed and managed by
 `router_packages` and `router_base`. Configure a non-default SNMP
 community with `router_snmpd_enabled` and
@@ -71,9 +75,11 @@ router_packages_list:
 ## Managed files and SNMP configuration
 
 The role downloads one source archive from the configured archive endpoint
-to the Ansible controller during each run, then deploys the required scripts
-under `/etc/librenms`. Downloading one archive ensures all scripts come from
-the same repository snapshot and avoids depending on the GitHub REST API.
+to the Ansible controller during each run, extracts it with the controller's
+Python standard library, then deploys the required scripts under
+`/etc/librenms`. No external tar or unzip utility is required. Downloading
+one archive ensures all scripts come from the same repository snapshot and
+avoids depending on the GitHub REST API.
 `wlInterfaces.txt` is rendered locally from the configured interface
 mappings and is not downloaded. The router itself does not need Internet
 access. The controller must be able to reach the configured endpoint over
