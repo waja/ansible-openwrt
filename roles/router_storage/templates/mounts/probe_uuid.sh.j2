@@ -13,7 +13,7 @@ probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
       sub(/^.*UUID="/, "", uuid_field)
       sub(/"$/, "", uuid_field)
     }
-    # The actual TYPE field follows LABEL in OpenWrt's block-info output.
+    # The actual TYPE field follows LABEL in OpenWrt block-info output.
     # Anchor it at the end so TYPE-like text inside LABEL cannot win.
     if (match($0, /[[:space:]]TYPE="[^"]+"$/)) {
       type_field = substr($0, RSTART, RLENGTH)
