@@ -269,16 +269,28 @@
         == router_firewall_desired_zone_names | length
     fail_msg: Firewall zone names must be unique.
 
-- name: Check for firewall zones with the desired section ID
+- name: Read firewall configuration for section discovery
   community.openwrt.uci:
-    command: get
-    key: "firewall.{{ item.key }}"
-  loop: "{{ router_firewall_zones | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
-  register: router_firewall_named_zones
+    command: show
+    config: firewall
+  register: router_firewall_uci_show
   changed_when: false
-  failed_when: false
+
+- name: Resolve named firewall zones from the configuration snapshot
+  ansible.builtin.set_fact:
+    router_firewall_named_zones:
+      results: >-
+        {%- set ns = namespace(results=[]) -%}
+        {%- for item in router_firewall_zones | dict2items -%}
+        {%- set matches = router_firewall_uci_show.result
+          | regex_findall('(?m)^firewall\\.' ~ item.key ~ '=(\\S+)$') -%}
+        {%- set ns.results = ns.results + [{
+          'item': item,
+          'result': matches[0] | default('')
+        }] -%}
+        {%- endfor -%}
+        {{ ns.results }}
+  changed_when: false
 
 - name: Validate existing named firewall sections
   ansible.builtin.assert:
@@ -290,13 +302,6 @@
   loop: "{{ router_firewall_named_zones.results | default([]) }}"
   loop_control:
     label: "{{ item.item.key }}"
-
-- name: Read firewall configuration for anonymous zone identities
-  community.openwrt.uci:
-    command: show
-    config: firewall
-  register: router_firewall_uci_show
-  changed_when: false
 
 - name: Reject zones already assigned to a different named section
   ansible.builtin.assert:
