@@ -992,23 +992,23 @@
               target: ACCEPT
               test_sentinel: |-
                 prefix
-                firewall.molecule_snapshot_decoy=zone
+                firewall.snapdecoy=zone
                 suffix\\
           - command: section
             config: firewall
             type: redirect
-            name: molecule_snapshot_decoy
+            name: snapdecoy
             value:
-              name: molecule_snapshot_decoy
+              name: snapdecoy
               src: wan
               dest: lan
               target: DNAT
           - command: section
             config: firewall
             type: zone
-            name: molecule_snapshot_after_backslash
+            name: snapafter
             value:
-              name: molecule_snapshot_after_backslash
+              name: snapafter
               network:
                 - lan
               input: ACCEPT
@@ -1021,7 +1021,7 @@
           vars:
             router_firewall_apply_runtime_changes: false
             router_firewall_zones:
-              molecule_snapshot_decoy:
+              snapdecoy:
                 state: absent
       rescue:
         - name: Record rejection of the header-like section
@@ -1039,7 +1039,7 @@
     - name: Read the redirect after header-like value validation
       community.openwrt.uci:
         command: get
-        key: firewall.molecule_snapshot_decoy
+        key: firewall.snapdecoy
       register: router_firewall_snapshot_decoy
       changed_when: false
 
@@ -1054,7 +1054,7 @@
       vars:
         router_firewall_apply_runtime_changes: false
         router_firewall_zones:
-          molecule_snapshot_after_backslash:
+          snapafter:
             network: null
 
     - name: Read firewall configuration after snapshot parsing test
@@ -1069,10 +1069,10 @@
       ansible.builtin.assert:
         that:
           - >-
-            'firewall.molecule_snapshot_after_backslash=zone'
+            'firewall.snapafter=zone'
             in router_firewall_snapshot_parsing_show.result
           - >-
-            'firewall.molecule_snapshot_after_backslash.network='
+            'firewall.snapafter.network='
             not in router_firewall_snapshot_parsing_show.result
 
     - name: Update a managed firewall zone while unrelated sections exist
