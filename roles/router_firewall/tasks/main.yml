@@ -301,6 +301,46 @@
         {{ ns.results }}
   changed_when: false
 
+- name: Check generated firewall zone sections missing from the snapshot
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ item.key }}"
+  loop: >-
+    {{
+      router_firewall_named_zones.results
+      | selectattr('result', 'equalto', '')
+      | map(attribute='item')
+      | selectattr('key', 'match', '^cfg[0-9a-f]+')
+      | list
+    }}
+  loop_control:
+    label: "{{ item.key }}"
+  register: router_firewall_generated_zone_lookups
+  changed_when: false
+  failed_when: false
+
+- name: Restore generated firewall zone section types from targeted lookups
+  ansible.builtin.set_fact:
+    router_firewall_named_zones:
+      results: >-
+        {%- set ns = namespace(results=[]) -%}
+        {%- for result in router_firewall_named_zones.results -%}
+        {%- set fallback = (
+          router_firewall_generated_zone_lookups.results
+          | selectattr('item.key', 'equalto', result.item.key)
+          | map(attribute='result')
+          | first
+          | default('')
+        ) -%}
+        {%- set ns.results = ns.results + [
+          result | combine({
+            'result': result.result if result.result != '' else fallback
+          })
+        ] -%}
+        {%- endfor -%}
+        {{ ns.results }}
+  changed_when: false
+
 - name: Validate existing named firewall sections
   ansible.builtin.assert:
     that:
