@@ -367,6 +367,102 @@
               The invalid topology failed for an unexpected reason:
               {{ ansible_failed_task.name }}.
 
+    - name: Verify topology inputs must be lists
+      block:
+        - name: Apply a mapping instead of the network device list
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices: {}
+            router_network_bridge_vlans: []
+            router_network_interfaces: {}
+
+        - name: Fail if a mapping is accepted for network devices
+          ansible.builtin.fail:
+            msg: A mapping was accepted for router_network_devices.
+      rescue:
+        - name: Verify the network device container check rejected the mapping
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate network topology container types'
+            fail_msg: >-
+              The invalid device container failed for an unexpected reason:
+              {{ ansible_failed_task.name }}.
+
+    - name: Verify bridge VLAN inputs must be lists
+      block:
+        - name: Apply a mapping instead of the bridge VLAN list
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices: []
+            router_network_bridge_vlans: {}
+            router_network_interfaces: {}
+
+        - name: Fail if a mapping is accepted for bridge VLANs
+          ansible.builtin.fail:
+            msg: A mapping was accepted for router_network_bridge_vlans.
+      rescue:
+        - name: Verify the bridge VLAN container check rejected the mapping
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate network topology container types'
+            fail_msg: >-
+              The invalid bridge VLAN container failed for an unexpected
+              reason: {{ ansible_failed_task.name }}.
+
+    - name: Verify cyclic 802.1Q parent dependencies are rejected
+      block:
+        - name: Apply a topology with cyclic VLAN parent references
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: wan.69
+                type: 8021q
+                ifname: wan.70
+                vid: 69
+              - name: wan.70
+                type: 8021q
+                ifname: wan.69
+                vid: 70
+            router_network_bridge_vlans: []
+            router_network_interfaces: {}
+
+        - name: Fail if cyclic VLAN parent references are accepted
+          ansible.builtin.fail:
+            msg: Cyclic 802.1Q parent references were accepted.
+      rescue:
+        - name: Verify the VLAN parent order check rejected the cycle
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate declared 802.1Q parents precede their children'
+            fail_msg: >-
+              The cyclic topology failed for an unexpected reason:
+              {{ ansible_failed_task.name }}.
+
+    - name: Accept a declared 802.1Q parent before its child
+      ansible.builtin.include_role:
+        name: router_network
+      vars:
+        router_network_devices:
+          - name: wan.69
+            type: 8021q
+            ifname: wan
+            vid: 69
+          - name: wan.69.70
+            type: 8021q
+            ifname: wan.69
+            vid: 70
+        router_network_bridge_vlans: []
+        router_network_interfaces: {}
+
     - name: Read static LAN network settings
       community.openwrt.uci:
         command: get

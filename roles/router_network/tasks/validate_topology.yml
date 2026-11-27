@@ -5,8 +5,10 @@
     that:
       - router_network_devices is sequence
       - router_network_devices is not string
+      - router_network_devices is not mapping
       - router_network_bridge_vlans is sequence
       - router_network_bridge_vlans is not string
+      - router_network_bridge_vlans is not mapping
     fail_msg: >-
       router_network_devices and router_network_bridge_vlans must be lists.
 
@@ -66,6 +68,30 @@
     fail_msg: >-
       802.1Q device '{{ item.name }}' duplicates the parent interface
       and VLAN ID of another 802.1Q device.
+  loop: >-
+    {{ router_network_devices
+       | selectattr('type', 'equalto', '8021q') | list }}
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Validate declared 802.1Q parents precede their children
+  ansible.builtin.assert:
+    that:
+      - >-
+        (router_network_devices
+         | selectattr('name', 'equalto', item.ifname)
+         | selectattr('type', 'equalto', '8021q')
+         | list | length == 0)
+        or
+        (router_network_devices
+         | map(attribute='name') | list).index(item.ifname)
+        <
+        (router_network_devices
+         | map(attribute='name') | list).index(item.name)
+    fail_msg: >-
+      802.1Q parent '{{ item.ifname }}' must be declared before child
+      '{{ item.name }}' when both devices are in router_network_devices.
+      This ordering prevents cyclic VLAN parent dependencies.
   loop: >-
     {{ router_network_devices
        | selectattr('type', 'equalto', '8021q') | list }}
