@@ -235,7 +235,8 @@
           ansible.builtin.fail:
             msg: A physical port was accepted as a member of two bridges.
       rescue:
-        - name: Verify the expected cross-bridge validation rejected the topology
+        - name: >-
+            Verify the expected cross-bridge validation rejected the topology
           ansible.builtin.assert:
             that:
               - >-
@@ -267,7 +268,8 @@
           ansible.builtin.fail:
             msg: Duplicate 802.1Q parent and VLAN ID pairs were accepted.
       rescue:
-        - name: Verify the expected 802.1Q identity validation rejected the topology
+        - name: >-
+            Verify the expected 802.1Q identity validation rejected the topology
           ansible.builtin.assert:
             that:
               - >-
@@ -298,7 +300,9 @@
         - name: Verify device validation rejected the self-parenting device
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name == 'Validate network device definitions'
+              - >-
+                ansible_failed_task.name ==
+                'Validate network device definitions'
             fail_msg: >-
               The invalid topology failed for an unexpected reason:
               {{ ansible_failed_task.name }}.
@@ -324,7 +328,9 @@
         - name: Verify device validation rejected the boolean VLAN ID
           ansible.builtin.assert:
             that:
-              - ansible_failed_task.name == 'Validate network device definitions'
+              - >-
+                ansible_failed_task.name ==
+                'Validate network device definitions'
             fail_msg: >-
               The invalid topology failed for an unexpected reason:
               {{ ansible_failed_task.name }}.
