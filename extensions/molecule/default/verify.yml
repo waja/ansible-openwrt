@@ -754,6 +754,57 @@
         that:
           - router_firewall_removed_anonymous_zone.result_list | length == 0
 
+    - name: Create an anonymous zone for generated-ID removal
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: generated_id_remove
+
+    - name: Find the generated ID of the anonymous zone
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: generated_id_remove
+      register: router_firewall_generated_zone
+      changed_when: false
+
+    - name: Remove an anonymous zone by its generated section ID
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones: >-
+          {{
+            {
+              router_firewall_generated_zone.result_list[0]: {
+                'state': 'absent'
+              }
+            }
+          }}
+
+    - name: Verify the generated-ID anonymous zone was removed
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: generated_id_remove
+      register: router_firewall_generated_zone_after_removal
+      changed_when: false
+
+    - name: Assert the generated-ID anonymous zone is absent
+      ansible.builtin.assert:
+        that:
+          - router_firewall_generated_zone.result_list | length == 1
+          - router_firewall_generated_zone_after_removal.result_list | length == 0
+
     - name: Create a zone and dependent firewall objects
       community.openwrt.uci:
         autocommit: true
