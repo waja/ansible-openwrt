@@ -31,7 +31,9 @@
         item.type != '8021q' or
         (item.ifname is defined and item.ifname is string and
          item.ifname | length > 0 and
+         item.name != item.ifname and
          item.vid is defined and item.vid is integer and
+         item.vid is not boolean and
          item.vid >= 1 and item.vid <= 4094)
     fail_msg: >-
       Each network device needs a non-empty name and a supported type
@@ -51,6 +53,24 @@
          | map(attribute='name') | unique(case_sensitive=true) | list | length)
     fail_msg: "router_network_devices contains duplicate device names."
   when: router_network_devices | length > 0
+
+- name: Validate unique 802.1Q parent and VLAN IDs
+  ansible.builtin.assert:
+    that:
+      - >-
+        (router_network_devices
+         | selectattr('type', 'equalto', '8021q')
+         | selectattr('ifname', 'equalto', item.ifname)
+         | selectattr('vid', 'equalto', item.vid)
+         | list | length) == 1
+    fail_msg: >-
+      802.1Q device '{{ item.name }}' duplicates the parent interface
+      and VLAN ID of another 802.1Q device.
+  loop: >-
+    {{ router_network_devices
+       | selectattr('type', 'equalto', '8021q') | list }}
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: Validate bridge port names
   ansible.builtin.assert:
@@ -83,6 +103,28 @@
   loop_control:
     label: "{{ item.name }}"
 
+- name: Validate bridge ports are assigned to only one bridge
+  ansible.builtin.assert:
+    that:
+      - >-
+        (router_network_devices
+         | selectattr('type', 'equalto', 'bridge')
+         | selectattr('ports', 'defined')
+         | map(attribute='ports') | flatten | length)
+        ==
+        (router_network_devices
+         | selectattr('type', 'equalto', 'bridge')
+         | selectattr('ports', 'defined')
+         | map(attribute='ports') | flatten
+         | unique(case_sensitive=true) | list | length)
+    fail_msg: >-
+      A physical port cannot be assigned to more than one bridge.
+  when: >-
+    (router_network_devices
+     | selectattr('type', 'equalto', 'bridge')
+     | selectattr('ports', 'defined')
+     | map(attribute='ports') | flatten | length) > 0
+
 - name: Validate bridge VLAN definitions
   ansible.builtin.assert:
     that:
@@ -91,6 +133,7 @@
       - item.device is string
       - item.vlan is defined
       - item.vlan is integer
+      - item.vlan is not boolean
       - item.vlan >= 1
       - item.vlan <= 4094
       - item.ports is defined
