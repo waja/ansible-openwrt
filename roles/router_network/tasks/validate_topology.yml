@@ -1,0 +1,215 @@
+# roles/router_network/tasks/validate_topology.yml
+---
+- name: Validate network topology container types
+  ansible.builtin.assert:
+    that:
+      - router_network_devices is sequence
+      - router_network_devices is not string
+      - router_network_bridge_vlans is sequence
+      - router_network_bridge_vlans is not string
+    fail_msg: >-
+      router_network_devices and router_network_bridge_vlans must be lists.
+
+- name: Validate network device definitions
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name is defined
+      - item.name is string
+      - item.name | length > 0
+      - item.type is defined
+      - item.type in ['bridge', '8021q']
+      - >-
+        item.type != 'bridge' or
+        (item.ports is not defined or
+         (item.ports is sequence and item.ports is not string))
+      - >-
+        item.type != 'bridge' or
+        item.vlan_filtering is not defined or
+        item.vlan_filtering is boolean
+      - >-
+        item.type != '8021q' or
+        (item.ifname is defined and item.ifname is string and
+         item.ifname | length > 0 and
+         item.vid is defined and item.vid is integer and
+         item.vid >= 1 and item.vid <= 4094)
+    fail_msg: >-
+      Each network device needs a non-empty name and a supported type
+      ('bridge' or '8021q'). Bridges may define a list of ports;
+      802.1Q devices require a parent ifname and an integer VID from 1 to 4094.
+  loop: "{{ router_network_devices }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+
+- name: Validate unique network device names
+  ansible.builtin.assert:
+    that:
+      - >-
+        (router_network_devices | map(attribute='name') | list | length)
+        ==
+        (router_network_devices
+         | map(attribute='name') | unique(case_sensitive=true) | list | length)
+    fail_msg: "router_network_devices contains duplicate device names."
+  when: router_network_devices | length > 0
+
+- name: Validate bridge port names
+  ansible.builtin.assert:
+    that:
+      - item.1 is string
+      - item.1 | length > 0
+      - item.1 != item.0.name
+    fail_msg: >-
+      Bridge '{{ item.0.name }}' contains an invalid or self-referencing port
+      '{{ item.1 }}'.
+  loop: >-
+    {{ router_network_devices
+       | selectattr('type', 'equalto', 'bridge')
+       | list
+       | subelements('ports', skip_missing=True) }}
+  loop_control:
+    label: "{{ item.0.name }} -> {{ item.1 }}"
+
+- name: Validate unique bridge port names
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.ports | length ==
+        item.ports | unique(case_sensitive=true) | list | length
+    fail_msg: "Bridge '{{ item.name }}' contains duplicate port names."
+  loop: >-
+    {{ router_network_devices
+       | selectattr('type', 'equalto', 'bridge')
+       | selectattr('ports', 'defined') | list }}
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Validate bridge VLAN definitions
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.device is defined
+      - item.device is string
+      - item.vlan is defined
+      - item.vlan is integer
+      - item.vlan >= 1
+      - item.vlan <= 4094
+      - item.ports is defined
+      - item.ports is sequence
+      - item.ports is not string
+      - item.local is not defined or item.local is boolean
+    fail_msg: >-
+      Each bridge VLAN needs a bridge device, a VLAN ID from 1 to 4094,
+      a port list, and an optional boolean local flag.
+  loop: "{{ router_network_bridge_vlans }}"
+  loop_control:
+    label: >-
+      {{ item.device | default('unnamed') }} VLAN
+      {{ item.vlan | default('?') }}
+
+- name: Validate bridge VLAN port definitions
+  ansible.builtin.assert:
+    that:
+      - item.1 is mapping
+      - item.1.name is defined
+      - item.1.name is string
+      - item.1.name | length > 0
+      - item.1.mode is defined
+      - item.1.mode in ['tagged', 'untagged']
+      - item.1.pvid is not defined or item.1.pvid is boolean
+      - >-
+        item.1.pvid is not defined or not item.1.pvid or
+        item.1.mode == 'untagged'
+    fail_msg: >-
+      Bridge VLAN '{{ item.0.device }}' contains a port without a valid
+      name, tagged/untagged mode, or boolean PVID setting. PVID membership
+      must be untagged.
+  loop: "{{ router_network_bridge_vlans | subelements('ports') }}"
+  loop_control:
+    label: >-
+      {{ item.0.device }} VLAN {{ item.0.vlan }} ->
+      {{ item.1.name | default('unnamed') }}
+
+- name: Validate bridge VLAN references and membership
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.device in
+        (router_network_devices
+         | selectattr('type', 'equalto', 'bridge')
+         | map(attribute='name') | list)
+      - >-
+        (item.ports | map(attribute='name') | list | length)
+        ==
+        (item.ports | map(attribute='name')
+         | unique(case_sensitive=true) | list | length)
+      - >-
+        item.ports | selectattr('mode', 'defined')
+        | rejectattr('mode', 'in', ['tagged', 'untagged']) | list | length == 0
+      - >-
+        (item.ports | map(attribute='name') | list
+         | difference(
+             router_network_devices
+             | selectattr('name', 'equalto', item.device)
+             | map(attribute='ports') | first | default([])
+           )
+         | length) == 0
+      - >-
+        (router_network_devices
+         | selectattr('name', 'equalto', item.device)
+         | selectattr('vlan_filtering', 'defined')
+         | selectattr('vlan_filtering', 'equalto', true)
+         | list | length) == 1
+    fail_msg: >-
+      Bridge VLAN '{{ item.device }}' VLAN {{ item.vlan }} must reference a
+      declared VLAN-aware bridge, use only declared bridge ports, have unique
+      port names, and use tagged/untagged modes.
+  loop: "{{ router_network_bridge_vlans }}"
+  loop_control:
+    label: "{{ item.device }} VLAN {{ item.vlan }}"
+
+- name: Validate unique VLAN IDs per bridge
+  ansible.builtin.assert:
+    that:
+      - >-
+        (router_network_bridge_vlans
+         | selectattr('device', 'equalto', item.device)
+         | map(attribute='vlan') | list | length)
+        ==
+        (router_network_bridge_vlans
+         | selectattr('device', 'equalto', item.device)
+         | map(attribute='vlan') | unique | list | length)
+    fail_msg: >-
+      Bridge '{{ item.device }}' contains duplicate VLAN IDs.
+  loop: "{{ router_network_bridge_vlans }}"
+  loop_control:
+    label: "{{ item.device }} VLAN {{ item.vlan }}"
+
+- name: Validate unique PVID assignment per bridge port
+  ansible.builtin.assert:
+    that:
+      - >-
+        (router_network_bridge_vlans
+         | selectattr('device', 'equalto', item.0.device)
+         | map(attribute='ports') | flatten
+         | selectattr('name', 'equalto', item.1.name)
+         | selectattr('pvid', 'defined')
+         | selectattr('pvid', 'equalto', true)
+         | list | length)
+        ==
+        (router_network_bridge_vlans
+         | selectattr('device', 'equalto', item.0.device)
+         | selectattr('vlan', 'equalto', item.0.vlan)
+         | map(attribute='ports') | flatten
+         | selectattr('name', 'equalto', item.1.name)
+         | selectattr('pvid', 'defined')
+         | selectattr('pvid', 'equalto', true)
+         | list | length)
+    fail_msg: >-
+      Bridge port '{{ item.1.name }}' on '{{ item.0.device }}' is marked
+      as PVID in more than one VLAN.
+  loop: "{{ router_network_bridge_vlans | subelements('ports') }}"
+  loop_control:
+    label: >-
+      {{ item.0.device }} VLAN {{ item.0.vlan }} ->
+      {{ item.1.name | default('unnamed') }}
+  when: item.1.pvid | default(false) | bool

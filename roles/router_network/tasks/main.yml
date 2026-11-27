@@ -1,5 +1,8 @@
 # roles/router_network/tasks/main.yml
 ---
+- name: Validate declarative network topology
+  ansible.builtin.import_tasks: validate_topology.yml
+
 - name: Validate network interface configuration
   ansible.builtin.assert:
     that:
