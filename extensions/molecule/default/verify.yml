@@ -1369,7 +1369,9 @@
       register: router_firewall_generated_null_rule_dest_port
       changed_when: false
       failed_when: false
-      when: router_firewall_generated_null_rule_after_removal.result_list | length == 1
+      when: >-
+        router_firewall_generated_null_rule_after_removal.result_list
+        | length == 1
 
     - name: Verify null option removal works for an adopted anonymous rule
       ansible.builtin.assert:
