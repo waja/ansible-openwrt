@@ -1370,9 +1370,7 @@
         that:
           - router_firewall_generated_null_rule_after_removal.result_list | length == 1
           - router_firewall_generated_null_rule_section.result == 'rule'
-          - >-
-            router_firewall_generated_null_rule_dest_port.result
-            | default('') == ''
+          - router_firewall_generated_null_rule_dest_port.result == ''
 
     - name: Create an anonymous firewall rule for adoption
       community.openwrt.uci:
