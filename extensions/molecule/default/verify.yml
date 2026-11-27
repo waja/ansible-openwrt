@@ -1346,10 +1346,16 @@
     - name: Read the anonymous rule section after null removal
       community.openwrt.uci:
         command: get
-        key: "firewall.{{ router_firewall_generated_null_rule_after_removal.result_list[0] }}"
+        key: >-
+          {{
+            'firewall.'
+            ~ router_firewall_generated_null_rule_after_removal.result_list[0]
+          }}
       register: router_firewall_generated_null_rule_section
       changed_when: false
-      when: router_firewall_generated_null_rule_after_removal.result_list | length == 1
+      when: >-
+        router_firewall_generated_null_rule_after_removal.result_list
+        | length == 1
 
     - name: Read the anonymous rule option after null removal
       community.openwrt.uci:
@@ -1368,7 +1374,9 @@
     - name: Verify null option removal works for an adopted anonymous rule
       ansible.builtin.assert:
         that:
-          - router_firewall_generated_null_rule_after_removal.result_list | length == 1
+          - >-
+            router_firewall_generated_null_rule_after_removal.result_list
+            | length == 1
           - router_firewall_generated_null_rule_section.result == 'rule'
           - router_firewall_generated_null_rule_dest_port.result == ''
 
