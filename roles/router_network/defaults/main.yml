@@ -9,6 +9,11 @@ router_network_interface_mode: dhcp
 # Optional static settings are gateway and dns (a list of DNS servers).
 router_network_interfaces: {}
 
+# Declarative wired topology schema. These variables are validated before
+# changes; device/VLAN UCI management is added in subsequent steps.
+router_network_devices: []
+router_network_bridge_vlans: []
+
 # Optional DHCP server settings are nested under each interface:
 # dhcp:
 #   enabled: true

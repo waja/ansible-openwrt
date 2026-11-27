@@ -143,3 +143,61 @@ router_network_interfaces:
 
 The example is illustrative only; choose addresses, routes, and DHCP
 settings that match the actual network topology.
+
+## Declarative topology schema (validation foundation)
+
+Two optional lists define the intended input model for wired network
+topology. This initial implementation validates their structure before
+applying existing interface configuration; it does not yet create or
+modify network devices or DSA bridge VLAN entries.
+
+`router_network_devices` accepts bridge and ordinary 802.1Q VLAN devices:
+
+```yaml
+router_network_devices:
+  - name: br-lan
+    type: bridge
+    vlan_filtering: true
+    ports:
+      - lan1
+      - lan2
+  - name: wan.69
+    type: 8021q
+    ifname: wan
+    vid: 69
+```
+
+Bridge ports are optional, allowing empty bridges. The optional
+`vlan_filtering` flag must be boolean; it must be `true` when bridge VLAN
+entries are defined for that bridge. An 802.1Q device requires a parent
+`ifname` and an integer VLAN ID from 1 through 4094. Its name must differ
+from its parent, and each parent/VLAN ID pair must be unique. Device names
+must be unique, as must the member ports within each bridge. A physical
+port may belong to only one bridge. Device and port names are case-sensitive.
+
+`router_network_bridge_vlans` describes DSA bridge VLAN membership using
+explicit semantics rather than UCI's compact port notation:
+
+```yaml
+router_network_bridge_vlans:
+  - device: br-lan
+    vlan: 69
+    local: true
+    ports:
+      - name: lan1
+        mode: untagged
+        pvid: true
+      - name: lan2
+        mode: tagged
+```
+
+Each entry must reference a VLAN-aware bridge declared in
+`router_network_devices`, and every listed port must be a member of that
+bridge. VLAN IDs must be unique per bridge, as must port names within an
+entry. Modes are `tagged` or `untagged`; PVID membership must be untagged.
+Multiple access ports may be marked as PVID in the same VLAN, but each
+bridge port may be marked as PVID in only one VLAN. The optional `local`
+flag must be boolean.
+
+**Important:** These topology variables are validation-only in this
+implementation step. They do not yet configure the router's topology.

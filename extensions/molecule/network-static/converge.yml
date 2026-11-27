@@ -42,6 +42,34 @@
         name: router_network
       vars:
         router_network_interface_mode: static
+        router_network_devices:
+          - name: br-lan
+            type: bridge
+            vlan_filtering: true
+            ports:
+              - lan1
+              - lan2
+              - lan3
+              - wan.69
+          - name: wan.69
+            type: 8021q
+            ifname: wan
+            vid: 69
+          - name: br-empty
+            type: bridge
+        router_network_bridge_vlans:
+          - device: br-lan
+            vlan: 69
+            local: true
+            ports:
+              - name: lan1
+                mode: untagged
+                pvid: true
+              - name: lan2
+                mode: untagged
+                pvid: true
+              - name: lan3
+                mode: tagged
         router_network_interfaces:
           lan:
             ipaddr: 192.0.2.1
@@ -51,6 +79,293 @@
               - 192.0.2.53
             dhcp:
               enabled: true
+
+    - name: Verify a bridge port cannot be PVID in multiple VLANs
+      block:
+        - name: Apply an invalid topology with conflicting PVID assignments
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: br-lan
+                type: bridge
+                vlan_filtering: true
+                ports:
+                  - lan1
+            router_network_bridge_vlans:
+              - device: br-lan
+                vlan: 69
+                ports:
+                  - name: lan1
+                    mode: untagged
+                    pvid: true
+              - device: br-lan
+                vlan: 70
+                ports:
+                  - name: lan1
+                    mode: untagged
+                    pvid: true
+            router_network_interfaces: {}
+
+        - name: Fail if conflicting PVID assignments are accepted
+          ansible.builtin.fail:
+            msg: >-
+              The topology validator accepted a bridge port assigned as
+              PVID in more than one VLAN.
+      rescue:
+        - name: Verify the expected PVID validation rejected the topology
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate unique PVID assignment per bridge port'
+            fail_msg: >-
+              The invalid topology failed for an unexpected reason:
+              {{ ansible_failed_task.name }}.
+
+    - name: Verify bridge VLANs require VLAN filtering
+      block:
+        - name: Apply a VLAN to a bridge without VLAN filtering
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: br-lan
+                type: bridge
+                vlan_filtering: false
+                ports:
+                  - lan1
+            router_network_bridge_vlans:
+              - device: br-lan
+                vlan: 69
+                ports:
+                  - name: lan1
+                    mode: untagged
+            router_network_interfaces: {}
+
+        - name: Fail if VLAN filtering is not required
+          ansible.builtin.fail:
+            msg: >-
+              Bridge VLAN validation accepted a bridge without VLAN filtering.
+      rescue:
+        - name: Verify VLAN filtering validation rejected the topology
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate bridge VLAN references and membership'
+
+    - name: Verify bridge VLAN membership references declared ports
+      block:
+        - name: Apply a VLAN with an undeclared bridge port
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: br-lan
+                type: bridge
+                vlan_filtering: true
+                ports:
+                  - lan1
+            router_network_bridge_vlans:
+              - device: br-lan
+                vlan: 69
+                ports:
+                  - name: lan2
+                    mode: tagged
+            router_network_interfaces: {}
+
+        - name: Fail if an undeclared bridge port is accepted
+          ansible.builtin.fail:
+            msg: Bridge VLAN validation accepted an undeclared bridge port.
+      rescue:
+        - name: Verify bridge port membership validation rejected the topology
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate bridge VLAN references and membership'
+
+    - name: Accept case-distinct device and port names
+      ansible.builtin.include_role:
+        name: router_network
+      vars:
+        router_network_devices:
+          - name: br-A
+            type: bridge
+            vlan_filtering: true
+            ports:
+              - lan-A
+              - lan-a
+          - name: br-a
+            type: bridge
+            ports:
+              - lan
+        router_network_bridge_vlans:
+          - device: br-A
+            vlan: 69
+            ports:
+              - name: lan-A
+                mode: untagged
+                pvid: true
+              - name: lan-a
+                mode: untagged
+                pvid: true
+        router_network_interfaces: {}
+
+    - name: Verify a physical port cannot belong to multiple bridges
+      block:
+        - name: Apply a topology that assigns one port to two bridges
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: br-lan
+                type: bridge
+                ports:
+                  - lan1
+              - name: br-guest
+                type: bridge
+                ports:
+                  - lan1
+            router_network_bridge_vlans: []
+            router_network_interfaces: {}
+
+        - name: Fail if a port assigned to two bridges is accepted
+          ansible.builtin.fail:
+            msg: A physical port was accepted as a member of two bridges.
+      rescue:
+        - name: >-
+            Verify the expected cross-bridge validation rejected the topology
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate bridge ports are assigned to only one bridge'
+            fail_msg: >-
+              The invalid topology failed for an unexpected reason:
+              {{ ansible_failed_task.name }}.
+
+    - name: Verify 802.1Q parent and VLAN ID pairs are unique
+      block:
+        - name: Apply duplicate 802.1Q parent and VLAN ID definitions
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: wan.69
+                type: 8021q
+                ifname: wan
+                vid: 69
+              - name: wan-vlan69
+                type: 8021q
+                ifname: wan
+                vid: 69
+            router_network_bridge_vlans: []
+            router_network_interfaces: {}
+
+        - name: Fail if duplicate 802.1Q identities are accepted
+          ansible.builtin.fail:
+            msg: Duplicate 802.1Q parent and VLAN ID pairs were accepted.
+      rescue:
+        - name: >-
+            Verify the expected 802.1Q identity validation rejected the topology
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate unique 802.1Q parent and VLAN IDs'
+            fail_msg: >-
+              The invalid topology failed for an unexpected reason:
+              {{ ansible_failed_task.name }}.
+
+    - name: Verify an 802.1Q device cannot parent itself
+      block:
+        - name: Apply an 802.1Q device with itself as parent
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: wan
+                type: 8021q
+                ifname: wan
+                vid: 69
+            router_network_bridge_vlans: []
+            router_network_interfaces: {}
+
+        - name: Fail if a self-parenting 802.1Q device is accepted
+          ansible.builtin.fail:
+            msg: A self-parenting 802.1Q device was accepted.
+      rescue:
+        - name: Verify device validation rejected the self-parenting device
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate network device definitions'
+            fail_msg: >-
+              The invalid topology failed for an unexpected reason:
+              {{ ansible_failed_task.name }}.
+
+    - name: Verify a boolean is not accepted as an 802.1Q VLAN ID
+      block:
+        - name: Apply an 802.1Q device with a boolean VLAN ID
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: wan.1
+                type: 8021q
+                ifname: wan
+                vid: true
+            router_network_bridge_vlans: []
+            router_network_interfaces: {}
+
+        - name: Fail if a boolean 802.1Q VLAN ID is accepted
+          ansible.builtin.fail:
+            msg: A boolean was accepted as an 802.1Q VLAN ID.
+      rescue:
+        - name: Verify device validation rejected the boolean VLAN ID
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate network device definitions'
+            fail_msg: >-
+              The invalid topology failed for an unexpected reason:
+              {{ ansible_failed_task.name }}.
+
+    - name: Verify a boolean is not accepted as a bridge VLAN ID
+      block:
+        - name: Apply a bridge VLAN with a boolean VLAN ID
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: br-lan
+                type: bridge
+                vlan_filtering: true
+                ports:
+                  - lan1
+            router_network_bridge_vlans:
+              - device: br-lan
+                vlan: true
+                ports:
+                  - name: lan1
+                    mode: untagged
+            router_network_interfaces: {}
+
+        - name: Fail if a boolean bridge VLAN ID is accepted
+          ansible.builtin.fail:
+            msg: A boolean was accepted as a bridge VLAN ID.
+      rescue:
+        - name: Verify bridge VLAN validation rejected the boolean VLAN ID
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Validate bridge VLAN definitions'
+            fail_msg: >-
+              The invalid topology failed for an unexpected reason:
+              {{ ansible_failed_task.name }}.
 
     - name: Read static LAN network settings
       community.openwrt.uci:
