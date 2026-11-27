@@ -169,8 +169,8 @@ router_network_devices:
 
 Bridge ports are optional, allowing empty bridges. The optional
 `vlan_filtering` flag must be boolean; it must be `true` when bridge VLAN
-entries are defined for that bridge. Both topology variables must be lists.
-An 802.1Q device requires a parent `ifname` and an integer VLAN ID from 1
+entries are defined for that bridge. Both topology variables and all nested bridge/VLAN `ports` values must
+be lists. An 802.1Q device requires a parent `ifname` and an integer VLAN ID from 1
 through 4094. Its name must differ from its parent, and each parent/VLAN ID
 pair must be unique. When an 802.1Q parent is itself declared as an 802.1Q
 device, declare that parent before its child in `router_network_devices`.

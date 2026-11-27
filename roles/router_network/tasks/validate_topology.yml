@@ -24,7 +24,8 @@
       - >-
         item.type != 'bridge' or
         (item.ports is not defined or
-         (item.ports is sequence and item.ports is not string))
+         (item.ports is sequence and item.ports is not string and
+          item.ports is not mapping))
       - >-
         item.type != 'bridge' or
         item.vlan_filtering is not defined or
@@ -165,6 +166,7 @@
       - item.ports is defined
       - item.ports is sequence
       - item.ports is not string
+      - item.ports is not mapping
       - item.local is not defined or item.local is boolean
     fail_msg: >-
       Each bridge VLAN needs a bridge device, a VLAN ID from 1 to 4094,
