@@ -1333,23 +1333,43 @@
             name: molecule_generated_null_rule
             dest_port: null
 
+    - name: Find the anonymous rule after null removal
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_generated_null_rule
+      register: router_firewall_generated_null_rule_after_removal
+      changed_when: false
+
+    - name: Read the anonymous rule section after null removal
+      community.openwrt.uci:
+        command: get
+        key: "firewall.{{ router_firewall_generated_null_rule_after_removal.result_list[0] }}"
+      register: router_firewall_generated_null_rule_section
+      changed_when: false
+      when: router_firewall_generated_null_rule_after_removal.result_list | length == 1
+
     - name: Read the anonymous rule option after null removal
       community.openwrt.uci:
         command: get
         key: >-
           {{
             'firewall.'
-            ~ router_firewall_generated_null_rule.result_list[0]
+            ~ router_firewall_generated_null_rule_after_removal.result_list[0]
             ~ '.dest_port'
           }}
       register: router_firewall_generated_null_rule_dest_port
       changed_when: false
       failed_when: false
+      when: router_firewall_generated_null_rule_after_removal.result_list | length == 1
 
     - name: Verify null option removal works for an adopted anonymous rule
       ansible.builtin.assert:
         that:
-          - router_firewall_generated_null_rule.result_list | length == 1
+          - router_firewall_generated_null_rule_after_removal.result_list | length == 1
+          - router_firewall_generated_null_rule_section.result == 'rule'
           - >-
             router_firewall_generated_null_rule_dest_port.result
             | default('') == ''
