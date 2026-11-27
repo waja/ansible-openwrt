@@ -1337,8 +1337,11 @@
       community.openwrt.uci:
         command: get
         key: >-
-          firewall.{{ router_firewall_generated_null_rule.result_list[0] }}
-          .dest_port
+          {{
+            'firewall.'
+            ~ router_firewall_generated_null_rule.result_list[0]
+            ~ '.dest_port'
+          }}
       register: router_firewall_generated_null_rule_dest_port
       changed_when: false
       failed_when: false
