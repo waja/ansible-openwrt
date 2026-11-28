@@ -765,15 +765,32 @@
             key: firewall.@zone[-1].name
             value: generated_id_remove
 
-    - name: Find the generated ID of the anonymous zone
-      community.openwrt.uci:
-        command: find_all
-        config: firewall
-        type: zone
-        option: name
-        find: generated_id_remove
-      register: router_firewall_generated_zone
+    - name: Read firewall configuration with generated section IDs
+      ansible.builtin.command:
+        argv:
+          - uci
+          - -X
+          - show
+          - firewall
+      register: router_firewall_generated_zone_show
       changed_when: false
+
+    - name: Resolve the actual generated ID of the anonymous zone
+      ansible.builtin.set_fact:
+        router_firewall_generated_zone_id: >-
+          {{
+            router_firewall_generated_zone_show.stdout
+            | regex_findall(
+                "(?ms)^firewall\\.(cfg[0-9a-f]+)=zone"
+                ~ "(?:(?!^firewall\\.).*\\n)*?"
+                ~ "^firewall\\.\\1\\.name='generated_id_remove'$"
+              )
+          }}
+
+    - name: Assert the generated zone ID was resolved
+      ansible.builtin.assert:
+        that:
+          - router_firewall_generated_zone_id | length == 1
 
     - name: Remove an anonymous zone by its generated section ID
       ansible.builtin.include_role:
@@ -783,7 +800,7 @@
         router_firewall_zones: >-
           {{
             {
-              router_firewall_generated_zone.result_list[0]: {
+              router_firewall_generated_zone_id[0]: {
                 'state': 'absent'
               }
             }
@@ -806,6 +823,96 @@
           - >-
             router_firewall_generated_zone_after_removal.result_list
             | length == 0
+
+    - name: Create an anonymous zone referenced by a firewall rule
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: generated_id_ref
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: generated_id_ref_rule
+          - command: set
+            key: firewall.@rule[-1].src
+            value: generated_id_ref
+
+    - name: Read firewall configuration to resolve the referenced zone ID
+      ansible.builtin.command:
+        argv:
+          - uci
+          - -X
+          - show
+          - firewall
+      register: router_firewall_generated_ref_show
+      changed_when: false
+
+    - name: Resolve the actual ID of the referenced anonymous zone
+      ansible.builtin.set_fact:
+        router_firewall_generated_ref_zone_id: >-
+          {{
+            router_firewall_generated_ref_show.stdout
+            | regex_findall(
+                "(?ms)^firewall\\.(cfg[0-9a-f]+)=zone"
+                ~ "(?:(?!^firewall\\.).*\\n)*?"
+                ~ "^firewall\\.\\1\\.name='generated_id_ref'$"
+              )
+          }}
+
+    - name: Assert the referenced generated zone ID was resolved
+      ansible.builtin.assert:
+        that:
+          - router_firewall_generated_ref_zone_id | length == 1
+
+    - name: Capture reference validation for a generated-ID zone
+      block:
+        - name: Attempt to remove a referenced zone by generated ID
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones: >-
+              {{
+                {
+                  router_firewall_generated_ref_zone_id[0]: {
+                    'state': 'absent'
+                  }
+                }
+              }}
+      rescue:
+        - name: Record the generated-ID reference validation failure
+          ansible.builtin.set_fact:
+            router_firewall_generated_ref_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Assert generated-ID zone removal was rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_generated_ref_failure
+            == 'Reject removal of referenced firewall zones'
+
+    - name: Verify the referenced generated-ID zone remains
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: generated_id_ref
+      register: router_firewall_generated_ref_after_removal
+      changed_when: false
+
+    - name: Assert the referenced generated-ID zone still exists
+      ansible.builtin.assert:
+        that:
+          - router_firewall_generated_ref_after_removal.result_list | length == 1
 
     - name: Create a zone and dependent firewall objects
       community.openwrt.uci:
