@@ -341,6 +341,45 @@
         {{ ns.results }}
   changed_when: false
 
+- name: Read names of generated firewall zones missing from the snapshot
+  community.openwrt.uci:
+    command: get
+    key: "firewall.{{ item.item.key }}.name"
+  loop: >-
+    {{
+      router_firewall_named_zones.results
+      | selectattr('result', 'equalto', 'zone')
+      | selectattr('item.key', 'match', '^cfg[0-9a-f]+')
+      | list
+    }}
+  loop_control:
+    label: "{{ item.item.key }}"
+  register: router_firewall_generated_zone_name_lookups
+  changed_when: false
+
+- name: Restore generated firewall zone names
+  ansible.builtin.set_fact:
+    router_firewall_named_zones:
+      results: >-
+        {%- set ns = namespace(results=[]) -%}
+        {%- for result in router_firewall_named_zones.results -%}
+        {%- set fallback = (
+          router_firewall_generated_zone_name_lookups.results
+          | selectattr('item.item.key', 'equalto', result.item.key)
+          | map(attribute='result')
+          | first
+          | default('')
+        ) -%}
+        {%- set ns.results = ns.results + [
+          result | combine({
+            'name': result.item.value.name | default(fallback, true)
+                    | default(result.item.key)
+          })
+        ] -%}
+        {%- endfor -%}
+        {{ ns.results }}
+  changed_when: false
+
 - name: Validate existing named firewall sections
   ansible.builtin.assert:
     that:
@@ -389,10 +428,16 @@
     config: firewall
     type: zone
     option: name
-    find: "{{ item.value.name | default(item.key) }}"
-  loop: "{{ router_firewall_zones | dict2items }}"
+    find: "{{ item.1.name }}"
+  loop: >-
+    {{
+      router_firewall_zones
+      | dict2items
+      | zip(router_firewall_named_zones.results)
+      | list
+    }}
   loop_control:
-    label: "{{ item.key }}"
+    label: "{{ item.0.key }}"
   register: router_firewall_matching_zones
   changed_when: false
 
@@ -428,7 +473,7 @@
     router_firewall_zone_reference_queries: >-
       {{
         router_firewall_zone_reference_queries + [{
-          'zone_name': item.1.0.value.name | default(item.1.0.key),
+          'zone_name': item.1.1.name,
           'type': item.0.0,
           'option': item.0.1
         }]
