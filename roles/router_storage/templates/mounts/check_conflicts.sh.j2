@@ -1,12 +1,12 @@
 set -eu
-lower() { printf '%s\\n' "$1" | tr 'A-Z' 'a-z'; }
+lower() { printf '%s\n' "$1" | tr 'A-Z' 'a-z'; }
 name='router_storage_{{ storage_mount_name }}'
 uuid="$(lower '{{ storage_mount_uuid }}')"
 target='{{ storage_mount_target }}'
 probe_output='{{ storage_mount_probe_output }}'
-device="$(printf '%s\\n' "$probe_output" | sed -n 's/^device=//p')"
+device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
 block_info="$(block info)"
-block_line="$(printf '%s\\n' "$block_info" | awk -v uuid="$uuid" '
+block_line="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
   {
     uuid_field = ""
     if (match($0, /^[^[:space:]]+[[:space:]]+UUID="[^"]+"/)) {
@@ -17,8 +17,8 @@ block_line="$(printf '%s\\n' "$block_info" | awk -v uuid="$uuid" '
     if (tolower(uuid_field) == uuid) print $0
   }
 ')"
-current_label="$(printf '%s\\n' "$block_line" |
-  sed -n 's/.*LABEL="\\([^"]*\\)".*/\\1/p')"
+current_label="$(printf '%s\n' "$block_line" |
+  sed -n 's/.*LABEL="\([^"]*\)".*/\1/p')"
 if uci -q get "fstab.$name" >/dev/null 2>&1; then
   section_type="$(uci -q get "fstab.$name")"
   if [ "$section_type" != mount ]; then
@@ -46,8 +46,8 @@ if ! fstab_config="$(uci -q show fstab 2>/dev/null)"; then
   echo "Unable to read existing fstab configuration" >&2
   exit 1
 fi
-sections="$(printf '%s\\n' "$fstab_config" | \\
-  sed -n 's/^fstab\\.\\([^.=]*\\)\\..*=.*/\\1/p' | sort -u)"
+sections="$(printf '%s\n' "$fstab_config" | \
+  sed -n 's/^fstab\.\([^.=]*\)\..*=.*/\1/p' | sort -u)"
 for section in $sections; do
   [ "$section" = "$name" ] && continue
   section_enabled="$(uci -q get "fstab.$section.enabled" 2>/dev/null ||
@@ -57,9 +57,9 @@ for section in $sections; do
   section_uuid="$(lower "$section_uuid")"
   section_label="$(uci -q get "fstab.$section.label" 2>/dev/null || true)"
   section_target="$(uci -q get "fstab.$section.target" 2>/dev/null || true)"
-  section_target_normalized="$(printf '%s\\n' "$section_target" |
-    sed -e 's#//*#/#g' -e ':a' -e 's#/\\./#/#;ta' \\
-      -e 's#/\\.$#/#')"
+  section_target_normalized="$(printf '%s\n' "$section_target" |
+    sed -e 's#//*#/#g' -e ':a' -e 's#/\./#/#;ta' \
+      -e 's#/\.$#/#')"
   case "$section_target_normalized" in
     */)
       [ "$section_target_normalized" = "/" ] ||
