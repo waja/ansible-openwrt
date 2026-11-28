@@ -169,11 +169,16 @@ router_network_devices:
 
 Bridge ports are optional, allowing empty bridges. The optional
 `vlan_filtering` flag must be boolean; it must be `true` when bridge VLAN
-entries are defined for that bridge. An 802.1Q device requires a parent
-`ifname` and an integer VLAN ID from 1 through 4094. Its name must differ
-from its parent, and each parent/VLAN ID pair must be unique. Device names
-must be unique, as must the member ports within each bridge. A physical
-port may belong to only one bridge. Device and port names are case-sensitive.
+entries are defined for that bridge. Both topology variables and all
+nested bridge/VLAN `ports` values must be lists. An 802.1Q device requires
+a parent `ifname` and an integer VLAN ID from 1 through 4094. Its name must
+differ from its parent, and each parent/VLAN ID pair must be unique. When
+an 802.1Q parent is itself declared as an 802.1Q device, declare that
+parent before its child in `router_network_devices`. This ordering
+prevents cyclic VLAN parent dependencies while allowing nested VLAN
+devices. Device names must be unique, as must the member ports within
+each bridge. A physical port may belong to only one bridge. Device and
+port names are case-sensitive.
 
 `router_network_bridge_vlans` describes DSA bridge VLAN membership using
 explicit semantics rather than UCI's compact port notation:

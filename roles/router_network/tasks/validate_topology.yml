@@ -3,10 +3,8 @@
 - name: Validate network topology container types
   ansible.builtin.assert:
     that:
-      - router_network_devices is sequence
-      - router_network_devices is not string
-      - router_network_bridge_vlans is sequence
-      - router_network_bridge_vlans is not string
+      - (router_network_devices | type_debug) == 'list'
+      - (router_network_bridge_vlans | type_debug) == 'list'
     fail_msg: >-
       router_network_devices and router_network_bridge_vlans must be lists.
 
@@ -22,7 +20,7 @@
       - >-
         item.type != 'bridge' or
         (item.ports is not defined or
-         (item.ports is sequence and item.ports is not string))
+         (item.ports | type_debug) == 'list')
       - >-
         item.type != 'bridge' or
         item.vlan_filtering is not defined or
@@ -72,22 +70,51 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: Validate bridge port names
+- name: Validate declared 802.1Q parents precede their children
   ansible.builtin.assert:
     that:
-      - item.1 is string
-      - item.1 | length > 0
-      - item.1 != item.0.name
+      - >-
+        (router_network_devices
+         | selectattr('name', 'equalto', item.ifname)
+         | selectattr('type', 'equalto', '8021q')
+         | list | length == 0)
+        or
+        (router_network_devices
+         | map(attribute='name') | list).index(item.ifname)
+        <
+        (router_network_devices
+         | map(attribute='name') | list).index(item.name)
     fail_msg: >-
-      Bridge '{{ item.0.name }}' contains an invalid or self-referencing port
-      '{{ item.1 }}'.
+      802.1Q parent '{{ item.ifname }}' must be declared before child
+      '{{ item.name }}' when both devices are in router_network_devices.
+      This ordering prevents cyclic VLAN parent dependencies.
   loop: >-
     {{ router_network_devices
-       | selectattr('type', 'equalto', 'bridge')
-       | list
-       | subelements('ports', skip_missing=True) }}
+       | selectattr('type', 'equalto', '8021q') | list }}
   loop_control:
-    label: "{{ item.0.name }} -> {{ item.1 }}"
+    label: "{{ item.name }}"
+
+- name: Validate bridge port definitions
+  ansible.builtin.assert:
+    that:
+      - item.ports is not defined or (item.ports | type_debug) == 'list'
+      - >-
+        item.ports is not defined or
+        (item.ports | select('string') | list | length)
+        == item.ports | length
+      - >-
+        item.ports is not defined or
+        (item.ports | reject('equalto', '') | list | length)
+        == item.ports | length
+      - item.ports is not defined or item.name not in item.ports
+    fail_msg: >-
+      Bridge '{{ item.name }}' must contain a list of non-empty string ports
+      and cannot contain itself as a port.
+  loop: >-
+    {{ router_network_devices
+       | selectattr('type', 'equalto', 'bridge') | list }}
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: Validate unique bridge port names
   ansible.builtin.assert:
@@ -137,8 +164,7 @@
       - item.vlan >= 1
       - item.vlan <= 4094
       - item.ports is defined
-      - item.ports is sequence
-      - item.ports is not string
+      - (item.ports | type_debug) == 'list'
       - item.local is not defined or item.local is boolean
     fail_msg: >-
       Each bridge VLAN needs a bridge device, a VLAN ID from 1 to 4094,
@@ -152,25 +178,47 @@
 - name: Validate bridge VLAN port definitions
   ansible.builtin.assert:
     that:
-      - item.1 is mapping
-      - item.1.name is defined
-      - item.1.name is string
-      - item.1.name | length > 0
-      - item.1.mode is defined
-      - item.1.mode in ['tagged', 'untagged']
-      - item.1.pvid is not defined or item.1.pvid is boolean
       - >-
-        item.1.pvid is not defined or not item.1.pvid or
-        item.1.mode == 'untagged'
+        (item.ports | select('mapping') | list | length)
+        == item.ports | length
+      - >-
+        (item.ports
+         | select('mapping')
+         | selectattr('name', 'defined')
+         | selectattr('name', 'string')
+         | rejectattr('name', 'equalto', '')
+         | list | length) == item.ports | length
+      - >-
+        (item.ports
+         | select('mapping')
+         | selectattr('mode', 'defined')
+         | selectattr('mode', 'in', ['tagged', 'untagged'])
+         | list | length) == item.ports | length
+      - >-
+        (item.ports
+         | select('mapping')
+         | selectattr('pvid', 'defined')
+         | selectattr('pvid', 'boolean')
+         | list | length)
+        ==
+        (item.ports
+         | select('mapping')
+         | selectattr('pvid', 'defined')
+         | list | length)
+      - >-
+        (item.ports
+         | select('mapping')
+         | selectattr('pvid', 'defined')
+         | selectattr('pvid', 'equalto', true)
+         | rejectattr('mode', 'equalto', 'untagged')
+         | list | length) == 0
     fail_msg: >-
-      Bridge VLAN '{{ item.0.device }}' contains a port without a valid
+      Bridge VLAN '{{ item.device }}' contains a port without a valid
       name, tagged/untagged mode, or boolean PVID setting. PVID membership
       must be untagged.
-  loop: "{{ router_network_bridge_vlans | subelements('ports') }}"
+  loop: "{{ router_network_bridge_vlans }}"
   loop_control:
-    label: >-
-      {{ item.0.device }} VLAN {{ item.0.vlan }} ->
-      {{ item.1.name | default('unnamed') }}
+    label: "{{ item.device }} VLAN {{ item.vlan }}"
 
 - name: Validate bridge VLAN references and membership
   ansible.builtin.assert:
@@ -254,5 +302,5 @@
   loop_control:
     label: >-
       {{ item.0.device }} VLAN {{ item.0.vlan }} ->
-      {{ item.1.name | default('unnamed') }}
+      {{ item.1.name }}
   when: item.1.pvid | default(false) | bool
