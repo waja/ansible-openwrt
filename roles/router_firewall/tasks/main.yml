@@ -374,7 +374,6 @@
         {%- set ns.results = ns.results + [
           result | combine({
             'name': result.item.value.name | default(fallback, true)
-                    | default(result.item.key)
           })
         ] -%}
         {%- endfor -%}
@@ -470,7 +469,7 @@
         router_firewall_zone_reference_queries + [{
           'zone_name': (
             item.1.1.name
-            | default(item.1.0.value.name | default(item.1.0.key), true)
+            | default(item.1.0.value.name | default(''), true)
           ),
           'type': item.0.0,
           'option': item.0.1
@@ -499,6 +498,10 @@
       {{ item.1.0.key }}:{{ item.0.0 }}.{{ item.0.1 }}
   when:
     - item.1.0.value.state | default('present') == 'absent'
+    - >-
+      item.1.1.name
+      | default(item.1.0.value.name | default(''), true)
+      | length > 0
     - item.1.1.result == 'zone' or
       (item.1.2.result_list | default([]) | length == 1)
   changed_when: false
