@@ -3,12 +3,8 @@
 - name: Validate network topology container types
   ansible.builtin.assert:
     that:
-      - router_network_devices is sequence
-      - router_network_devices is not string
-      - router_network_devices is not mapping
-      - router_network_bridge_vlans is sequence
-      - router_network_bridge_vlans is not string
-      - router_network_bridge_vlans is not mapping
+      - (router_network_devices | type_debug) == 'list'
+      - (router_network_bridge_vlans | type_debug) == 'list'
     fail_msg: >-
       router_network_devices and router_network_bridge_vlans must be lists.
 
@@ -24,8 +20,7 @@
       - >-
         item.type != 'bridge' or
         (item.ports is not defined or
-         (item.ports is sequence and item.ports is not string and
-          item.ports is not mapping))
+         (item.ports | type_debug) == 'list')
       - >-
         item.type != 'bridge' or
         item.vlan_filtering is not defined or
@@ -164,9 +159,7 @@
       - item.vlan >= 1
       - item.vlan <= 4094
       - item.ports is defined
-      - item.ports is sequence
-      - item.ports is not string
-      - item.ports is not mapping
+      - (item.ports | type_debug) == 'list'
       - item.local is not defined or item.local is boolean
     fail_msg: >-
       Each bridge VLAN needs a bridge device, a VLAN ID from 1 to 4094,

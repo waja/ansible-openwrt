@@ -522,6 +522,103 @@
               The invalid bridge VLAN ports failed for an unexpected reason:
               {{ ansible_failed_task.name }}.
 
+    - name: Verify topology device input must be a list, not a tuple
+      block:
+        - name: Apply tuple-valued network device definitions
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices: >-
+              {{ ({'name': 'br-lan', 'type': 'bridge'},) }}
+            router_network_bridge_vlans: []
+            router_network_interfaces: {}
+
+        - name: Fail if a tuple is accepted for network devices
+          ansible.builtin.fail:
+            msg: A tuple was accepted for router_network_devices.
+      rescue:
+        - name: Verify the device container check rejected the tuple
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate network topology container types'
+
+    - name: Verify bridge VLAN input must be a list, not a tuple
+      block:
+        - name: Apply tuple-valued bridge VLAN definitions
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices: []
+            router_network_bridge_vlans: >-
+              {{ ({'device': 'br-lan', 'vlan': 69, 'ports': []},) }}
+            router_network_interfaces: {}
+
+        - name: Fail if a tuple is accepted for bridge VLANs
+          ansible.builtin.fail:
+            msg: A tuple was accepted for router_network_bridge_vlans.
+      rescue:
+        - name: Verify the bridge VLAN container check rejected the tuple
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate network topology container types'
+
+    - name: Verify bridge device ports must be a list, not a tuple
+      block:
+        - name: Apply tuple-valued bridge device ports
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: br-lan
+                type: bridge
+                ports: "{{ ('lan1',) }}"
+            router_network_bridge_vlans: []
+            router_network_interfaces: {}
+
+        - name: Fail if a tuple is accepted for bridge device ports
+          ansible.builtin.fail:
+            msg: A tuple was accepted for bridge device ports.
+      rescue:
+        - name: Verify device validation rejected tuple-valued ports
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate network device definitions'
+
+    - name: Verify bridge VLAN ports must be a list, not a tuple
+      block:
+        - name: Apply tuple-valued bridge VLAN ports
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
+            router_network_devices:
+              - name: br-lan
+                type: bridge
+                vlan_filtering: true
+                ports:
+                  - lan1
+            router_network_bridge_vlans:
+              - device: br-lan
+                vlan: 69
+                ports: "{{ ({'name': 'lan1', 'mode': 'tagged'},) }}"
+            router_network_interfaces: {}
+
+        - name: Fail if a tuple is accepted for bridge VLAN ports
+          ansible.builtin.fail:
+            msg: A tuple was accepted for bridge VLAN ports.
+      rescue:
+        - name: Verify bridge VLAN validation rejected tuple-valued ports
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name ==
+                'Validate bridge VLAN definitions'
+
     - name: Read static LAN network settings
       community.openwrt.uci:
         command: get
