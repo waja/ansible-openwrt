@@ -467,7 +467,11 @@
     router_firewall_zone_reference_queries: >-
       {{
         router_firewall_zone_reference_queries + [{
-          'zone_name': item.1.1.name | default(item.1.0.value.name | default(item.1.0.key), true),
+          'zone_name': >-
+            {{
+              item.1.1.name
+              | default(item.1.0.value.name | default(item.1.0.key), true)
+            }},
           'type': item.0.0,
           'option': item.0.1
         }]
