@@ -568,15 +568,17 @@
 
     - name: Verify bridge device ports must be a list, not a tuple
       block:
+        - name: Set a tuple-valued bridge device port
+          ansible.builtin.set_fact:
+            router_network_devices: >-
+              {{ [{'name': 'br-lan', 'type': 'bridge',
+                   'ports': ('lan1',)}] }}
+            router_network_bridge_vlans: []
+
         - name: Apply tuple-valued bridge device ports
           ansible.builtin.include_role:
             name: router_network
           vars:
-            router_network_devices:
-              - name: br-lan
-                type: bridge
-                ports: "{{ ('lan1',) }}"
-            router_network_bridge_vlans: []
             router_network_interfaces: {}
 
         - name: Fail if a tuple is accepted for bridge device ports
@@ -592,20 +594,22 @@
 
     - name: Verify bridge VLAN ports must be a list, not a tuple
       block:
-        - name: Apply tuple-valued bridge VLAN ports
-          ansible.builtin.include_role:
-            name: router_network
-          vars:
+        - name: Set tuple-valued bridge VLAN ports
+          ansible.builtin.set_fact:
             router_network_devices:
               - name: br-lan
                 type: bridge
                 vlan_filtering: true
                 ports:
                   - lan1
-            router_network_bridge_vlans:
-              - device: br-lan
-                vlan: 69
-                ports: "{{ ({'name': 'lan1', 'mode': 'tagged'},) }}"
+            router_network_bridge_vlans: >-
+              {{ [{'device': 'br-lan', 'vlan': 69,
+                   'ports': ({'name': 'lan1', 'mode': 'tagged'},)}] }}
+
+        - name: Apply tuple-valued bridge VLAN ports
+          ansible.builtin.include_role:
+            name: router_network
+          vars:
             router_network_interfaces: {}
 
         - name: Fail if a tuple is accepted for bridge VLAN ports
