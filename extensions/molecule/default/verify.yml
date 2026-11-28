@@ -819,7 +819,7 @@
     - name: Assert the generated-ID anonymous zone is absent
       ansible.builtin.assert:
         that:
-          - router_firewall_generated_zone.result_list | length == 1
+          - router_firewall_generated_zone_id | length == 1
           - >-
             router_firewall_generated_zone_after_removal.result_list
             | length == 0
@@ -912,7 +912,9 @@
     - name: Assert the referenced generated-ID zone still exists
       ansible.builtin.assert:
         that:
-          - router_firewall_generated_ref_after_removal.result_list | length == 1
+          - >-
+            router_firewall_generated_ref_after_removal.result_list
+            | length == 1
 
     - name: Create a zone and dependent firewall objects
       community.openwrt.uci:
