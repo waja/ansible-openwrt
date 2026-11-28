@@ -356,6 +356,7 @@
     label: "{{ item.item.key }}"
   register: router_firewall_generated_zone_name_lookups
   changed_when: false
+  failed_when: false
 
 - name: Restore generated firewall zone names
   ansible.builtin.set_fact:
