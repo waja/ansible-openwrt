@@ -428,16 +428,10 @@
     config: firewall
     type: zone
     option: name
-    find: "{{ item.1.name }}"
-  loop: >-
-    {{
-      router_firewall_zones
-      | dict2items
-      | zip(router_firewall_named_zones.results)
-      | list
-    }}
+    find: "{{ item.value.name | default(item.key) }}"
+  loop: "{{ router_firewall_zones | dict2items }}"
   loop_control:
-    label: "{{ item.0.key }}"
+    label: "{{ item.key }}"
   register: router_firewall_matching_zones
   changed_when: false
 
