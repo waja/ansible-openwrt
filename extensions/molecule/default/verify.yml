@@ -766,12 +766,7 @@
             value: generated_id_remove
 
     - name: Read firewall configuration with generated section IDs
-      ansible.builtin.command:
-        argv:
-          - uci
-          - -X
-          - show
-          - firewall
+      ansible.builtin.raw: uci -X show firewall
       register: router_firewall_generated_zone_show
       changed_when: false
 
