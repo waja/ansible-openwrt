@@ -765,22 +765,18 @@
             key: firewall.@zone[-1].name
             value: generated_id_remove
 
-    - name: Read firewall configuration with generated section IDs
-      ansible.builtin.raw: uci -X show firewall
+    - name: Resolve the generated zone ID directly from UCI
+      ansible.builtin.raw: >-
+        uci -X show firewall
+        | grep -F ".name='generated_id_remove'"
+        | cut -d. -f2
       register: router_firewall_generated_zone_show
       changed_when: false
 
-    - name: Resolve the actual generated ID of the anonymous zone
+    - name: Store the generated zone ID
       ansible.builtin.set_fact:
-        router_firewall_generated_zone_id: >-
-          {{
-            router_firewall_generated_zone_show.stdout
-            | regex_findall(
-                "(?ms)^firewall\\.(cfg[0-9a-f]+)=zone"
-                ~ "(?:(?!^firewall\\.).*\\n)*?"
-                ~ "^firewall\\.\\1\\.name='generated_id_remove'$"
-              )
-          }}
+        router_firewall_generated_zone_id:
+          - "{{ router_firewall_generated_zone_show.stdout | trim }}"
 
     - name: Assert the generated zone ID was resolved
       ansible.builtin.assert:
@@ -839,27 +835,18 @@
             key: firewall.@rule[-1].src
             value: generated_id_ref
 
-    - name: Read firewall configuration to resolve the referenced zone ID
-      ansible.builtin.command:
-        argv:
-          - uci
-          - -X
-          - show
-          - firewall
+    - name: Resolve the referenced generated zone ID directly from UCI
+      ansible.builtin.raw: >-
+        uci -X show firewall
+        | grep -F ".name='generated_id_ref'"
+        | cut -d. -f2
       register: router_firewall_generated_ref_show
       changed_when: false
 
-    - name: Resolve the actual ID of the referenced anonymous zone
+    - name: Store the referenced generated zone ID
       ansible.builtin.set_fact:
-        router_firewall_generated_ref_zone_id: >-
-          {{
-            router_firewall_generated_ref_show.stdout
-            | regex_findall(
-                "(?ms)^firewall\\.(cfg[0-9a-f]+)=zone"
-                ~ "(?:(?!^firewall\\.).*\\n)*?"
-                ~ "^firewall\\.\\1\\.name='generated_id_ref'$"
-              )
-          }}
+        router_firewall_generated_ref_zone_id:
+          - "{{ router_firewall_generated_ref_show.stdout | trim }}"
 
     - name: Assert the referenced generated zone ID was resolved
       ansible.builtin.assert:
