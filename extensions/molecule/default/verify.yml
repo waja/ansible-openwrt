@@ -754,6 +754,160 @@
         that:
           - router_firewall_removed_anonymous_zone.result_list | length == 0
 
+    - name: Create an anonymous zone for generated-ID removal
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: generated_id_remove
+
+    - name: Resolve the generated zone ID directly from UCI
+      ansible.builtin.raw: >-
+        uci -X show firewall
+        | grep -F ".name='generated_id_remove'"
+        | cut -d. -f2
+      register: router_firewall_generated_zone_show
+      changed_when: false
+
+    - name: Store the generated zone ID
+      ansible.builtin.set_fact:
+        router_firewall_generated_zone_id:
+          - "{{ router_firewall_generated_zone_show.stdout | trim }}"
+
+    - name: Assert the generated zone ID was resolved
+      ansible.builtin.assert:
+        that:
+          - router_firewall_generated_zone_id | length == 1
+
+    - name: Remove an anonymous zone by its generated section ID
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones: >-
+          {{
+            {
+              router_firewall_generated_zone_id[0]: {
+                'state': 'absent'
+              }
+            }
+          }}
+
+    - name: Verify the generated-ID anonymous zone was removed
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: generated_id_remove
+      register: router_firewall_generated_zone_after_removal
+      changed_when: false
+
+    - name: Assert the generated-ID anonymous zone is absent
+      ansible.builtin.assert:
+        that:
+          - router_firewall_generated_zone_id | length == 1
+          - >-
+            router_firewall_generated_zone_after_removal.result_list
+            | length == 0
+
+    - name: Create an anonymous zone without a name option
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+
+    - name: Resolve the generated ID of the unnamed zone
+      ansible.builtin.raw: >-
+        uci -X show firewall
+        | grep '=zone      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: generated_id_ref
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: generated_id_ref_rule
+          - command: set
+            key: firewall.@rule[-1].src
+            value: generated_id_ref
+
+    - name: Resolve the referenced generated zone ID directly from UCI
+      ansible.builtin.raw: >-
+        uci -X show firewall
+        | grep -F ".name='generated_id_ref'"
+        | cut -d. -f2
+      register: router_firewall_generated_ref_show
+      changed_when: false
+
+    - name: Store the referenced generated zone ID
+      ansible.builtin.set_fact:
+        router_firewall_generated_ref_zone_id:
+          - "{{ router_firewall_generated_ref_show.stdout | trim }}"
+
+    - name: Assert the referenced generated zone ID was resolved
+      ansible.builtin.assert:
+        that:
+          - router_firewall_generated_ref_zone_id | length == 1
+
+    - name: Capture reference validation for a generated-ID zone
+      block:
+        - name: Attempt to remove a referenced zone by generated ID
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones: >-
+              {{
+                {
+                  router_firewall_generated_ref_zone_id[0]: {
+                    'state': 'absent'
+                  }
+                }
+              }}
+      rescue:
+        - name: Record the generated-ID reference validation failure
+          ansible.builtin.set_fact:
+            router_firewall_generated_ref_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Assert generated-ID zone removal was rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_generated_ref_failure
+            == 'Reject removal of referenced firewall zones'
+
+    - name: Verify the referenced generated-ID zone remains
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: generated_id_ref
+      register: router_firewall_generated_ref_after_removal
+      changed_when: false
+
+    - name: Assert the referenced generated-ID zone still exists
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_generated_ref_after_removal.result_list
+            | length == 1
+
     - name: Create a zone and dependent firewall objects
       community.openwrt.uci:
         autocommit: true
@@ -982,6 +1136,98 @@
               src: lan
               target: ACCEPT
               test_sentinel: keep-rule-value
+          - command: section
+            config: firewall
+            type: rule
+            name: molecule_snapshot_quote_test
+            value:
+              name: molecule_snapshot_quote_test
+              src: lan
+              target: ACCEPT
+              test_sentinel: |-
+                prefix
+                firewall.snapdecoy=zone
+                suffix\\
+          - command: section
+            config: firewall
+            type: redirect
+            name: snapdecoy
+            value:
+              name: snapdecoy
+              src: wan
+              dest: lan
+              target: DNAT
+          - command: section
+            config: firewall
+            type: zone
+            name: snapafter
+            value:
+              name: snapafter
+              network:
+                - lan
+              input: ACCEPT
+
+    - name: Reject a header-like line inside a multiline option value
+      block:
+        - name: Attempt to remove the redirect as a firewall zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              snapdecoy:
+                state: absent
+      rescue:
+        - name: Record rejection of the header-like section
+          ansible.builtin.set_fact:
+            router_firewall_snapshot_decoy_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify a multiline option cannot disguise a redirect as a zone
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_snapshot_decoy_failure
+            == 'Validate existing named firewall sections'
+
+    - name: Read the redirect after header-like value validation
+      community.openwrt.uci:
+        command: get
+        key: firewall.snapdecoy
+      register: router_firewall_snapshot_decoy
+      changed_when: false
+
+    - name: Assert the redirect was not removed
+      ansible.builtin.assert:
+        that:
+          - router_firewall_snapshot_decoy.result == 'redirect'
+
+    - name: Remove an option after multiline and trailing-backslash UCI values
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          snapafter:
+            network: null
+
+    - name: Read firewall configuration after snapshot parsing test
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_snapshot_parsing_show
+      changed_when: false
+
+    - name: >-
+        Verify snapshot parsing preserves the real section after quoted values
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.snapafter=zone'
+            in router_firewall_snapshot_parsing_show.result
+          - >-
+            'firewall.snapafter.network='
+            not in router_firewall_snapshot_parsing_show.result
 
     - name: Update a managed firewall zone while unrelated sections exist
       ansible.builtin.include_role:
@@ -1199,6 +1445,1881 @@
       ansible.builtin.assert:
         that:
           - router_firewall_rule_removed.result | default('') == ''
+
+    - name: Create an anonymous firewall rule with a removable option
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_generated_null_rule
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].dest_port
+            value: "8443"
+          - command: set
+            key: firewall.@rule[-1].target
+            value: ACCEPT
+
+    - name: Find the generated section ID of the anonymous rule
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_generated_null_rule
+      register: router_firewall_generated_null_rule
+      changed_when: false
+
+    - name: >-
+        Remove an explicitly null option from an anonymous rule by matching name
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_generated_null_rule:
+            name: molecule_generated_null_rule
+            dest_port: null
+
+    - name: Find the anonymous rule after null removal
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_generated_null_rule
+      register: router_firewall_generated_null_rule_after_removal
+      changed_when: false
+
+    - name: Read the anonymous rule section after null removal
+      community.openwrt.uci:
+        command: get
+        key: >-
+          {{
+            'firewall.'
+            ~ router_firewall_generated_null_rule_after_removal.result_list[0]
+          }}
+      register: router_firewall_generated_null_rule_section
+      changed_when: false
+      when: >-
+        router_firewall_generated_null_rule_after_removal.result_list
+        | length == 1
+
+    - name: Read the anonymous rule option after null removal
+      community.openwrt.uci:
+        command: get
+        key: >-
+          {{
+            'firewall.'
+            ~ router_firewall_generated_null_rule_after_removal.result_list[0]
+            ~ '.dest_port'
+          }}
+      register: router_firewall_generated_null_rule_dest_port
+      changed_when: false
+      failed_when: false
+      when: >-
+        router_firewall_generated_null_rule_after_removal.result_list
+        | length == 1
+
+    - name: Verify null option removal works for an adopted anonymous rule
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_generated_null_rule_after_removal.result_list
+            | length == 1
+          - router_firewall_generated_null_rule_section.result == 'rule'
+          - router_firewall_generated_null_rule_dest_port.result == ''
+
+    - name: Create an anonymous firewall rule for adoption
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_anonymous_rule
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Adopt an anonymous firewall rule by its name
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_anonymous_rule:
+            name: molecule_anonymous_rule
+            target: ACCEPT
+
+    - name: Find the adopted anonymous firewall rule
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_anonymous_rule
+      register: router_firewall_adopted_rule
+      changed_when: false
+
+    - name: Read the adopted anonymous firewall rule target
+      community.openwrt.uci:
+        command: get
+        key: "firewall.{{ router_firewall_adopted_rule.result_list[0] }}.target"
+      register: router_firewall_adopted_rule_target
+      changed_when: false
+
+    - name: Verify anonymous firewall rule adoption
+      ansible.builtin.assert:
+        that:
+          - router_firewall_adopted_rule.result_list | length == 1
+          - router_firewall_adopted_rule_target.result == 'ACCEPT'
+
+    - name: Create two anonymous firewall rules with an ambiguous name
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_ambiguous_rule
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_ambiguous_rule
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Capture ambiguous anonymous firewall rule validation
+      block:
+        - name: Attempt to adopt an ambiguous anonymous firewall rule
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_rules:
+              molecule_ambiguous_rule:
+                name: molecule_ambiguous_rule
+                target: ACCEPT
+      rescue:
+        - name: Record the ambiguous rule validation failure
+          ansible.builtin.set_fact:
+            router_firewall_ambiguous_rule_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify ambiguous anonymous rules are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_ambiguous_rule_failure
+            == 'Reject ambiguous anonymous firewall rule matches'
+
+    - name: Verify ambiguous rule input did not create a named section
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_ambiguous_rule
+      register: router_firewall_ambiguous_named_rule
+      changed_when: false
+      failed_when: false
+
+    - name: Verify both ambiguous anonymous rules remain
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_ambiguous_rule
+      register: router_firewall_ambiguous_rules
+      changed_when: false
+
+    - name: Assert ambiguous firewall rules remain unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_ambiguous_named_rule.result | default('') == ''
+          - router_firewall_ambiguous_rules.result_list | length == 2
+
+    - name: Capture invalid firewall rule zone reference validation
+      block:
+        - name: Attempt to create a rule with an unknown zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_rules:
+              molecule_invalid_zone_rule:
+                src: missing_zone
+                target: ACCEPT
+      rescue:
+        - name: Record the invalid rule zone reference failure
+          ansible.builtin.set_fact:
+            router_firewall_invalid_rule_zone_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify invalid firewall rule zone references are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_rule_zone_failure
+            == 'Validate firewall rule zone references'
+
+    - name: Verify invalid firewall rule input did not create a section
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_invalid_zone_rule
+      register: router_firewall_invalid_zone_rule
+      changed_when: false
+      failed_when: false
+
+    - name: Assert invalid firewall rule input left UCI unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_invalid_zone_rule.result | default('') == ''
+
+    - name: Capture an empty protocol list validation failure
+      block:
+        - name: Attempt to create a rule with an empty protocol list
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_rules:
+              molecule_empty_proto:
+                proto: []
+                target: ACCEPT
+      rescue:
+        - name: Record the empty protocol list failure
+          ansible.builtin.set_fact:
+            router_firewall_empty_proto_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify empty protocol lists are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_empty_proto_failure
+            == 'Validate firewall rule definitions'
+
+    - name: Create an anonymous firewall rule matching a mapping key
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_key_without_explicit_name
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Create a named rule when no explicit name is supplied
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_key_without_explicit_name:
+            target: ACCEPT
+
+    - name: Read named and anonymous rules after omitted-name handling
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_omitted_name_show
+      changed_when: false
+
+    - name: Find the anonymous rule retained alongside the named rule
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_key_without_explicit_name
+      register: router_firewall_omitted_name_matches
+      changed_when: false
+
+    - name: Assert anonymous rules are not adopted without explicit name
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_key_without_explicit_name=rule'
+            in router_firewall_omitted_name_show.result
+          - router_firewall_omitted_name_matches.result_list | length == 2
+          - >-
+            "firewall.molecule_key_without_explicit_name.target='ACCEPT'"
+            in router_firewall_omitted_name_show.result
+          - >-
+            router_firewall_omitted_name_show.result
+            is search("firewall\\.@rule\\[[0-9]+\\]\\.target='DROP'")
+
+    - name: Create a named firewall rule and a matching anonymous rule
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: section
+            config: firewall
+            type: rule
+            name: molecule_named_precedence
+            value:
+              name: molecule_named_precedence
+              src: guest_test
+              target: DROP
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_named_precedence
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].target
+            value: DROP
+
+    - name: Update the named firewall rule ahead of a matching anonymous rule
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_named_precedence:
+            name: molecule_named_precedence
+            target: ACCEPT
+
+    - name: Read named and anonymous firewall rule precedence results
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_named_precedence_show
+      changed_when: false
+
+    - name: Find both rules sharing the precedence test name
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_named_precedence
+      register: router_firewall_named_precedence_matches
+      changed_when: false
+
+    - name: Assert named firewall section takes precedence over anonymous match
+      ansible.builtin.assert:
+        that:
+          - >-
+            "firewall.molecule_named_precedence.target='ACCEPT'"
+            in router_firewall_named_precedence_show.result
+          - router_firewall_named_precedence_matches.result_list | length == 2
+          - >-
+            router_firewall_named_precedence_show.result
+            is search("firewall\\.@rule\\[[0-9]+\\]\\.target='DROP'")
+
+    - name: Create firewall rules in a deliberately non-alphabetical order
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_order_second:
+            name: Molecule order second
+            src: guest_test
+            target: ACCEPT
+          molecule_order_first:
+            name: Molecule order first
+            src: guest_test
+            target: ACCEPT
+
+    - name: Read firewall rules after ordered creation
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_order_show
+      changed_when: false
+
+    - name: Assert newly created rules preserve declaration order
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_order_show.result.find(
+              'firewall.molecule_order_second=rule'
+            ) >= 0
+          - >-
+            router_firewall_order_show.result.find(
+              'firewall.molecule_order_first=rule'
+            ) >
+            router_firewall_order_show.result.find(
+              'firewall.molecule_order_second=rule'
+            )
+
+    - name: Create declarative DNAT and SNAT redirects
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_https_dnat:
+            name: Molecule HTTPS DNAT [regex].1
+            src: wan
+            src_dport: "443"
+            dest: guest_test
+            dest_ip: 192.0.2.20
+            dest_port: "443"
+            proto:
+              - tcp
+            src_mac:
+              - "02:00:00:00:00:01"
+            reflection_zone:
+              - guest_test
+            weekdays: mon wed
+            limit: "3/second"
+            limit_burst: 5
+            target: DNAT
+          molecule_snat:
+            name: Molecule SNAT
+            src: guest_test
+            src_ip: 192.0.2.250
+            src_dip: 192.0.2.10
+            dest: wan
+            proto:
+              - icmp
+            target: SNAT
+
+    - name: Read declarative firewall redirects
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_redirect_show
+      changed_when: false
+
+    - name: Verify DNAT and SNAT redirect configuration
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_https_dnat=redirect'
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.target='DNAT'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.dest_ip='192.0.2.20'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.src_dport='443'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.reflection_zone='guest_test'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.src_mac='02:00:00:00:00:01'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.weekdays='mon wed'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.limit='3/second'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_https_dnat.limit_burst='5'"
+            in router_firewall_redirect_show.result
+          - >-
+            'firewall.molecule_snat=redirect'
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_snat.target='SNAT'"
+            in router_firewall_redirect_show.result
+          - >-
+            "firewall.molecule_snat.src_dip='192.0.2.10'"
+            in router_firewall_redirect_show.result
+
+    - name: Verify DNAT and SNAT redirects are persisted and committed
+      ansible.builtin.raw: |
+        dnat_config="$(sed -n \
+          "/^config redirect 'molecule_https_dnat'$/,/^config /p" \
+          /etc/config/firewall)"
+        snat_config="$(sed -n \
+          "/^config redirect 'molecule_snat'$/,/^config /p" \
+          /etc/config/firewall)"
+        printf '%s\n' "$dnat_config" | \
+          grep -F "option target 'DNAT'" >/dev/null || {
+            echo "Missing persisted DNAT target"
+            exit 1
+          }
+        printf '%s\n' "$dnat_config" | \
+          grep -F "option dest_ip '192.0.2.20'" >/dev/null || {
+            echo "Missing persisted DNAT destination address"
+            exit 1
+          }
+        printf '%s\n' "$dnat_config" | \
+          grep -F "list proto 'tcp'" >/dev/null || {
+            echo "Missing persisted DNAT protocol"
+            exit 1
+          }
+        printf '%s\n' "$snat_config" | \
+          grep -F "option target 'SNAT'" >/dev/null || {
+            echo "Missing persisted SNAT target"
+            exit 1
+          }
+        printf '%s\n' "$snat_config" | \
+          grep -F "option src_dip '192.0.2.10'" >/dev/null || {
+            echo "Missing persisted SNAT translated address"
+            exit 1
+          }
+        printf '%s\n' "$snat_config" | \
+          grep -F "list proto 'icmp'" >/dev/null || {
+            echo "Missing persisted SNAT protocol"
+            exit 1
+          }
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
+      changed_when: false
+
+    - name: Reject a redirect name already owned by another section ID
+      block:
+        - name: Attempt to create a duplicate named redirect
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_duplicate_redirect_id:
+                name: Molecule HTTPS DNAT [regex].1
+                src: wan
+                dest_ip: 192.0.2.21
+                target: DNAT
+      rescue:
+        - name: Record duplicate redirect identity rejection
+          ansible.builtin.set_fact:
+            router_firewall_duplicate_redirect_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify duplicate redirect names are rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_duplicate_redirect_failure
+            == 'Reject redirects already assigned to a different named section'
+
+    - name: Verify duplicate redirect section was not created
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_duplicate_redirect_id
+      register: router_firewall_duplicate_redirect
+      changed_when: false
+      failed_when: false
+
+    - name: Assert duplicate redirect input left UCI unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_duplicate_redirect.result | default('') == ''
+
+    - name: Require target for target-specific partial updates
+      block:
+        - name: Attempt partial SNAT update without target
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_snat:
+                reflection: true
+      rescue:
+        - name: Record missing target validation for partial redirect update
+          ansible.builtin.set_fact:
+            router_firewall_missing_partial_target_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify target is required for target-specific partial updates
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_missing_partial_target_failure
+            == (
+              'Require an explicit target for target-specific '
+              ~ 'partial redirect updates'
+            )
+
+    - name: Disable SNAT and remove its translated address option
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_snat:
+            target: SNAT
+            enabled: false
+            src_dip: null
+            proto: null
+
+    - name: Read updated SNAT redirect
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_snat_updated
+      changed_when: false
+
+    - name: Verify redirect disable and null option removal
+      ansible.builtin.assert:
+        that:
+          - >-
+            "firewall.molecule_snat.enabled='0'"
+            in router_firewall_snat_updated.result
+          - >-
+            'firewall.molecule_snat.src_dip='
+            not in router_firewall_snat_updated.result
+          - >-
+            'firewall.molecule_snat.proto='
+            not in router_firewall_snat_updated.result
+          - >-
+            'firewall.molecule_snat=redirect'
+            in router_firewall_snat_updated.result
+          - >-
+            "firewall.molecule_snat.name='Molecule SNAT'"
+            in router_firewall_snat_updated.result
+
+    - name: Verify redirect disable and null removals are persisted
+      ansible.builtin.raw: |
+        redirect_config="$(sed -n \
+          "/^config redirect 'molecule_snat'$/,/^config /p" \
+          /etc/config/firewall)"
+        printf '%s\n' "$redirect_config" | \
+          grep -F "option enabled '0'" >/dev/null || {
+            echo "Missing persisted disabled redirect option"
+            exit 1
+          }
+        if printf '%s\n' "$redirect_config" | \
+          grep -E "^[[:space:]]*(option|list) (src_dip|proto) "; then
+          echo "Explicitly null redirect option remains persisted"
+          exit 1
+        fi
+        test -z "$(uci changes firewall)" || {
+          echo "Uncommitted changes remain in firewall UCI configuration"
+          exit 1
+        }
+      changed_when: false
+
+    - name: Reapply the same redirect configuration
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_snat:
+            enabled: false
+
+    - name: Verify redirect application is idempotent
+      ansible.builtin.assert:
+        that:
+          - not router_firewall_apply_result.changed
+
+    - name: Remove declarative firewall redirects
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_https_dnat:
+            state: absent
+          molecule_snat:
+            state: absent
+
+    - name: Verify declarative firewall redirects were removed
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_redirect_removed
+      changed_when: false
+
+    - name: Assert DNAT and SNAT redirects are absent
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_https_dnat=redirect'
+            not in router_firewall_redirect_removed.result
+          - >-
+            'firewall.molecule_snat=redirect'
+            not in router_firewall_redirect_removed.result
+
+    - name: Reject non-string scalar redirect options
+      block:
+        - name: Attempt to create a redirect with an integer port
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_invalid_redirect_type:
+                src: wan
+                src_dport: 443
+                dest_ip: 192.0.2.22
+      rescue:
+        - name: Record invalid redirect option type validation
+          ansible.builtin.set_fact:
+            router_firewall_invalid_redirect_type_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify scalar redirect options require strings
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_redirect_type_failure
+            == 'Validate firewall redirect definitions'
+
+    - name: Verify invalid redirect option type did not create a section
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_invalid_redirect_type
+      register: router_firewall_invalid_redirect_type
+      changed_when: false
+      failed_when: false
+
+    - name: Assert invalid redirect option type left UCI unchanged
+      ansible.builtin.assert:
+        that:
+          - router_firewall_invalid_redirect_type.result | default('') == ''
+
+    - name: Reject malformed and out-of-range redirect ports
+      block:
+        - name: Attempt to create redirects with invalid port values
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_invalid_port_syntax:
+                src: wan
+                src_dport: invalid
+                dest_ip: 192.0.2.91
+              molecule_invalid_port_range:
+                src: wan
+                dest_port: "65536"
+                dest_ip: 192.0.2.92
+              molecule_invalid_port_order:
+                src: wan
+                src_dport: "100-80"
+                dest_ip: 192.0.2.93
+      rescue:
+        - name: Record invalid redirect port validation
+          ansible.builtin.set_fact:
+            router_firewall_invalid_port_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify redirect ports are validated before UCI writes
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_port_failure
+            == 'Validate firewall redirect definitions'
+
+    - name: Read firewall configuration after invalid port validation
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_invalid_port_show
+      changed_when: false
+
+    - name: Assert invalid port values created no redirect sections
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_invalid_port_syntax=redirect'
+            not in router_firewall_invalid_port_show.result
+          - >-
+            'firewall.molecule_invalid_port_range=redirect'
+            not in router_firewall_invalid_port_show.result
+          - >-
+            'firewall.molecule_invalid_port_order=redirect'
+            not in router_firewall_invalid_port_show.result
+
+    - name: Reject redirect ports above the supported range
+      block:
+        - name: Attempt to create a redirect with port 65536
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_port_too_high:
+                src: wan
+                src_dport: "65536"
+                dest_ip: 192.0.2.94
+      rescue:
+        - name: Record out-of-range redirect port validation
+          ansible.builtin.set_fact:
+            router_firewall_port_range_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify redirect ports cannot exceed 65535
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_port_range_failure
+            == 'Validate firewall redirect definitions'
+
+    - name: Reject descending redirect port ranges
+      block:
+        - name: Attempt to create a redirect with a descending port range
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_port_range_reversed:
+                src: wan
+                src_dport: "100-80"
+                dest_ip: 192.0.2.95
+      rescue:
+        - name: Record descending redirect port range validation
+          ansible.builtin.set_fact:
+            router_firewall_port_order_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify redirect port ranges are ordered
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_port_order_failure
+            == 'Validate firewall redirect definitions'
+
+    - name: Reject a new default-DNAT redirect without a source zone
+      block:
+        - name: Attempt to create default DNAT without src
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_missing_dnat_src:
+                dest_ip: 192.0.2.60
+      rescue:
+        - name: Record missing DNAT source validation
+          ansible.builtin.set_fact:
+            router_firewall_missing_dnat_src_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify default DNAT requires a source zone
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_missing_dnat_src_failure
+            == 'Validate target-specific options for firewall redirects'
+
+    - name: Reject an SNAT redirect without its translated source address
+      block:
+        - name: Attempt to create SNAT without src_dip
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_missing_snat_src_dip:
+                target: SNAT
+                dest: wan
+      rescue:
+        - name: Record missing SNAT translated address validation
+          ansible.builtin.set_fact:
+            router_firewall_missing_snat_src_dip_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify SNAT requires src_dip
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_missing_snat_src_dip_failure
+            == 'Validate target-specific options for firewall redirects'
+
+    - name: Reject SNAT-only incompatible source MAC and helper options
+      block:
+        - name: Attempt SNAT with a source MAC match
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_snat_src_mac:
+                target: SNAT
+                dest: wan
+                src_dip: 192.0.2.10
+                src_mac:
+                  - "02:00:00:00:00:02"
+      rescue:
+        - name: Record unsupported SNAT source MAC validation
+          ansible.builtin.set_fact:
+            router_firewall_snat_src_mac_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify SNAT rejects src_mac
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_snat_src_mac_failure
+            == 'Validate target-specific options for firewall redirects'
+
+    - name: Reject DNAT and SNAT wildcard zone references
+      block:
+        - name: Attempt DNAT with wildcard source zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_dnat_wildcard_src:
+                src: "*"
+                dest_ip: 192.0.2.70
+      rescue:
+        - name: Record wildcard source validation
+          ansible.builtin.set_fact:
+            router_firewall_dnat_wildcard_src_failure:
+              "{{ ansible_failed_task.name }}"
+
+    - name: Verify DNAT rejects wildcard source zone
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_dnat_wildcard_src_failure
+            == 'Validate firewall redirect zone references'
+
+    - name: Reject a redirect that references an unknown zone
+      block:
+        - name: Attempt to create a redirect with an invalid zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_invalid_redirect:
+                src: unknown_zone
+                dest_ip: 192.0.2.30
+                target: DNAT
+      rescue:
+        - name: Record invalid redirect zone validation
+          ansible.builtin.set_fact:
+            router_firewall_invalid_redirect_zone_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify invalid redirect zone input was rejected before writes
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_invalid_redirect_zone_failure
+            == 'Validate firewall redirect zone references'
+
+    - name: Read firewall configuration after invalid redirect validation
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_invalid_redirect_show
+      changed_when: false
+
+    - name: Assert invalid redirect did not create a UCI section
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_invalid_redirect='
+            not in router_firewall_invalid_redirect_show.result
+
+    - name: Create an anonymous firewall redirect for adoption
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: redirect
+          - command: set
+            key: firewall.@redirect[-1].name
+            value: molecule_anonymous_redirect
+          - command: set
+            key: firewall.@redirect[-1].src
+            value: wan
+          - command: set
+            key: firewall.@redirect[-1].dest_ip
+            value: 192.0.2.40
+          - command: set
+            key: firewall.@redirect[-1].target
+            value: DNAT
+
+    - name: Adopt an anonymous firewall redirect by its explicit name
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_redirects:
+          molecule_redirect_adopted:
+            name: molecule_anonymous_redirect
+            dest_port: "8443"
+
+    - name: Read firewall configuration after redirect adoption
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_redirect_adoption_show
+      changed_when: false
+
+    - name: Find the adopted firewall redirect by name
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: redirect
+        option: name
+        find: molecule_anonymous_redirect
+      register: router_firewall_redirect_adoption_matches
+      changed_when: false
+
+    - name: Verify anonymous redirect adoption
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_redirect_adopted=redirect'
+            in router_firewall_redirect_adoption_show.result
+          - >-
+            "firewall.molecule_redirect_adopted.name="
+            ~ "'molecule_anonymous_redirect'"
+            in router_firewall_redirect_adoption_show.result
+          - >-
+            "firewall.molecule_redirect_adopted.dest_ip="
+            ~ "'192.0.2.40'"
+            in router_firewall_redirect_adoption_show.result
+          - >-
+            "firewall.molecule_redirect_adopted.dest_port="
+            ~ "'8443'"
+            in router_firewall_redirect_adoption_show.result
+          - >-
+            router_firewall_redirect_adoption_matches.result_list | length
+            == 1
+
+    - name: Create two anonymous redirects with an ambiguous name
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: redirect
+          - command: set
+            key: firewall.@redirect[-1].name
+            value: molecule_ambiguous_redirect
+          - command: set
+            key: firewall.@redirect[-1].target
+            value: DNAT
+          - command: add
+            config: firewall
+            type: redirect
+          - command: set
+            key: firewall.@redirect[-1].name
+            value: molecule_ambiguous_redirect
+          - command: set
+            key: firewall.@redirect[-1].target
+            value: DNAT
+
+    - name: Reject ambiguous anonymous redirect adoption
+      block:
+        - name: Attempt to adopt ambiguous anonymous redirects
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_redirects:
+              molecule_ambiguous_redirect_id:
+                name: molecule_ambiguous_redirect
+                src: wan
+                dest_ip: 192.0.2.50
+                target: DNAT
+      rescue:
+        - name: Record ambiguous redirect validation failure
+          ansible.builtin.set_fact:
+            router_firewall_ambiguous_redirect_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify ambiguous redirect adoption was rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_ambiguous_redirect_failure
+            == 'Reject ambiguous anonymous firewall redirect matches'
+
+    - name: Verify global firewall default semantics
+      ansible.builtin.include_tasks: tasks/verify_firewall_defaults.yml
+
+    - name: Verify declarative inter-zone forwardings
+      ansible.builtin.include_tasks: tasks/verify_firewall_forwardings.yml
+
+        | tail -n 1
+        | cut -d. -f2
+      register: router_firewall_unnamed_zone_show
+      changed_when: false
+
+    - name: Store the generated ID of the unnamed zone
+      ansible.builtin.set_fact:
+        router_firewall_unnamed_zone_id: >-
+          {{ router_firewall_unnamed_zone_show.stdout | trim }}
+
+    - name: Repair an existing anonymous zone without a name
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones: >-
+          {{
+            {
+              router_firewall_unnamed_zone_id: {
+                'name': 'unnamed_repair'
+              }
+            }
+          }}
+
+    - name: Find the repaired anonymous zone
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: unnamed_repair
+      register: router_firewall_unnamed_zone_repaired
+      changed_when: false
+
+    - name: Assert an unnamed existing zone can be repaired
+      ansible.builtin.assert:
+        that:
+          - router_firewall_unnamed_zone_id is match('^cfg')
+          - >-
+            router_firewall_unnamed_zone_repaired.result_list
+            | length == 1
+
+    - name: Create an anonymous zone referenced by a firewall rule
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: generated_id_ref
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: generated_id_ref_rule
+          - command: set
+            key: firewall.@rule[-1].src
+            value: generated_id_ref
+
+    - name: Resolve the referenced generated zone ID directly from UCI
+      ansible.builtin.raw: >-
+        uci -X show firewall
+        | grep -F ".name='generated_id_ref'"
+        | cut -d. -f2
+      register: router_firewall_generated_ref_show
+      changed_when: false
+
+    - name: Store the referenced generated zone ID
+      ansible.builtin.set_fact:
+        router_firewall_generated_ref_zone_id:
+          - "{{ router_firewall_generated_ref_show.stdout | trim }}"
+
+    - name: Assert the referenced generated zone ID was resolved
+      ansible.builtin.assert:
+        that:
+          - router_firewall_generated_ref_zone_id | length == 1
+
+    - name: Capture reference validation for a generated-ID zone
+      block:
+        - name: Attempt to remove a referenced zone by generated ID
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones: >-
+              {{
+                {
+                  router_firewall_generated_ref_zone_id[0]: {
+                    'state': 'absent'
+                  }
+                }
+              }}
+      rescue:
+        - name: Record the generated-ID reference validation failure
+          ansible.builtin.set_fact:
+            router_firewall_generated_ref_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Assert generated-ID zone removal was rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_generated_ref_failure
+            == 'Reject removal of referenced firewall zones'
+
+    - name: Verify the referenced generated-ID zone remains
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: generated_id_ref
+      register: router_firewall_generated_ref_after_removal
+      changed_when: false
+
+    - name: Assert the referenced generated-ID zone still exists
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_generated_ref_after_removal.result_list
+            | length == 1
+
+    - name: Create a zone and dependent firewall objects
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: zone
+          - command: set
+            key: firewall.@zone[-1].name
+            value: ref_test
+          - command: add_list
+            key: firewall.@zone[-1].network
+            value: lan
+          - command: section
+            config: firewall
+            type: rule
+            name: ref_rule_test
+            value:
+              name: ref_rule_test
+              src: ref_test
+              target: ACCEPT
+          - command: section
+            config: firewall
+            type: redirect
+            name: ref_redirect_test
+            value:
+              name: ref_redirect_test
+              src: ref_test
+              dest: lan
+          - command: section
+            config: firewall
+            type: forwarding
+            name: ref_forward_test
+            value:
+              src: ref_test
+              dest: lan
+
+    - name: Capture reference-safe zone removal validation
+      block:
+        - name: Attempt to remove a referenced firewall zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              ref_test:
+                state: absent
+      rescue:
+        - name: Record the referenced zone validation failure
+          ansible.builtin.set_fact:
+            router_firewall_referenced_zone_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify referenced zone removal was rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_referenced_zone_failure
+            == 'Reject removal of referenced firewall zones'
+
+    - name: Verify the referenced zone and dependent objects remain
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_referenced_zone_show
+      changed_when: false
+
+    - name: Find the anonymous zone that must remain
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: zone
+        option: name
+        find: ref_test
+      register: router_firewall_referenced_anonymous_zone
+      changed_when: false
+
+    - name: Assert the referenced anonymous zone remains
+      ansible.builtin.assert:
+        that:
+          - router_firewall_referenced_anonymous_zone.result_list | length == 1
+
+    - name: Assert reference validation made no partial changes
+      ansible.builtin.assert:
+        that:
+          - "'firewall.@zone[' in router_firewall_referenced_zone_show.result"
+          - >-
+            'firewall.ref_rule_test=rule'
+            in router_firewall_referenced_zone_show.result
+          - >-
+            'firewall.ref_redirect_test=redirect'
+            in router_firewall_referenced_zone_show.result
+          - >-
+            'firewall.ref_forward_test=forwarding'
+            in router_firewall_referenced_zone_show.result
+
+    - name: Create a zone referenced only by a redirect reflection list
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: section
+            config: firewall
+            type: zone
+            name: refl_test
+            value:
+              name: refl_test
+              network:
+                - lan
+          - command: section
+            config: firewall
+            type: redirect
+            name: ref_reflection_redirect
+            value:
+              name: Reflection list reference test
+              src: wan
+              dest_ip: 192.0.2.90
+              target: DNAT
+          - command: add_list
+            key: firewall.ref_reflection_redirect.reflection_zone
+            value: guest_test
+          - command: add_list
+            key: firewall.ref_reflection_redirect.reflection_zone
+            value: refl_test
+
+    - name: Capture reflection list reference-safe zone removal validation
+      block:
+        - name: Attempt to remove a zone referenced in reflection_zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              refl_test:
+                state: absent
+      rescue:
+        - name: Record the reflection zone validation failure
+          ansible.builtin.set_fact:
+            router_firewall_reflection_zone_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify reflection list zone removal was rejected
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_reflection_zone_failure
+            == 'Reject removal of referenced firewall zones'
+
+    - name: Read firewall configuration after reflection list validation
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_reflection_zone_show
+      changed_when: false
+
+    - name: Verify the reflection list and zone remain unchanged
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.refl_test=zone'
+            in router_firewall_reflection_zone_show.result
+          - >-
+            router_firewall_reflection_zone_show.result
+            | regex_search(
+                "(?m)^firewall\\.ref_reflection_redirect\\." ~
+                "reflection_zone=.*refl_test"
+              ) is not none
+          - >-
+            router_firewall_reflection_zone_show.result
+            | regex_search(
+                "(?m)^firewall\\.ref_reflection_redirect\\." ~
+                "reflection_zone=.*guest_test"
+              ) is not none
+
+    - name: Verify reflection list validation left no staged changes
+      community.openwrt.command:
+        cmd: uci changes firewall
+      register: router_firewall_reflection_pending_changes
+      changed_when: false
+
+    - name: Assert reflection list validation made no partial changes
+      ansible.builtin.assert:
+        that:
+          - router_firewall_reflection_pending_changes.stdout | length == 0
+
+    - name: Check for staged changes after reference validation
+      community.openwrt.command:
+        cmd: uci changes firewall
+      register: router_firewall_pending_changes
+      changed_when: false
+
+    - name: Assert reference validation left no staged changes
+      ansible.builtin.assert:
+        that:
+          - router_firewall_pending_changes.stdout | length == 0
+
+    - name: Verify no staged firewall UCI changes remain
+      community.openwrt.command:
+        cmd: uci changes firewall
+      register: router_firewall_pending_changes
+      changed_when: false
+
+    - name: Assert firewall UCI changes were committed
+      ansible.builtin.assert:
+        that:
+          - router_firewall_pending_changes.stdout | length == 0
+
+    - name: Create unrelated firewall sections with sentinel options
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: section
+            config: firewall
+            type: zone
+            name: unmanaged_test
+            value:
+              name: unmanaged_test
+              network:
+                - lan
+              test_sentinel: keep-zone-value
+          - command: section
+            config: firewall
+            type: rule
+            name: unmanaged_rule_test
+            value:
+              name: unmanaged_rule_test
+              src: lan
+              target: ACCEPT
+              test_sentinel: keep-rule-value
+          - command: section
+            config: firewall
+            type: rule
+            name: molecule_snapshot_quote_test
+            value:
+              name: molecule_snapshot_quote_test
+              src: lan
+              target: ACCEPT
+              test_sentinel: |-
+                prefix
+                firewall.snapdecoy=zone
+                suffix\\
+          - command: section
+            config: firewall
+            type: redirect
+            name: snapdecoy
+            value:
+              name: snapdecoy
+              src: wan
+              dest: lan
+              target: DNAT
+          - command: section
+            config: firewall
+            type: zone
+            name: snapafter
+            value:
+              name: snapafter
+              network:
+                - lan
+              input: ACCEPT
+
+    - name: Reject a header-like line inside a multiline option value
+      block:
+        - name: Attempt to remove the redirect as a firewall zone
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              snapdecoy:
+                state: absent
+      rescue:
+        - name: Record rejection of the header-like section
+          ansible.builtin.set_fact:
+            router_firewall_snapshot_decoy_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify a multiline option cannot disguise a redirect as a zone
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_snapshot_decoy_failure
+            == 'Validate existing named firewall sections'
+
+    - name: Read the redirect after header-like value validation
+      community.openwrt.uci:
+        command: get
+        key: firewall.snapdecoy
+      register: router_firewall_snapshot_decoy
+      changed_when: false
+
+    - name: Assert the redirect was not removed
+      ansible.builtin.assert:
+        that:
+          - router_firewall_snapshot_decoy.result == 'redirect'
+
+    - name: Remove an option after multiline and trailing-backslash UCI values
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          snapafter:
+            network: null
+
+    - name: Read firewall configuration after snapshot parsing test
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_snapshot_parsing_show
+      changed_when: false
+
+    - name: >-
+        Verify snapshot parsing preserves the real section after quoted values
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.snapafter=zone'
+            in router_firewall_snapshot_parsing_show.result
+          - >-
+            'firewall.snapafter.network='
+            not in router_firewall_snapshot_parsing_show.result
+
+    - name: Update a managed firewall zone while unrelated sections exist
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_zones:
+          guest_test:
+            input: DROP
+
+    - name: Read firewall configuration after unrelated-section test
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_unrelated_preservation
+      changed_when: false
+
+    - name: Verify unrelated firewall sections and options remain unchanged
+      ansible.builtin.assert:
+        that:
+          - >-
+            "firewall.unmanaged_test.test_sentinel='keep-zone-value'"
+            in router_firewall_unrelated_preservation.result
+          - >-
+            "firewall.unmanaged_test.network='lan'"
+            in router_firewall_unrelated_preservation.result
+          - >-
+            "firewall.unmanaged_rule_test.test_sentinel='keep-rule-value'"
+            in router_firewall_unrelated_preservation.result
+          - >-
+            "firewall.unmanaged_rule_test.target='ACCEPT'"
+            in router_firewall_unrelated_preservation.result
+
+    - name: Capture scalar input for a list-valued firewall zone option
+      block:
+        - name: Attempt to configure network as a scalar
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              bad_scalar:
+                network: lan
+      rescue:
+        - name: Record scalar-as-list validation failure
+          ansible.builtin.set_fact:
+            router_firewall_scalar_list_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify scalar values are rejected for list-valued zone options
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_scalar_list_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Capture list input for a scalar firewall zone option
+      block:
+        - name: Attempt to configure log as a list
+          ansible.builtin.include_role:
+            name: router_firewall
+          vars:
+            router_firewall_apply_runtime_changes: false
+            router_firewall_zones:
+              bad_log:
+                log:
+                  - 1
+      rescue:
+        - name: Record list-as-scalar validation failure
+          ansible.builtin.set_fact:
+            router_firewall_list_scalar_failure: >-
+              {{ ansible_failed_task.name }}
+
+    - name: Verify list values are rejected for scalar zone options
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_list_scalar_failure
+            == 'Validate firewall zone option types and values'
+
+    - name: Verify cross-type validation made no firewall changes
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_cross_type_validation
+      changed_when: false
+
+    - name: Assert invalid cross-type input did not create firewall sections
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_cross_type_validation.result
+            is not search('firewall\\.bad_scalar=')
+          - >-
+            router_firewall_cross_type_validation.result
+            is not search('firewall\\.bad_log=')
+    - name: Create a declarative firewall rule
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            name: Molecule allow SSH
+            src: guest_test
+            dest_port: "22"
+            proto:
+              - tcp
+            target: ACCEPT
+            enabled: true
+
+    - name: Read the declarative firewall rule
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_rule_show
+      changed_when: false
+
+    - name: Verify the declarative firewall rule and list option
+      ansible.builtin.assert:
+        that:
+          - >-
+            'firewall.molecule_allow_ssh=rule'
+            in router_firewall_rule_show.result
+          - >-
+            "firewall.molecule_allow_ssh.name='Molecule allow SSH'"
+            in router_firewall_rule_show.result
+          - >-
+            "firewall.molecule_allow_ssh.src='guest_test'"
+            in router_firewall_rule_show.result
+          - >-
+            "firewall.molecule_allow_ssh.proto='tcp'"
+            in router_firewall_rule_show.result
+          - >-
+            "firewall.molecule_allow_ssh.target='ACCEPT'"
+            in router_firewall_rule_show.result
+
+    - name: Update the declarative firewall rule and remove an option
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            enabled: false
+            dest_port: null
+
+    - name: Read the updated declarative firewall rule
+      community.openwrt.uci:
+        command: show
+        config: firewall
+      register: router_firewall_rule_updated
+      changed_when: false
+
+    - name: Verify rule updates, null removal, and retention
+      ansible.builtin.assert:
+        that:
+          - >-
+            "firewall.molecule_allow_ssh.enabled='0'"
+            in router_firewall_rule_updated.result
+          - >-
+            'firewall.molecule_allow_ssh.dest_port='
+            not in router_firewall_rule_updated.result
+          - >-
+            'firewall.molecule_allow_ssh=rule'
+            in router_firewall_rule_updated.result
+
+
+    - name: Reapply the same declarative firewall rule configuration
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            enabled: false
+
+    - name: Verify declarative firewall rule application is idempotent
+      ansible.builtin.assert:
+        that:
+          - not router_firewall_apply_result.changed
+
+    - name: Reapply the same declarative firewall rule configuration again
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            enabled: false
+
+    - name: Verify repeated declarative firewall rule application is idempotent
+      ansible.builtin.assert:
+        that:
+          - not router_firewall_apply_result.changed
+
+    - name: Remove the declarative firewall rule
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_allow_ssh:
+            state: absent
+
+    - name: Verify the declarative firewall rule was removed
+      community.openwrt.uci:
+        command: get
+        key: firewall.molecule_allow_ssh
+      register: router_firewall_rule_removed
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the declarative firewall rule is absent
+      ansible.builtin.assert:
+        that:
+          - router_firewall_rule_removed.result | default('') == ''
+
+    - name: Create an anonymous firewall rule with a removable option
+      community.openwrt.uci:
+        autocommit: true
+        operations:
+          - command: add
+            config: firewall
+            type: rule
+          - command: set
+            key: firewall.@rule[-1].name
+            value: molecule_generated_null_rule
+          - command: set
+            key: firewall.@rule[-1].src
+            value: guest_test
+          - command: set
+            key: firewall.@rule[-1].dest_port
+            value: "8443"
+          - command: set
+            key: firewall.@rule[-1].target
+            value: ACCEPT
+
+    - name: Find the generated section ID of the anonymous rule
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_generated_null_rule
+      register: router_firewall_generated_null_rule
+      changed_when: false
+
+    - name: >-
+        Remove an explicitly null option from an anonymous rule by matching name
+      ansible.builtin.include_role:
+        name: router_firewall
+      vars:
+        router_firewall_apply_runtime_changes: false
+        router_firewall_rules:
+          molecule_generated_null_rule:
+            name: molecule_generated_null_rule
+            dest_port: null
+
+    - name: Find the anonymous rule after null removal
+      community.openwrt.uci:
+        command: find_all
+        config: firewall
+        type: rule
+        option: name
+        find: molecule_generated_null_rule
+      register: router_firewall_generated_null_rule_after_removal
+      changed_when: false
+
+    - name: Read the anonymous rule section after null removal
+      community.openwrt.uci:
+        command: get
+        key: >-
+          {{
+            'firewall.'
+            ~ router_firewall_generated_null_rule_after_removal.result_list[0]
+          }}
+      register: router_firewall_generated_null_rule_section
+      changed_when: false
+      when: >-
+        router_firewall_generated_null_rule_after_removal.result_list
+        | length == 1
+
+    - name: Read the anonymous rule option after null removal
+      community.openwrt.uci:
+        command: get
+        key: >-
+          {{
+            'firewall.'
+            ~ router_firewall_generated_null_rule_after_removal.result_list[0]
+            ~ '.dest_port'
+          }}
+      register: router_firewall_generated_null_rule_dest_port
+      changed_when: false
+      failed_when: false
+      when: >-
+        router_firewall_generated_null_rule_after_removal.result_list
+        | length == 1
+
+    - name: Verify null option removal works for an adopted anonymous rule
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_firewall_generated_null_rule_after_removal.result_list
+            | length == 1
+          - router_firewall_generated_null_rule_section.result == 'rule'
+          - router_firewall_generated_null_rule_dest_port.result == ''
+
     - name: Create an anonymous firewall rule for adoption
       community.openwrt.uci:
         autocommit: true
