@@ -186,7 +186,7 @@
                 ansible_failed_task.name ==
                 'Validate bridge VLAN references and membership'
 
-    - name: Accept case-distinct device and port names
+    - name: Accept case-distinct device and port PVID names
       ansible.builtin.include_role:
         name: router_network
       vars:
@@ -208,6 +208,9 @@
               - name: lan-A
                 mode: untagged
                 pvid: true
+          - device: br-A
+            vlan: 70
+            ports:
               - name: lan-a
                 mode: untagged
                 pvid: true

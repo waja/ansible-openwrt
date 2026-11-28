@@ -279,23 +279,28 @@
   ansible.builtin.assert:
     that:
       - >-
-        (item.ports
+        (router_network_bridge_vlans
+         | selectattr('device', 'equalto', item.0.device)
+         | map(attribute='ports') | flatten
+         | selectattr('name', 'equalto', item.1.name)
          | selectattr('pvid', 'defined')
          | selectattr('pvid', 'equalto', true)
-         | map(attribute='name') | list
-         | intersect(
-             router_network_bridge_vlans
-             | selectattr('device', 'equalto', item.device)
-             | rejectattr('vlan', 'equalto', item.vlan)
-             | map(attribute='ports') | flatten
-             | selectattr('pvid', 'defined')
-             | selectattr('pvid', 'equalto', true)
-             | map(attribute='name') | list
-           )
-         | length) == 0
+         | list | length)
+        ==
+        (router_network_bridge_vlans
+         | selectattr('device', 'equalto', item.0.device)
+         | selectattr('vlan', 'equalto', item.0.vlan)
+         | map(attribute='ports') | flatten
+         | selectattr('name', 'equalto', item.1.name)
+         | selectattr('pvid', 'defined')
+         | selectattr('pvid', 'equalto', true)
+         | list | length)
     fail_msg: >-
-      A bridge port on '{{ item.device }}' is marked as PVID in more
-      than one VLAN.
-  loop: "{{ router_network_bridge_vlans }}"
+      Bridge port '{{ item.1.name }}' on '{{ item.0.device }}' is marked
+      as PVID in more than one VLAN.
+  loop: "{{ router_network_bridge_vlans | subelements('ports') }}"
   loop_control:
-    label: "{{ item.device }} VLAN {{ item.vlan }}"
+    label: >-
+      {{ item.0.device }} VLAN {{ item.0.vlan }} ->
+      {{ item.1.name }}
+  when: item.1.pvid | default(false) | bool
