@@ -1,0 +1,44 @@
+set -eu
+uuid="$(printf '%s' '{{ item.uuid }}' | tr 'A-Z' 'a-z')"
+expected_fstype='{{ item.filesystem | default("ext4") }}'
+block_info="$(block info)"
+probe="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
+  {
+    device = $1
+    sub(/:$/, "", device)
+    uuid_field = ""
+    type_field = ""
+    if (match($0, /^[^[:space:]]+[[:space:]]+UUID="[^"]+"/)) {
+      uuid_field = substr($0, RSTART, RLENGTH)
+      sub(/^.*UUID="/, "", uuid_field)
+      sub(/"$/, "", uuid_field)
+    }
+    # The actual TYPE field follows LABEL in OpenWrt block-info output.
+    # Anchor it at the end so TYPE-like text inside LABEL cannot win.
+    if (match($0, /[[:space:]]TYPE="[^"]+"$/)) {
+      type_field = substr($0, RSTART, RLENGTH)
+      sub(/^.*TYPE="/, "", type_field)
+      sub(/"$/, "", type_field)
+    }
+    if (tolower(uuid_field) == uuid) {
+      print device "|" type_field
+    }
+  }
+')"
+count="$(printf '%s\n' "$probe" | awk '
+  NF { count++ }
+  END { print count+0 }
+')"
+[ "$count" -eq 1 ] || {
+  echo "Expected exactly one block device with UUID $uuid;" \
+    "found $count" >&2
+  exit 1
+}
+device="${probe%%|*}"
+actual_fstype="${probe#*|}"
+[ "$actual_fstype" = "$expected_fstype" ] || {
+  echo "UUID $uuid has filesystem $actual_fstype;" \
+    "expected $expected_fstype" >&2
+  exit 1
+}
+printf 'device=%s\n' "$device"

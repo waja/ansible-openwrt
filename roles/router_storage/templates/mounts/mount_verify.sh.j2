@@ -1,0 +1,106 @@
+set -eu
+uuid="$(printf '%s' '{{ storage_mount_uuid }}' | tr 'A-Z' 'a-z')"
+target='{{ storage_mount_target }}'
+expected_fstype="{{ storage_mount_fstype }}"
+probe_output='{{ storage_mount_probe_output }}'
+device="$(printf '%s\n' "$probe_output" | sed -n 's/^device=//p')"
+block_info="$(block info)"
+resolved="$(printf '%s\n' "$block_info" | awk -v uuid="$uuid" '
+  {
+    device = $1
+    sub(/:$/, "", device)
+    if (match($0, /^[^[:space:]]+[[:space:]]+UUID="[^"]+"/)) {
+      uuid_field = substr($0, RSTART, RLENGTH)
+      sub(/^.*UUID="/, "", uuid_field)
+      sub(/"$/, "", uuid_field)
+      if (tolower(uuid_field) == uuid) print device
+    }
+  }
+')"
+[ "$resolved" = "$device" ] || {
+  echo "UUID $uuid resolved to a different device before mounting" >&2
+  exit 1
+}
+changed=0
+
+target_parent="$target"
+while [ "$target_parent" != "/" ]; do
+  if [ -L "$target_parent" ]; then
+    echo "Mount target path contains symbolic link $target_parent" >&2
+    exit 1
+  fi
+  target_parent="${target_parent%/*}"
+  [ -n "$target_parent" ] || target_parent="/"
+done
+mkdir -p "$target"
+
+existing_target="$(awk -v target="$target" \
+  '$2 == target {print $1 "|" $3}' /proc/mounts)"
+if [ -n "$existing_target" ]; then
+  existing_source="$(printf '%s\n' "$existing_target" | cut -d '|' -f 1)"
+  existing_fstype="$(printf '%s\n' "$existing_target" | cut -d '|' -f 2)"
+  [ "$existing_source" = "$device" ] && \
+    [ "$existing_fstype" = "$expected_fstype" ] || {
+    echo "Mount target $target is already used by" \
+      "$existing_source ($existing_fstype)" >&2
+    exit 1
+  }
+else
+  existing_device_mount="$(awk -v device="$device" \
+    '$1 == device {print $2}' /proc/mounts)"
+  [ -z "$existing_device_mount" ] || {
+    echo "Device $device is already mounted at $existing_device_mount" >&2
+    exit 1
+  }
+  target_contents="$(find "$target" -mindepth 1 -maxdepth 1 -print)" || {
+    echo "Unable to inspect mount target $target" >&2
+    exit 1
+  }
+  if [ -n "$target_contents" ]; then
+    echo "Mount target $target is not empty; refusing to" \
+      "hide existing data" >&2
+    exit 1
+  fi
+  if [ -n "{{ item.options | default('') }}" ]; then
+    mount -t "$expected_fstype" \
+      -o "{{ item.options }}" "$device" "$target"
+  else
+    mount -t "$expected_fstype" "$device" "$target"
+  fi
+  changed=1
+fi
+
+verified="$(awk -v target="$target" \
+  '$2 == target {print $1 "|" $3}' /proc/mounts)"
+expected="$(printf '%s|%s' "$device" "$expected_fstype")"
+[ "$verified" = "$expected" ] || {
+  echo "Mount verification failed for $target (UUID $uuid)" >&2
+  exit 1
+}
+mounted_uuid="$(printf '%s\n' "$(block info)" | awk -v device="$device" '
+  {
+    found_device = $1
+    sub(/:$/, "", found_device)
+    if (found_device != device) next
+    if (match($0, /^[^[:space:]]+[[:space:]]+UUID="[^"]+"/)) {
+      value = substr($0, RSTART, RLENGTH)
+      sub(/^.*UUID="/, "", value)
+      sub(/"$/, "", value)
+      print tolower(value)
+    }
+  }
+')"
+[ "$mounted_uuid" = "$uuid" ] || {
+  echo "Mounted device $device does not have requested UUID $uuid" >&2
+  exit 1
+}
+requested_options="{{ item.options | default('') }}"
+if [ -n "$requested_options" ]; then
+  effective_options="$(awk -v target="$target" \
+    '$2 == target {print $4}' /proc/mounts)"
+  {% include 'mounts/verify_options.sh.j2' %}
+  verify_mount_options "$expected_fstype" "$requested_options" \
+    "$effective_options" "$target"
+fi
+echo "device=$device"
+echo "changed=$changed"

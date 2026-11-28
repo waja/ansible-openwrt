@@ -39,6 +39,264 @@
             router_storage_unsupported_failure
             == 'Reject unsupported layouts when root expansion is requested'
 
+    - name: Verify invalid external storage configuration is rejected
+      block:
+        - name: Run storage role with an invalid external storage UUID
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: invalid
+                uuid: invalid
+
+        - name: Fail if invalid external storage configuration was accepted
+          ansible.builtin.fail:
+            msg: Invalid external storage UUID was accepted.
+      rescue:
+        - name: Confirm invalid external storage configuration was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
+
+    - name: Verify unsafe external storage targets are rejected
+      block:
+        - name: Run storage role with a root filesystem target
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: unsafe
+                uuid: 00000000-0000-0000-0000-000000000000
+                target: /
+        - name: Fail if unsafe external storage target was accepted
+          ansible.builtin.fail:
+            msg: Unsafe external storage target was accepted.
+      rescue:
+        - name: Confirm unsafe external storage target was rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
+
+    - name: Verify FAT volume identifiers pass validation
+      block:
+        - name: Run storage role with a FAT volume identifier
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: fat_volume
+                uuid: 1234-ABCD
+                filesystem: vfat
+        - name: Fail if FAT volume identifier reached mount processing
+          ansible.builtin.fail:
+            msg: FAT volume identifier was not rejected by the probe.
+      rescue:
+        - name: Confirm FAT volume identifier passed validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Check external storage UUID and filesystem'
+
+    - name: Verify duplicate external storage UUIDs are rejected
+      block:
+        - name: Run storage role with duplicate external storage UUIDs
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: first
+                uuid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+              - name: second
+                uuid: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE
+                target: /mnt/second
+        - name: Fail if duplicate external storage UUIDs were accepted
+          ansible.builtin.fail:
+            msg: Duplicate external storage UUIDs were accepted.
+      rescue:
+        - name: Confirm duplicate external storage UUIDs were rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Reject duplicate external storage mount identifiers'
+
+    - name: Verify nested external storage targets are rejected
+      block:
+        - name: Run storage role with nested external storage targets
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: parent
+                uuid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+                target: /mnt/data
+              - name: child
+                uuid: bbbbbbbb-cccc-dddd-eeee-ffffffffffff
+                target: /mnt/data/cache
+        - name: Fail if nested external storage targets were accepted
+          ansible.builtin.fail:
+            msg: Nested external storage targets were accepted.
+      rescue:
+        - name: Confirm nested targets were rejected
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Reject nested external storage mount targets'
+
+    - name: Create the fake block command directory
+      community.openwrt.file:
+        path: /tmp/router-storage-molecule-bin
+        state: directory
+        mode: '0755'
+
+    - name: Create a fake block info command for UUID parser coverage
+      community.openwrt.copy:
+        dest: /tmp/router-storage-molecule-bin/block
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          printf '%s: UUID="%s" LABEL="%s" TYPE="%s"\n' \
+            /dev/sda1 aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee \
+            'backup UUID=bad TYPE="vfat"' ext4
+
+    - name: Probe a UUID without matching UUID text embedded in a label
+      ansible.builtin.raw: |
+        export PATH=/tmp/router-storage-molecule-bin:$PATH
+        {{
+          lookup(
+            'template',
+            playbook_dir ~
+            '/../../../roles/router_storage/templates/mounts/probe_uuid.sh.j2'
+          )
+        }}
+      register: router_storage_uuid_parser_probe
+      changed_when: false
+      vars:
+        item:
+          name: molecule_uuid_parser
+          uuid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+          filesystem: ext4
+
+    - name: Verify the UUID parser selected the actual block metadata field
+      ansible.builtin.assert:
+        that:
+          - "'device=/dev/sda1' in router_storage_uuid_parser_probe.stdout"
+
+    - name: Persist a mocked external filesystem mount
+      ansible.builtin.include_role:
+        name: router_storage
+        tasks_from: persist_mounts.yml
+      vars:
+        router_storage_mounts:
+          - name: molecule
+            uuid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+            target: /mnt/molecule
+            filesystem: ext4
+
+    - name: Read the mocked external mount fstab section
+      community.openwrt.uci:
+        command: show
+        config: fstab
+      register: router_storage_molecule_fstab_first
+      changed_when: false
+
+    - name: Verify the persistent mount section matches the probed device
+      ansible.builtin.assert:
+        that:
+          - >-
+            "fstab.router_storage_molecule=mount"
+            in router_storage_molecule_fstab_first.result
+          - >-
+            "fstab.router_storage_molecule.uuid='"
+            ~ "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'"
+            in router_storage_molecule_fstab_first.result
+          - >-
+            "fstab.router_storage_molecule.target='/mnt/molecule'"
+            in router_storage_molecule_fstab_first.result
+          - >-
+            "fstab.router_storage_molecule.fstype='ext4'"
+            in router_storage_molecule_fstab_first.result
+          - >-
+            "fstab.router_storage_molecule.enabled='1'"
+            in router_storage_molecule_fstab_first.result
+
+    - name: Reapply the mocked external mount persistence
+      ansible.builtin.include_role:
+        name: router_storage
+        tasks_from: persist_mounts.yml
+      vars:
+        router_storage_mounts:
+          - name: molecule
+            uuid: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+            target: /mnt/molecule
+            filesystem: ext4
+
+    - name: Read the external mount fstab section after reapplication
+      community.openwrt.uci:
+        command: show
+        config: fstab
+      register: router_storage_molecule_fstab_second
+      changed_when: false
+
+    - name: Verify reapplication keeps one unchanged persistent mount section
+      ansible.builtin.assert:
+        that:
+          - >-
+            router_storage_molecule_fstab_second.result
+            | regex_findall('(?m)^fstab[.]router_storage_molecule=mount$')
+            | length == 1
+          - >-
+            router_storage_molecule_fstab_second.result
+            == router_storage_molecule_fstab_first.result
+
+    - name: Verify unsupported mount options are rejected before package changes
+      block:
+        - name: Attempt to configure an unsupported automatic mount option
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: unsupported_auto
+                uuid: 00000000-0000-0000-0000-000000000000
+                options: rw,auto
+        - name: Fail if unsupported automatic mount option was accepted
+          ansible.builtin.fail:
+            msg: Unsupported auto mount option was accepted.
+      rescue:
+        - name: Confirm unsupported mount option was rejected in preflight
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
+
+    - name: Verify defaults cannot be mixed with explicit mount options
+      block:
+        - name: Attempt to configure defaults with rw
+          ansible.builtin.include_role:
+            name: router_storage
+          vars:
+            router_storage_mounts:
+              - name: defaults_option
+                uuid: 00000000-0000-0000-0000-000000000000
+                options: defaults,rw
+        - name: Fail if mixed defaults option was accepted
+          ansible.builtin.fail:
+            msg: Mixed defaults mount option was accepted.
+      rescue:
+        - name: Confirm mixed defaults option was rejected in preflight
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Validate external storage mount definitions'
+
     - name: Apply router system role
       ansible.builtin.include_role:
         name: router_system

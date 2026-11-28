@@ -14,7 +14,16 @@ configuration.
 
 Run the dedicated playbook without enabling expansion:
 
-    ansible-playbook -i inventory.ini playbooks/storage.yml --limit router1
+    ansible-playbook -i inventory.ini playbooks/storage.yml --limit router1 \
+      -e '{"router_storage_expand_root": false, "router_storage_mounts": []}'
+
+The command explicitly disables both root expansion and external mounts,
+so it remains an inspection-only operation even when the inventory defines
+mounts. To apply configured external mounts, run a separate, explicit
+invocation:
+
+    ansible-playbook -i inventory.ini playbooks/storage.yml --limit router1 \
+      -e '{"router_storage_expand_root": false}'
 
 Detection is read-only. The role reports one of these states:
 
@@ -67,7 +76,7 @@ for disposable x86/64 test VMs. The official procedure and its limitations
 are documented at
 [OpenWrt: Expanding root partition and filesystem](https://openwrt.org/docs/guide-user/advanced/expand_root).
 
-## Current limitations
+## Root expansion limitations
 
 - Detection and expansion are limited to x86/64 SquashFS combined images.
 - Supported root disks are currently /dev/sdX and /dev/vdX.
@@ -78,3 +87,64 @@ are documented at
   may need a different wait strategy.
 - Full expansion has been validated on a disposable OpenWrt 25.12.5
   x86/64 VM clone. The original Proxmox template was not modified.
+
+## Optional external storage mounts
+
+The same role can optionally manage external filesystems, independently of
+root expansion. Mounts are disabled by default:
+
+    router_storage_mounts: []
+
+Configure each filesystem by its stable UUID. The target defaults to
+`/opt` and the filesystem to `ext4`. Mount options are optional; when
+omitted, no additional filesystem options are passed. Use a canonical UUID
+for ext4 or the `1234-ABCD` volume identifier for VFAT. Hardware-specific
+kernel modules belong in the per-mount `packages` list; they are not
+installed automatically for every router.
+
+    router_storage_mounts:
+      - name: opt
+        uuid: "00000000-0000-0000-0000-000000000000"
+        target: /opt
+        filesystem: ext4
+        packages:
+          - kmod-fs-ext4
+          - kmod-mmc
+          - kmod-sdhci-mt7620
+
+The role installs `block-mount` and the explicitly requested packages,
+checks that exactly one block device has the configured UUID and expected
+filesystem, and manages a named mount section in `/etc/config/fstab`.
+It enables the fstab init service for subsequent boots. At runtime it mounts
+only the configured device directly; it does not run the global
+`block mount` or `block umount` commands, which could affect unrelated
+mounts.
+
+Existing fstab sections are preserved. A conflicting UUID or target,
+a non-mount section using the managed name, an already-mounted device at
+another target, a conflicting mount at the target, or non-empty target
+directory causes a clear failure. A target directory is created if absent.
+No partitioning, formatting, filesystem repair, or device auto-selection
+is performed.
+
+For the MikroTik hEX S, the example kernel modules are hardware-specific
+and must be verified against the exact device and OpenWrt image. Filesystem
+creation and partitioning are intentionally manual prerequisites.
+
+On the target router, validate the setup before relying on persistent
+services:
+
+1. Confirm that `block info` reports the configured UUID and expected
+   filesystem type for exactly one device.
+2. Apply the role and confirm that the requested target is mounted from
+   that device.
+3. Apply the role a second time and confirm that it makes no mount changes
+   and does not create duplicate fstab sections.
+4. Compare `/etc/config/fstab` before and after to confirm unrelated
+   sections remain unchanged.
+5. Reboot the router and confirm that the filesystem is mounted at the
+   configured target again.
+
+Physical validation on a MikroTik hEX S remains outstanding; these
+checks are the required acceptance procedure, not a claim that the
+hardware test has already passed.

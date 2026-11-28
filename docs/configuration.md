@@ -59,7 +59,7 @@ roles that may be prerequisites; review the selected tasks before execution.
 | `router_snmpd` | Optional SNMP community replacement | [SNMP daemon](roles/router_snmpd.md) |
 | `router_tailscale` | Optional Tailscale daemon and tailnet configuration | [Tailscale](roles/router_tailscale.md) |
 | `router_package_audit` | Compare installed packages with a saved baseline | [Package audit](roles/router_package_audit.md) |
-| `router_storage` | Detect and optionally expand root storage | [Storage](roles/router_storage.md) |
+| `router_storage` | Detect and optionally expand root storage; optionally mount external filesystems | [Storage](roles/router_storage.md) |
 | `router_owut` | Optional read-only firmware update checks | [OWUT](roles/router_owut.md) |
 
 ## Reference projects

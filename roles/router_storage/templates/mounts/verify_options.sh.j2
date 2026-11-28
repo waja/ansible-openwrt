@@ -1,0 +1,83 @@
+# Compare requested mount options with the effective /proc/mounts options.
+verify_mount_options() {
+  local filesystem="$1"
+  local requested_options="$2"
+  local effective_options="$3"
+  local target="$4"
+  local option inverse old_ifs
+
+  has_mount_option_key() {
+    case ",$effective_options," in
+      *",$1="*) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+
+  has_mount_option() {
+    case ",$effective_options," in
+      *",$1,"*) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+
+  old_ifs="$IFS"
+  IFS=,
+  for option in $requested_options; do
+    case "$option" in
+      auto|nouser)
+        IFS="$old_ifs"
+        echo "Mount option $option is not supported by OpenWrt fstab" >&2
+        return 1
+        ;;
+      defaults)
+        IFS="$old_ifs"
+        echo "Mount option defaults must not be specified explicitly" >&2
+        return 1
+        ;;
+      # ext4's default commit interval is five seconds. The kernel omits
+      # this default from /proc/mounts when it is not explicitly set.
+      commit=5)
+        if [ "$filesystem" = ext4 ] &&
+          ! has_mount_option_key commit; then
+          continue
+        fi
+        if ! has_mount_option "$option"; then
+          IFS="$old_ifs"
+          echo "Mount option $option is not active for $target;" \
+            "remount the filesystem manually to apply changed options" >&2
+          return 1
+        fi
+        continue
+        ;;
+      ro|sync|noatime|nodiratime|nodev|noexec|nosuid)
+        if ! has_mount_option "$option"; then
+          IFS="$old_ifs"
+          echo "Mount option $option is not active for $target;" \
+            "remount the filesystem manually to apply changed options" >&2
+          return 1
+        fi
+        continue
+        ;;
+      rw) inverse=ro ;;
+      async) inverse=sync ;;
+      atime) inverse=noatime ;;
+      diratime) inverse=nodiratime ;;
+      dev) inverse=nodev ;;
+      exec) inverse=noexec ;;
+      suid) inverse=nosuid ;;
+      *) inverse="" ;;
+    esac
+    if [ -n "$inverse" ] && has_mount_option "$inverse"; then
+      IFS="$old_ifs"
+      echo "Mount option $option is not active for $target;" \
+            "remount the filesystem manually to apply changed options" >&2
+      return 1
+    elif [ -z "$inverse" ] && ! has_mount_option "$option"; then
+      IFS="$old_ifs"
+      echo "Mount option $option is not active for $target;" \
+            "remount the filesystem manually to apply changed options" >&2
+      return 1
+    fi
+  done
+  IFS="$old_ifs"
+}

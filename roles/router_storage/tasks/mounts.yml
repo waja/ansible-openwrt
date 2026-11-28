@@ -1,0 +1,141 @@
+# roles/router_storage/tasks/mounts.yml
+---
+- name: Validate external storage mount definitions
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name is match('^[A-Za-z0-9_]+$')
+      - item.uuid is defined
+      - >-
+        (item.uuid is match(
+          '^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-'
+          ~ '[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-'
+          ~ '[A-Fa-f0-9]{12}$'
+        )) or
+        ((item.filesystem | default('ext4')) == 'vfat' and
+        item.uuid is match('^[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}$'))
+      - "'defaults' not in ((item.options | default('')).split(','))"
+      - "'auto' not in ((item.options | default('')).split(','))"
+      - "'nouser' not in ((item.options | default('')).split(','))"
+      - >-
+        (item.target | default('/opt'))
+        is match('^/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$')
+      - (item.target | default('/opt')) not in ['/', '/overlay', '/rom', '/tmp']
+      - "'/../' not in (item.target | default('/opt'))"
+      - (item.filesystem | default('ext4')) is match('^[A-Za-z0-9]+$')
+      - (item.options | default('defaults')) is match('^[A-Za-z0-9_,=:-]+$')
+      - item.packages | default([]) is sequence
+      - item.packages | default([]) is not string
+    fail_msg: >-
+      Invalid router_storage_mounts entry. Provide a safe name, UUID,
+      absolute target, filesystem type, and optional package list.
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+
+- name: Reject duplicate external storage mount identifiers
+  ansible.builtin.assert:
+    that:
+      - >-
+        (router_storage_mounts | map(attribute='name') | list | unique | length)
+        == (router_storage_mounts | length)
+      - >-
+        (router_storage_mounts | map(attribute='uuid') | map('lower')
+        | list | unique | length)
+        == (router_storage_mounts | length)
+      - >-
+        (router_storage_mounts | map(attribute='target', default='/opt')
+        | list | unique | length) == (router_storage_mounts | length)
+    fail_msg: >-
+      External storage mount names, UUIDs, and targets must each be unique.
+
+- name: Reject nested external storage mount targets
+  ansible.builtin.assert:
+    that:
+      - >-
+        (router_storage_mounts
+         | map(attribute='target', default='/opt')
+         | select('match', '^' ~ (item.target | default('/opt')) ~ '/')
+         | list | length) == 0
+    fail_msg: >-
+      External storage mount targets must not contain one another.
+      Choose disjoint target directories.
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    label: "{{ item.target | default('/opt') }}"
+
+- name: Install external storage mount prerequisites
+  action: "community.openwrt.{{ openwrt_package_manager }}"
+  args:
+    name: >-
+      {{ (['block-mount'] +
+          (['kmod-fs-ext4']
+           if 'ext4' in (router_storage_mounts
+                         | map(attribute='filesystem', default='ext4')
+                         | list) else []) +
+          (router_storage_mounts | map(attribute='packages', default=[])
+           | flatten | list)) | unique | join(',') }}
+    state: present
+    update_cache: true
+
+- name: Check external storage UUID and filesystem
+  ansible.builtin.raw: "{{ lookup('template', 'mounts/probe_uuid.sh.j2') }}"
+  register: router_storage_mount_probe
+  changed_when: false
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Check for conflicting existing fstab entries
+  ansible.builtin.raw: >-
+    {{ lookup('template', 'mounts/check_conflicts.sh.j2') }}
+  changed_when: false
+  vars:
+    storage_mount_name: "{{ item.name }}"
+    storage_mount_uuid: "{{ item.uuid }}"
+    storage_mount_target: "{{ item.target | default('/opt') }}"
+    storage_mount_probe_output: >-
+      {{ router_storage_mount_probe.results[i].stdout | replace('\r', '') }}
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    extended: true
+    index_var: i
+    label: "{{ item.name }}"
+
+- name: Check external storage mount targets before changing fstab
+  ansible.builtin.raw: "{{ lookup('template', 'mounts/check_target.sh.j2') }}"
+  changed_when: false
+  vars:
+    storage_mount_target: "{{ item.target | default('/opt') }}"
+    storage_mount_fstype: "{{ item.filesystem | default('ext4') }}"
+    storage_mount_probe_output: >-
+      {{ router_storage_mount_probe.results[i].stdout | replace('\r', '') }}
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    extended: true
+    index_var: i
+    label: "{{ item.name }}"
+
+- name: Mount and verify external storage individually
+  ansible.builtin.raw: "{{ lookup('template', 'mounts/mount_verify.sh.j2') }}"
+  register: router_storage_mount_apply
+  changed_when: "'changed=1' in router_storage_mount_apply.stdout"
+  vars:
+    storage_mount_uuid: "{{ item.uuid }}"
+    storage_mount_target: "{{ item.target | default('/opt') }}"
+    storage_mount_fstype: "{{ item.filesystem | default('ext4') }}"
+    storage_mount_probe_output: >-
+      {{ router_storage_mount_probe.results[i].stdout | replace('\r', '') }}
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    extended: true
+    index_var: i
+    label: "{{ item.name }}"
+
+- name: Persist external storage mount configuration
+  ansible.builtin.include_tasks: persist_mounts.yml
+
+- name: Enable the OpenWrt fstab service without restarting existing mounts
+  ansible.builtin.raw: "{{ lookup('template', 'mounts/enable_fstab.sh.j2') }}"
+  register: router_storage_fstab_enable
+  changed_when: "'enabled-now' in router_storage_fstab_enable.stdout"

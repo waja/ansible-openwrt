@@ -1,0 +1,19 @@
+# roles/router_storage/tasks/persist_mounts.yml
+---
+- name: Configure persistent external storage mounts
+  community.openwrt.uci:
+    command: section
+    config: fstab
+    type: mount
+    name: "router_storage_{{ item.name }}"
+    value:
+      uuid: "{{ item.uuid }}"
+      target: "{{ item.target | default('/opt') }}"
+      fstype: "{{ item.filesystem | default('ext4') }}"
+      options: "{{ item.options | default('') }}"
+      enabled: '1'
+    replace: true
+    autocommit: true
+  loop: "{{ router_storage_mounts }}"
+  loop_control:
+    label: "{{ item.name }}"

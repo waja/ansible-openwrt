@@ -90,6 +90,7 @@ jobs:
                 roles/router_storage/files/*|\
                 roles/router_storage/tasks/*|\
                 roles/router_storage/defaults/*|\
+                roles/router_storage/templates/mounts/*|\
                 .github/openwrt-versions.json|\
                 .github/actions/openwrt-image/action.yml|\
                 .github/workflows/script-tests.yml)
@@ -208,6 +209,10 @@ jobs:
           cp scripts/owrt-extra-runtime.sh "$RUNNER_TEMP/owrt-test/runtime.sh"
           cp scripts/tests/test-owrt-extra-runtime.sh \
             "$RUNNER_TEMP/owrt-test/runtime-tests.sh"
+          cp roles/router_storage/templates/mounts/verify_options.sh.j2 \
+            "$RUNNER_TEMP/owrt-test/mount-options.sh"
+          cp scripts/tests/test-router-storage-mount-options.sh \
+            "$RUNNER_TEMP/owrt-test/mount-options-tests.sh"
           docker run --rm \
             -v "$RUNNER_TEMP/owrt-test:/opt/owrt-test:ro" \
             --entrypoint busybox \
@@ -223,6 +228,9 @@ jobs:
               busybox ash -n /opt/owrt-test/test.sh
               busybox ash /opt/owrt-test/test.sh \
                 /opt/owrt-test/detect.sh
+              busybox ash -n /opt/owrt-test/mount-options.sh
+              busybox ash /opt/owrt-test/mount-options-tests.sh \
+                /opt/owrt-test/mount-options.sh
 
               busybox ash /tmp/owrt-extra-test.sh -h > /tmp/help.txt
               grep -Eq -- "^[[:space:]#]*-k([[:space:]]|$)" /tmp/help.txt

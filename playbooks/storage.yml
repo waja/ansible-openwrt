@@ -1,6 +1,6 @@
 # playbooks/storage.yml
 ---
-- name: Inspect and optionally expand OpenWrt root storage
+- name: Inspect, expand, and optionally mount OpenWrt storage
   hosts: openwrt
   gather_facts: false
 

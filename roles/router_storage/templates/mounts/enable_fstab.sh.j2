@@ -1,0 +1,7 @@
+set -eu
+if /etc/init.d/fstab enabled; then
+  echo already-enabled
+else
+  /etc/init.d/fstab enable
+  echo enabled-now
+fi
