@@ -58,8 +58,8 @@ for section in $sections; do
   section_label="$(uci -q get "fstab.$section.label" 2>/dev/null || true)"
   section_target="$(uci -q get "fstab.$section.target" 2>/dev/null || true)"
   section_target_normalized="$(printf '%s\n' "$section_target" |
-    sed -e 's#//*#/#g' -e ':a' -e 's#/\./#/#;ta' \
-      -e 's#/\.$#/#')"
+    sed -e ':a' -e 's#/\./#/#;ta' -e 's#/\.$#/#' \
+      -e 's#//*#/#g')"
   case "$section_target_normalized" in
     */)
       [ "$section_target_normalized" = "/" ] ||
